@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { CircularTimer } from '@/components/CircularTimer';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useAuth } from '@/hooks/useAuth';
+import { replacePlaceholders } from '@/lib/questionUtils';
 
 const questions = [
   {
@@ -39,6 +41,9 @@ export default function Question() {
   
   const { videoRef, startCamera, startAutoCapture, stopAutoCapture, captureImage, capturedImages } = useCameraCapture();
   const { transcript, startListening, resetTranscript, hasSupport } = useSpeechRecognition();
+  const { user } = useAuth();
+
+
 
   useEffect(() => {
     console.log('Question page mounted, starting camera and capture');
@@ -104,7 +109,7 @@ export default function Question() {
                 Question
               </h3>
               <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed">
-                {currentQuestion?.text}
+                {currentQuestion?.text ? replacePlaceholders(currentQuestion.text, user) : ''}
               </p>
             </div>
           </div>

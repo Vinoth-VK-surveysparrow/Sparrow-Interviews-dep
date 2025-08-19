@@ -6,6 +6,8 @@ import { useS3Upload } from '@/hooks/useS3Upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { Home } from 'lucide-react';
+import { Question } from '@/lib/s3Service';
+import { replacePlaceholders } from '@/lib/questionUtils';
 // Circular Timer component with progress circle - Fixed for 60 seconds
 const CircularTimer = ({ timeLeft, isActive }: { timeLeft: number; isActive: boolean }) => {
   const totalTime = 60; // Always 60 seconds
@@ -55,42 +57,18 @@ import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 
-// Sample questions for the assessment - all with 60-second time limit
-const questions = [
-  {
-    id: 1,
-    text: "Tell me about yourself and your professional background.",
-    timeLimit: 60
-  },
-  {
-    id: 2,
-    text: "Describe a challenging project you've worked on and how you overcame the obstacles.",
-    timeLimit: 60
-  },
-  {
-    id: 3,
-    text: "What are your strongest technical skills and how do you stay updated with new technologies?",
-    timeLimit: 60
-  },
-  {
-    id: 4,
-    text: "Describe a time when you had to work under pressure. How did you handle it?",
-    timeLimit: 60
-  },
-  {
-    id: 5,
-    text: "Where do you see yourself in 5 years and what are your career goals?",
-    timeLimit: 60
-  }
-];
+// Questions will be fetched from API
 
 export default function Assessment() {
   const [, params] = useRoute('/assessment/:assessmentId');
   const [, setLocation] = useLocation();
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60); // Fixed 60 seconds for each question
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [assessmentStarted, setAssessmentStarted] = useState(false);
   // Removed responses state - not storing transcripts anymore
   
   const currentQuestion = questions[currentQuestionIndex];
@@ -100,10 +78,54 @@ export default function Assessment() {
   const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
   const { startRecording, stopRecording, isRecording, forceCleanup } = useAudioRecording();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition();
+  const { fetchQuestions } = useS3Upload();
+  const { user, loading: authLoading } = useAuth();
 
-  // Initialize everything once when component mounts
+
+
+  // Fetch questions when component mounts and authentication is ready
+  useEffect(() => {
+    const fetchAssessmentQuestions = async () => {
+      if (!params?.assessmentId) {
+        console.error('No assessment ID provided');
+        return;
+      }
+
+      // Wait for authentication to complete
+      if (authLoading) {
+        console.log('🔄 Authentication still loading, waiting...');
+        return;
+      }
+
+      if (!user?.email) {
+        console.error('❌ User not authenticated');
+        setLocation('/login');
+        return;
+      }
+
+      try {
+        setLoadingQuestions(true);
+        console.log('📝 Fetching questions for assessment:', params.assessmentId);
+        const fetchedQuestions = await fetchQuestions(params.assessmentId);
+        setQuestions(fetchedQuestions);
+        console.log('✅ Questions loaded:', fetchedQuestions.length, 'questions');
+      } catch (error) {
+        console.error('❌ Failed to fetch questions:', error);
+        // If questions fetch fails, redirect to dashboard
+        setLocation('/');
+      } finally {
+        setLoadingQuestions(false);
+      }
+    };
+
+    fetchAssessmentQuestions();
+  }, [params?.assessmentId, fetchQuestions, setLocation, authLoading, user?.email]);
+
+  // Initialize assessment once questions are loaded
   useEffect(() => {
     const initializeAssessment = async () => {
+      if (loadingQuestions || questions.length === 0) return;
+      
       console.log('Assessment page mounted - starting continuous recording');
       
       // Start assessment session if not already started
@@ -121,6 +143,7 @@ export default function Assessment() {
 
       // Start timer for first question
       setIsTimerActive(true);
+      setAssessmentStarted(true);
     };
 
     initializeAssessment();
@@ -129,7 +152,7 @@ export default function Assessment() {
       console.log('Assessment page unmounting - NOT stopping recordings (continue in background)');
       // Don't stop recordings - let them continue in background
     };
-  }, []);
+  }, [loadingQuestions, questions.length, params?.assessmentId, session.assessmentId, startSession, startCamera, startRecording, hasSupport, startListening]);
 
   // Start auto-capture only when S3 is ready
   useEffect(() => {
@@ -229,24 +252,50 @@ export default function Assessment() {
 
   // Removed handlePreviousQuestion - linear progression only with 60sec time limits
 
-  if (!currentQuestion) {
-    return <div>No questions available</div>;
+  if (loadingQuestions) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-300">Loading questions...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!currentQuestion || questions.length === 0) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <p className="text-gray-600 dark:text-gray-300">No questions available for this assessment.</p>
+            <Button onClick={() => setLocation('/')} className="mt-4">
+              Return to Dashboard
+            </Button>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Question Header */}
       <div className="flex items-center justify-between mb-8">
-        {/* Home Button */}
-        <Button
-          onClick={() => setLocation('/')}
-          variant="outline"
-          size="sm"
-          className="flex items-center gap-2"
-        >
-          <Home className="h-4 w-4" />
-          Home
-        </Button>
+        {/* Home Button - only show if assessment hasn't started */}
+        {!assessmentStarted && (
+          <Button
+            onClick={() => setLocation('/')}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <Home className="h-4 w-4" />
+            Home
+          </Button>
+        )}
 
         <div className="flex items-center space-x-4">
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -283,7 +332,7 @@ export default function Assessment() {
         <div className="space-y-6">
           <Card className="p-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
-              {currentQuestion.text}
+              {replacePlaceholders(currentQuestion.question_text, user)}
             </h2>
           </Card>
 

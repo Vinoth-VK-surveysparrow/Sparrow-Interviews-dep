@@ -1,0 +1,206 @@
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'wouter';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertTriangle } from 'lucide-react';
+
+export function AssessmentSecurity() {
+  const [location] = useLocation();
+  const [showCopyWarning, setShowCopyWarning] = useState(false);
+  const [showTabWarning, setShowTabWarning] = useState(false);
+
+  // Check if user is in assessment or rules (security-critical routes)
+  const isInSecureMode = location.startsWith('/rules/') || 
+                        location.startsWith('/assessment/') || 
+                        location.startsWith('/question/');
+
+  useEffect(() => {
+    if (!isInSecureMode) return;
+
+    console.log('🔒 Entering secure assessment mode');
+
+    // Request fullscreen when entering assessment
+    const enterFullscreen = async () => {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else if ((document.documentElement as any).webkitRequestFullscreen) {
+          await (document.documentElement as any).webkitRequestFullscreen();
+        } else if ((document.documentElement as any).msRequestFullscreen) {
+          await (document.documentElement as any).msRequestFullscreen();
+        }
+        console.log('✅ Fullscreen mode activated');
+      } catch (error) {
+        console.warn('⚠️ Could not enter fullscreen mode:', error);
+      }
+    };
+
+    enterFullscreen();
+
+    // Prevent text selection and copying
+    const preventCopy = (e: Event) => {
+      e.preventDefault();
+      setShowCopyWarning(true);
+      setTimeout(() => setShowCopyWarning(false), 3000);
+      console.log('🚫 Copy attempt blocked');
+    };
+
+    const preventKeyboardShortcuts = (e: KeyboardEvent) => {
+      // Prevent common copy shortcuts
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'a' || e.key === 'x' || e.key === 'v')) {
+        e.preventDefault();
+        setShowCopyWarning(true);
+        setTimeout(() => setShowCopyWarning(false), 3000);
+        console.log('🚫 Keyboard shortcut blocked:', e.key);
+      }
+
+      // Prevent F12, Ctrl+Shift+I (Dev Tools)
+      if (e.key === 'F12' || 
+          (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+          (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+          (e.ctrlKey && e.key === 'U')) {
+        e.preventDefault();
+        console.log('🚫 Developer tools shortcut blocked');
+      }
+
+      // Prevent Alt+Tab (Windows) and Cmd+Tab (Mac)
+      if ((e.altKey && e.key === 'Tab') || (e.metaKey && e.key === 'Tab')) {
+        e.preventDefault();
+        console.log('🚫 Tab switching blocked');
+      }
+    };
+
+    // Prevent right-click context menu
+    const preventContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      console.log('🚫 Context menu blocked');
+    };
+
+    // Detect when user leaves the tab/window
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setShowTabWarning(true);
+        console.log('⚠️ User left the tab - showing warning');
+        
+        // Try to regain focus
+        setTimeout(() => {
+          window.focus();
+          if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(console.warn);
+          }
+        }, 100);
+      } else {
+        setShowTabWarning(false);
+        console.log('✅ User returned to tab');
+      }
+    };
+
+    // Prevent window blur (losing focus)
+    const handleWindowBlur = () => {
+      setShowTabWarning(true);
+      console.log('⚠️ Window lost focus');
+      
+      // Try to regain focus immediately
+      setTimeout(() => {
+        window.focus();
+      }, 100);
+    };
+
+    const handleWindowFocus = () => {
+      setShowTabWarning(false);
+      console.log('✅ Window regained focus');
+    };
+
+    // Fullscreen change handler
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        console.log('⚠️ Exited fullscreen - attempting to re-enter');
+        // Try to re-enter fullscreen after a short delay
+        setTimeout(() => {
+          if (isInSecureMode) {
+            enterFullscreen();
+          }
+        }, 500);
+      }
+    };
+
+    // Add all event listeners
+    document.addEventListener('copy', preventCopy);
+    document.addEventListener('cut', preventCopy);
+    document.addEventListener('selectstart', preventCopy);
+    document.addEventListener('dragstart', preventCopy);
+    document.addEventListener('keydown', preventKeyboardShortcuts, true);
+    document.addEventListener('contextmenu', preventContextMenu);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+
+    // Disable text selection via CSS
+    document.body.style.userSelect = 'none';
+    document.body.style.webkitUserSelect = 'none';
+    document.body.style.msUserSelect = 'none';
+
+    // Cleanup function
+    return () => {
+      console.log('🔓 Exiting secure assessment mode');
+      
+      document.removeEventListener('copy', preventCopy);
+      document.removeEventListener('cut', preventCopy);
+      document.removeEventListener('selectstart', preventCopy);
+      document.removeEventListener('dragstart', preventCopy);
+      document.removeEventListener('keydown', preventKeyboardShortcuts, true);
+      document.removeEventListener('contextmenu', preventContextMenu);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+
+      // Restore text selection
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
+      document.body.style.msUserSelect = '';
+
+      // Exit fullscreen
+      if (document.exitFullscreen && document.fullscreenElement) {
+        document.exitFullscreen().catch(console.warn);
+      }
+    };
+  }, [isInSecureMode]);
+
+  // Don't render anything if not in secure mode
+  if (!isInSecureMode) return null;
+
+  return (
+    <>
+      {/* Copy Warning */}
+      {showCopyWarning && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[9999]">
+          <Alert className="bg-red-100 border-red-500 text-red-800 shadow-lg">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Copying content is not allowed during the assessment!
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {/* Tab Switch Warning */}
+      {showTabWarning && (
+        <div className="fixed inset-0 bg-red-600/90 z-[9998] flex items-center justify-center">
+          <div className="bg-white p-8 rounded-lg shadow-2xl text-center max-w-md">
+            <AlertTriangle className="h-16 w-16 text-red-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-red-800 mb-2">
+              Assessment Security Alert
+            </h2>
+            <p className="text-gray-700 mb-4">
+              You have left the assessment window. Please return to the assessment immediately.
+            </p>
+            <p className="text-sm text-gray-600">
+              Switching tabs or applications during the assessment is not permitted.
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+} 

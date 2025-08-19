@@ -1,5 +1,5 @@
 import React from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -19,13 +19,21 @@ import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
+import { AssessmentSecurity } from "@/components/AssessmentSecurity";
 
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
+  const [location] = useLocation();
 
   const handleSignOut = async () => {
     await signOut();
   };
+
+  // Check if user is in assessment-related routes
+  const isInAssessment = location.startsWith('/rules/') || 
+                        location.startsWith('/assessment/') || 
+                        location.startsWith('/question/') || 
+                        location.startsWith('/results/');
 
   if (!isAuthenticated) {
     return null;
@@ -56,15 +64,18 @@ function Header() {
             themes={["light", "dark", "system"]}
           />
             
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              className="flex items-center gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sign Out</span>
-            </Button>
+            {/* Only show sign out button when NOT in assessment */}
+            {!isInAssessment && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSignOut}
+                className="flex items-center gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -76,6 +87,7 @@ function Router() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header />
+      <AssessmentSecurity />
       <Switch>
         <Route path="/login" component={Login} />
         <Route path="/">
