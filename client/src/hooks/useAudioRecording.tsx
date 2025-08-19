@@ -77,8 +77,30 @@ export function useAudioRecording(): UseAudioRecordingReturn {
       
       mediaRecorder.onstop = () => {
         try {
-          console.log('stopRecording: MediaRecorder stopped, creating final blob');
+          console.log('stopRecording: MediaRecorder stopped, processing chunks:', {
+            chunksCount: audioChunksRef.current.length,
+            chunksDetails: audioChunksRef.current.map((chunk, i) => ({ 
+              index: i, 
+              size: chunk.size, 
+              type: chunk.type 
+            }))
+          });
+          
+          if (audioChunksRef.current.length === 0) {
+            console.error('❌ No audio chunks available - recording may have failed');
+            setIsRecording(false);
+            mediaRecorderRef.current = null;
+            resolve(null);
+            return;
+          }
+          
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          console.log('stopRecording: Created audio blob:', {
+            size: audioBlob.size,
+            type: audioBlob.type,
+            chunksUsed: audioChunksRef.current.length
+          });
+          
           const url = URL.createObjectURL(audioBlob);
           setAudioUrl(url);
           setIsRecording(false);
@@ -97,10 +119,10 @@ export function useAudioRecording(): UseAudioRecordingReturn {
           // Clear the media recorder reference
           mediaRecorderRef.current = null;
           
-          console.log('stopRecording: Complete, final blob size:', audioBlob.size);
+          console.log('✅ stopRecording: Complete, final blob size:', audioBlob.size);
           resolve(audioBlob);
         } catch (error) {
-          console.error('Error in recording stop handler:', error);
+          console.error('❌ Error in recording stop handler:', error);
           setIsRecording(false);
           mediaRecorderRef.current = null;
           resolve(null);

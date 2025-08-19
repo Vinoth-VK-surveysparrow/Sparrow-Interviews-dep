@@ -63,80 +63,105 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const clearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isStartingRef = useRef(false);
+  const lastUpdateRef = useRef(0);
 
-  const hasSupport = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+  // Simple browser support check - silent fallback if not supported
+  const hasSupport = (() => {
+    if (typeof window === 'undefined') return false;
+    return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+  })();
 
   const startListening = useCallback(() => {
     if (!hasSupport) return;
 
-    const SpeechRecognitionConstructor = (window.SpeechRecognition || window.webkitSpeechRecognition) as SpeechRecognitionConstructor;
-    const recognition = new SpeechRecognitionConstructor();
-    
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Only show the most recent result, not accumulated results
-      const lastResult = event.results[event.results.length - 1];
-      
-      if (lastResult) {
-        const currentTranscript = lastResult[0].transcript;
-        setTranscript(currentTranscript);
-
-        // Clear any existing timeout
-        if (clearTimeoutRef.current) {
-          clearTimeout(clearTimeoutRef.current);
-        }
-
-        // If this is a final result, clear after 3 seconds
-        if (lastResult.isFinal) {
-          clearTimeoutRef.current = setTimeout(() => {
-            setTranscript('');
-            clearTimeoutRef.current = null;
-          }, 3000);
-        }
-      }
-    };
-
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('Speech recognition error:', event.error);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      // Auto-restart recognition to keep it continuous and prevent accumulation
+    try {
       if (recognitionRef.current) {
-        setTimeout(() => {
-          if (recognitionRef.current && hasSupport) {
-            try {
-              recognitionRef.current.start();
-            } catch (error) {
-              console.log('Speech recognition restart error:', error);
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+
+      const SpeechRecognitionConstructor = (window.SpeechRecognition || window.webkitSpeechRecognition) as SpeechRecognitionConstructor;
+      const recognition = new SpeechRecognitionConstructor();
+      
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        try {
+          const lastResult = event.results[event.results.length - 1];
+          
+          if (lastResult && lastResult[0]) {
+            const currentTranscript = lastResult[0].transcript.trim();
+            
+            if (currentTranscript) {
+              // Throttle updates to prevent excessive re-renders
+              const now = Date.now();
+              if (now - lastUpdateRef.current > 500 || lastResult.isFinal) {
+                setTranscript(currentTranscript);
+                lastUpdateRef.current = now;
+              }
+
+              if (clearTimeoutRef.current) {
+                clearTimeout(clearTimeoutRef.current);
+                clearTimeoutRef.current = null;
+              }
+
+              if (lastResult.isFinal) {
+                clearTimeoutRef.current = setTimeout(() => {
+                  setTranscript('');
+                  clearTimeoutRef.current = null;
+                }, 3000);
+              }
             }
           }
-        }, 100);
-      }
-    };
+        } catch (error) {
+          // Silent error handling
+        }
+      };
 
-    recognitionRef.current = recognition;
-    recognition.start();
+      recognition.onerror = () => {
+        setIsListening(false);
+        // Silent error handling - no retries or logs
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+        // No auto-restart - keep it simple
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      
+    } catch (error) {
+      // Silent fallback if speech recognition fails
+      setIsListening(false);
+    }
   }, [hasSupport]);
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+        restartTimeoutRef.current = null;
+      }
+    } catch (error) {
+      // Silent cleanup
     }
     setIsListening(false);
   }, []);
 
   const resetTranscript = useCallback(() => {
-    // Clear any pending timeout
     if (clearTimeoutRef.current) {
       clearTimeout(clearTimeoutRef.current);
       clearTimeoutRef.current = null;
@@ -147,6 +172,9 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   useEffect(() => {
     return () => {
       stopListening();
+      if (clearTimeoutRef.current) {
+        clearTimeout(clearTimeoutRef.current);
+      }
     };
   }, [stopListening]);
 

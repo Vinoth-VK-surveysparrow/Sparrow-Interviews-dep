@@ -2,17 +2,22 @@ import { useEffect, useState } from 'react';
 import { useRoute, Link } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, ArrowRight, Home } from 'lucide-react';
+import { CheckCircle, ArrowRight, Home, Volume2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
 import { useAuth } from '@/hooks/useAuth';
+import { useS3Upload } from '@/hooks/useS3Upload';
 
 export default function Results() {
   const [, params] = useRoute('/results/:assessmentId');
   const [nextAssessment, setNextAssessment] = useState<Assessment | null>(null);
   const [loadingNext, setLoadingNext] = useState(true);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [loadingAudio, setLoadingAudio] = useState(true);
+  const [audioError, setAudioError] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { getAudioDownloadUrl } = useS3Upload();
 
   useEffect(() => {
     const initializeResults = async () => {
@@ -41,6 +46,29 @@ export default function Results() {
           setLoadingNext(false);
         }
       }
+
+      // Fetch audio download URL
+      if (params?.assessmentId && user?.email) {
+        try {
+          setLoadingAudio(true);
+          setAudioError(false);
+          console.log('🎵 Fetching audio download URL for:', params.assessmentId);
+          
+          const audioDownloadUrl = await getAudioDownloadUrl(params.assessmentId);
+          if (audioDownloadUrl) {
+            setAudioUrl(audioDownloadUrl);
+            console.log('✅ Audio download URL fetched successfully');
+          } else {
+            console.warn('⚠️ No audio download URL received');
+            setAudioError(true);
+          }
+        } catch (error) {
+          console.error('❌ Error fetching audio download URL:', error);
+          setAudioError(true);
+        } finally {
+          setLoadingAudio(false);
+        }
+      }
       
       toast({
         title: "Assessment Complete",
@@ -49,7 +77,7 @@ export default function Results() {
     };
 
     initializeResults();
-  }, [toast, params?.assessmentId, user?.email]);
+  }, [toast, params?.assessmentId, user?.email, getAudioDownloadUrl]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -76,6 +104,41 @@ export default function Results() {
                 Your responses have been recorded and submitted. 
                 Our team will review your submission and get back to you soon.
               </p>
+
+              {/* Audio Playback Section */}
+              <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-600">
+                <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center justify-center gap-2">
+                  <Volume2 className="h-5 w-5" />
+                  Your Assessment Recording
+                </h4>
+                
+                {loadingAudio ? (
+                  <div className="flex items-center justify-center gap-2 py-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600"></div>
+                    <span className="text-gray-600 dark:text-gray-300">Loading audio...</span>
+                  </div>
+                ) : audioError ? (
+                  <div className="text-center py-4">
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      Audio recording is being processed and will be available shortly.
+                    </p>
+                  </div>
+                ) : audioUrl ? (
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                    <audio 
+                      controls 
+                      className="w-full"
+                      preload="metadata"
+                      style={{ maxWidth: '500px', margin: '0 auto', display: 'block' }}
+                    >
+                      <source src={audioUrl} type="audio/webm" />
+                      <source src={audioUrl} type="audio/mp4" />
+                      Your browser does not support audio playback.
+                    </audio>
+                    
+                  </div>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         </div>

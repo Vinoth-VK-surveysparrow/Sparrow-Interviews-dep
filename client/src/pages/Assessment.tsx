@@ -8,8 +8,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { Home } from 'lucide-react';
 import { Question } from '@/lib/s3Service';
 import { replacePlaceholders } from '@/lib/questionUtils';
+import { useBackgroundUploadContext } from '@/contexts/BackgroundUploadProvider';
+import { memo } from 'react';
 // Circular Timer component with progress circle - Fixed for 60 seconds
-const CircularTimer = ({ timeLeft, isActive }: { timeLeft: number; isActive: boolean }) => {
+const CircularTimer = memo(({ timeLeft, isActive }: { timeLeft: number; isActive: boolean }) => {
   const totalTime = 60; // Always 60 seconds
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
   const minutes = Math.floor(timeLeft / 60);
@@ -51,10 +53,10 @@ const CircularTimer = ({ timeLeft, isActive }: { timeLeft: number; isActive: boo
       </div>
     </div>
   );
-};
+});
 import { useAssessment } from '@/contexts/AssessmentContext';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
-import { useAudioRecording } from '@/hooks/useAudioRecording';
+import { useContinuousAudioRecording } from '@/hooks/useContinuousAudioRecording';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 
 // Questions will be fetched from API
@@ -76,10 +78,11 @@ export default function Assessment() {
   
   const { session, finishAssessment, addTranscript, startSession, isS3Ready, uploadAudioToS3 } = useAssessment();
   const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
-  const { startRecording, stopRecording, isRecording, forceCleanup } = useAudioRecording();
+  const { startContinuousRecording, stopContinuousRecording, isRecording, recordingDuration, forceCleanup } = useContinuousAudioRecording();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition();
   const { fetchQuestions } = useS3Upload();
   const { user, loading: authLoading } = useAuth();
+  const { saveAudioLocally, forceUploadNow } = useBackgroundUploadContext();
 
 
 
@@ -135,7 +138,7 @@ export default function Assessment() {
       }
       
       startCamera();
-      startRecording();
+      await startContinuousRecording();
       
       if (hasSupport) {
         startListening();
@@ -152,17 +155,15 @@ export default function Assessment() {
       console.log('Assessment page unmounting - NOT stopping recordings (continue in background)');
       // Don't stop recordings - let them continue in background
     };
-  }, [loadingQuestions, questions.length, params?.assessmentId, session.assessmentId, startSession, startCamera, startRecording, hasSupport, startListening]);
+      }, [loadingQuestions, questions.length, params?.assessmentId]);
 
   // Start auto-capture only when S3 is ready
   useEffect(() => {
     if (isS3Ready) {
       console.log('📷 S3 is ready, starting auto-capture...');
       startAutoCapture();
-    } else {
-      console.log('📷 S3 not ready yet, waiting...');
     }
-  }, [isS3Ready, startAutoCapture]);
+  }, [isS3Ready]);
 
   // Timer logic
   useEffect(() => {
@@ -212,17 +213,49 @@ export default function Assessment() {
         
         console.log('Stopping audio recording and uploading to S3...');
         
-        // Stop recording
-        const finalAudio = await stopRecording();
-        if (finalAudio && isS3Ready) {
-          console.log('Final audio blob size:', finalAudio.size, '- uploading to S3...');
-          try {
-                         // Direct upload to S3 - wait for completion
-             await uploadAudioToS3(finalAudio);
-            console.log('Audio uploaded successfully to S3');
-          } catch (uploadError) {
-            console.error('Failed to upload audio to S3:', uploadError);
+        // Stop continuous recording
+        const finalAudio = await stopContinuousRecording();
+        console.log('🎤 Audio recording stopped:', {
+          hasAudio: !!finalAudio,
+          audioSize: finalAudio?.size || 0,
+          audioType: finalAudio?.type || 'none',
+          isS3Ready,
+          s3Config: session.s3Config
+        });
+        
+        if (finalAudio) {
+          // Always save audio locally first
+          if (user?.email && params?.assessmentId) {
+            console.log('💾 Saving audio locally before upload...');
+            try {
+              const audioId = await saveAudioLocally(finalAudio, params.assessmentId, user.email);
+              console.log('✅ Audio saved locally with ID:', audioId);
+              
+              // Force immediate background upload attempt
+              console.log('🚀 Triggering immediate upload attempt...');
+              setTimeout(() => {
+                forceUploadNow();
+              }, 1000); // Small delay to ensure local save completes
+              
+            } catch (localSaveError) {
+              console.error('❌ Failed to save audio locally:', localSaveError);
+            }
+          } else {
+            console.error('❌ Missing user email or assessment ID for local save');
           }
+
+          // Legacy direct upload as fallback (will be removed later)
+          if (isS3Ready) {
+            console.log('⚠️ Also attempting direct upload as fallback...');
+            try {
+              await uploadAudioToS3(finalAudio);
+              console.log('✅ Direct upload also successful');
+            } catch (uploadError) {
+              console.error('❌ Direct upload failed (background upload will retry):', uploadError);
+            }
+          }
+        } else {
+          console.error('❌ No audio blob received from stopRecording()');
         }
         
         // Force cleanup any remaining recording processes
@@ -284,18 +317,20 @@ export default function Assessment() {
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Question Header */}
       <div className="flex items-center justify-between mb-8">
-        {/* Home Button - only show if assessment hasn't started */}
-        {!assessmentStarted && (
-          <Button
-            onClick={() => setLocation('/')}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2"
-          >
-            <Home className="h-4 w-4" />
-            Home
-          </Button>
-        )}
+        {/* Home Button - maintains space to prevent layout shift */}
+        <div className="flex items-center">
+          {!assessmentStarted && (
+            <Button
+              onClick={() => setLocation('/')}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <Home className="h-4 w-4" />
+              Home
+            </Button>
+          )}
+        </div>
 
         <div className="flex items-center space-x-4">
           <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -309,23 +344,6 @@ export default function Assessment() {
           </div>
         </div>
       </div>
-
-      {/* S3 Status */}
-      {!isS3Ready && (
-        <Alert className="mb-4 bg-yellow-50 border-yellow-200">
-          <AlertDescription className="text-yellow-800">
-            Setting up cloud storage...
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {isS3Ready && (
-        <Alert className="mb-4 bg-green-50 border-green-200">
-          <AlertDescription className="text-green-800">
-            Recording system ready - capturing audio and images
-          </AlertDescription>
-        </Alert>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-8">
         {/* Question Section - Reduced width */}
@@ -345,13 +363,13 @@ export default function Assessment() {
             />
             
             {/* Live Transcription - Display only, no storage */}
-            {hasSupport && (
-              <div className="text-center max-w-full">
-                <p className="text-gray-900 dark:text-white text-lg leading-relaxed min-h-[60px]">
-                  {transcript || "Start speaking..."}
+            <div className="text-center max-w-full">
+              <div className="min-h-[80px] flex items-center justify-center">
+                <p className="text-gray-900 dark:text-white text-lg leading-relaxed opacity-75">
+                  {hasSupport ? (transcript || "Start speaking...") : ""}
                 </p>
               </div>
-            )}
+            </div>
           </div>
 
           {/* Navigation Buttons */}
@@ -375,10 +393,17 @@ export default function Assessment() {
               muted
               playsInline
               className="w-full h-full object-cover"
+              style={{ backgroundColor: '#111827' }}
             />
-            {/* Recording indicator */}
+            {/* Recording indicator - optimized animation */}
             <div className="absolute top-4 right-4 flex items-center bg-red-500 text-white px-3 py-1 rounded-full text-sm">
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse mr-2"></div>
+              <div 
+                className="w-2 h-2 bg-white rounded-full mr-2" 
+                style={{ 
+                  animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                  willChange: 'opacity'
+                }}
+              ></div>
               REC
             </div>
           </div>

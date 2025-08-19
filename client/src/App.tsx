@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
 import { AssessmentSecurity } from "@/components/AssessmentSecurity";
+import { BackgroundUploadProvider } from "@/contexts/BackgroundUploadProvider";
 
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
@@ -224,13 +225,15 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <AssessmentProvider>
-          <TooltipProvider>
-            <NavigationBlocker />
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </AssessmentProvider>
+        <BackgroundUploadProvider>
+          <AssessmentProvider>
+            <TooltipProvider>
+              <NavigationBlocker />
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </AssessmentProvider>
+        </BackgroundUploadProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

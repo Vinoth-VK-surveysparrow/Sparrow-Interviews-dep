@@ -115,15 +115,30 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [session.s3Config, uploadImage]);
 
   const uploadAudioToS3 = useCallback(async (audioBlob: Blob) => {
+    console.log('🎵 uploadAudioToS3 called:', {
+      blobSize: audioBlob.size,
+      blobType: audioBlob.type,
+      hasS3Config: !!session.s3Config,
+      hasAudioConfig: !!session.s3Config?.audio,
+      audioConfig: session.s3Config?.audio
+    });
+
     if (!session.s3Config?.audio) {
-      throw new Error('S3 not configured for audio upload');
+      const error = 'S3 not configured for audio upload';
+      console.error('❌', error, { s3Config: session.s3Config });
+      throw new Error(error);
     }
 
-    console.log('Starting audio upload to S3...');
+    console.log('✅ S3 audio config found, starting upload...');
     
-    // Wait for upload completion
-    await uploadAudio(audioBlob);
-    console.log('Audio upload completed successfully');
+    try {
+      // Wait for upload completion
+      await uploadAudio(audioBlob);
+      console.log('✅ Audio upload completed successfully');
+    } catch (error) {
+      console.error('❌ Audio upload failed in context:', error);
+      throw error;
+    }
   }, [session.s3Config, uploadAudio]);
 
   return (
