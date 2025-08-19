@@ -9,6 +9,7 @@ export function AssessmentSecurity() {
   const [showTabWarning, setShowTabWarning] = useState(false);
   const [isFullscreenTransition, setIsFullscreenTransition] = useState(false);
   const [securityInitialized, setSecurityInitialized] = useState(false);
+  const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
 
   // Check if user is in assessment or rules (security-critical routes)
   const isInSecureMode = location.startsWith('/rules/') || 
@@ -47,8 +48,42 @@ export function AssessmentSecurity() {
 
     enterFullscreen();
 
-    // Prevent text selection and copying
+    // Detect permission dialogs
+    const checkForPermissionDialogs = () => {
+      // Check if there are any active permission dialogs
+      const hasActiveModals = document.querySelector('[role="dialog"]') ||
+                            document.querySelector('.permission-dialog') ||
+                            document.activeElement?.closest('[role="dialog"]');
+      
+      if (hasActiveModals !== null) {
+        setPermissionDialogOpen(true);
+        console.log('🔓 Permission dialog detected - security relaxed');
+      } else {
+        setPermissionDialogOpen(false);
+      }
+    };
+
+    // Monitor for permission dialogs
+    const permissionObserver = new MutationObserver(checkForPermissionDialogs);
+    permissionObserver.observe(document.body, { 
+      childList: true, 
+      subtree: true, 
+      attributes: true 
+    });
+
+    // Prevent text selection and copying (only when no permission dialogs)
     const preventCopy = (e: Event) => {
+      if (permissionDialogOpen) {
+        console.log('🔓 Permission dialog open - allowing interaction');
+        return;
+      }
+      
+      // Only prevent copy on assessment content, not browser UI
+      const target = e.target as Element;
+      if (target?.closest('[role="dialog"]') || target?.closest('.permission-prompt')) {
+        return;
+      }
+      
       e.preventDefault();
       setShowCopyWarning(true);
       setTimeout(() => setShowCopyWarning(false), 3000);
@@ -56,6 +91,11 @@ export function AssessmentSecurity() {
     };
 
     const preventKeyboardShortcuts = (e: KeyboardEvent) => {
+      if (permissionDialogOpen) {
+        console.log('🔓 Permission dialog open - allowing keyboard interaction');
+        return;
+      }
+
       // Prevent common copy shortcuts
       if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'a' || e.key === 'x' || e.key === 'v')) {
         e.preventDefault();
@@ -80,16 +120,25 @@ export function AssessmentSecurity() {
       }
     };
 
-    // Prevent right-click context menu
+    // Prevent right-click context menu (only on assessment content)
     const preventContextMenu = (e: MouseEvent) => {
+      if (permissionDialogOpen) {
+        return;
+      }
+      
+      const target = e.target as Element;
+      if (target?.closest('[role="dialog"]') || target?.closest('.permission-prompt')) {
+        return;
+      }
+      
       e.preventDefault();
       console.log('🚫 Context menu blocked');
     };
 
     // Detect when user leaves the tab/window (only after security is fully initialized)
     const handleVisibilityChange = () => {
-      if (!securityInitialized || isFullscreenTransition) {
-        console.log('🔄 Security still initializing, ignoring visibility change');
+      if (!securityInitialized || isFullscreenTransition || permissionDialogOpen) {
+        console.log('🔄 Security still initializing or permission dialog open, ignoring visibility change');
         return;
       }
 
@@ -111,21 +160,26 @@ export function AssessmentSecurity() {
       }
     };
 
-    // Prevent window blur (losing focus) - only after initialization
+    // Prevent window blur (losing focus) - only after initialization and when no permission dialog
     const handleWindowBlur = () => {
-      if (!securityInitialized || isFullscreenTransition) {
-        console.log('🔄 Security still initializing, ignoring window blur');
+      if (!securityInitialized || isFullscreenTransition || permissionDialogOpen) {
+        console.log('🔄 Security still initializing or permission dialog open, ignoring window blur');
         return;
       }
 
-      setShowTabWarning(true);
-      console.log('⚠️ Window lost focus');
-      
-      // Auto-hide warning after 3 seconds
+      // Only show warning if blur is not due to permission dialog
       setTimeout(() => {
-        setShowTabWarning(false);
-        window.focus();
-      }, 3000);
+        if (!permissionDialogOpen) {
+          setShowTabWarning(true);
+          console.log('⚠️ Window lost focus');
+          
+          // Auto-hide warning after 3 seconds
+          setTimeout(() => {
+            setShowTabWarning(false);
+            window.focus();
+          }, 3000);
+        }
+      }, 100); // Small delay to check if permission dialog opened
     };
 
     const handleWindowFocus = () => {
@@ -148,12 +202,12 @@ export function AssessmentSecurity() {
       }
     };
 
-    // Add all event listeners
+    // Add event listeners (without capture for most to allow browser UI interactions)
     document.addEventListener('copy', preventCopy);
     document.addEventListener('cut', preventCopy);
     document.addEventListener('selectstart', preventCopy);
     document.addEventListener('dragstart', preventCopy);
-    document.addEventListener('keydown', preventKeyboardShortcuts, true);
+    document.addEventListener('keydown', preventKeyboardShortcuts); // Removed capture: true
     document.addEventListener('contextmenu', preventContextMenu);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -169,11 +223,14 @@ export function AssessmentSecurity() {
     return () => {
       console.log('🔓 Exiting secure assessment mode');
       
+      // Disconnect permission observer
+      permissionObserver.disconnect();
+      
       document.removeEventListener('copy', preventCopy);
       document.removeEventListener('cut', preventCopy);
       document.removeEventListener('selectstart', preventCopy);
       document.removeEventListener('dragstart', preventCopy);
-      document.removeEventListener('keydown', preventKeyboardShortcuts, true);
+      document.removeEventListener('keydown', preventKeyboardShortcuts);
       document.removeEventListener('contextmenu', preventContextMenu);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
