@@ -31,7 +31,7 @@ export default function Dashboard() {
   const [loadingAssessment, setLoadingAssessment] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { initiateAssessment, fetchQuestions } = useS3Upload();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
@@ -47,19 +47,35 @@ export default function Dashboard() {
     }
   };
 
-  // Fetch assessments on component mount
+  // Fetch assessments on component mount (wait for auth to complete)
   useEffect(() => {
     const fetchAssessments = async () => {
+      // Don't fetch if auth is still loading
+      if (authLoading) {
+        console.log('🔄 Authentication still loading, waiting...');
+        return;
+      }
+
+      // Don't fetch if no user email
+      if (!user?.email) {
+        console.log('❌ No user email available, skipping assessment fetch');
+        setLoadingAssessments(false);
+        return;
+      }
+
       try {
         setError(null);
+        console.log('📝 Fetching assessments for user:', user.email);
         
         const fetchedAssessments = await S3Service.getAssessments();
         const dashboardAssessments: DashboardAssessment[] = [];
         
         // Process each assessment to determine completed and unlocked status
         for (const assessment of fetchedAssessments) {
-          const completed = user?.email ? S3Service.isAssessmentCompleted(user.email, assessment.assessment_id) : false;
-          const unlocked = user?.email ? await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id) : false;
+          const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
+          const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
+          
+          console.log(`📊 Assessment ${assessment.assessment_name}: completed=${completed}, unlocked=${unlocked}`);
           
           dashboardAssessments.push({
             ...assessment,
@@ -84,7 +100,7 @@ export default function Dashboard() {
     };
 
     fetchAssessments();
-  }, [toast, user?.email]);
+  }, [toast, user?.email, authLoading]);
 
   // Function to refresh assessment states (completion and unlock status)
   const refreshAssessmentStates = async () => {

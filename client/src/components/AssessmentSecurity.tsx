@@ -7,6 +7,8 @@ export function AssessmentSecurity() {
   const [location] = useLocation();
   const [showCopyWarning, setShowCopyWarning] = useState(false);
   const [showTabWarning, setShowTabWarning] = useState(false);
+  const [isFullscreenTransition, setIsFullscreenTransition] = useState(false);
+  const [securityInitialized, setSecurityInitialized] = useState(false);
 
   // Check if user is in assessment or rules (security-critical routes)
   const isInSecureMode = location.startsWith('/rules/') || 
@@ -21,6 +23,7 @@ export function AssessmentSecurity() {
     // Request fullscreen when entering assessment
     const enterFullscreen = async () => {
       try {
+        setIsFullscreenTransition(true);
         if (document.documentElement.requestFullscreen) {
           await document.documentElement.requestFullscreen();
         } else if ((document.documentElement as any).webkitRequestFullscreen) {
@@ -29,8 +32,16 @@ export function AssessmentSecurity() {
           await (document.documentElement as any).msRequestFullscreen();
         }
         console.log('✅ Fullscreen mode activated');
+        
+        // Allow time for fullscreen transition to complete
+        setTimeout(() => {
+          setIsFullscreenTransition(false);
+          setSecurityInitialized(true);
+        }, 1500);
       } catch (error) {
         console.warn('⚠️ Could not enter fullscreen mode:', error);
+        setIsFullscreenTransition(false);
+        setSecurityInitialized(true);
       }
     };
 
@@ -75,44 +86,58 @@ export function AssessmentSecurity() {
       console.log('🚫 Context menu blocked');
     };
 
-    // Detect when user leaves the tab/window
+    // Detect when user leaves the tab/window (only after security is fully initialized)
     const handleVisibilityChange = () => {
+      if (!securityInitialized || isFullscreenTransition) {
+        console.log('🔄 Security still initializing, ignoring visibility change');
+        return;
+      }
+
       if (document.hidden) {
         setShowTabWarning(true);
         console.log('⚠️ User left the tab - showing warning');
         
-        // Try to regain focus
+        // Auto-hide warning after 3 seconds and try to regain focus
         setTimeout(() => {
+          setShowTabWarning(false);
           window.focus();
           if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(console.warn);
           }
-        }, 100);
+        }, 3000);
       } else {
         setShowTabWarning(false);
         console.log('✅ User returned to tab');
       }
     };
 
-    // Prevent window blur (losing focus)
+    // Prevent window blur (losing focus) - only after initialization
     const handleWindowBlur = () => {
+      if (!securityInitialized || isFullscreenTransition) {
+        console.log('🔄 Security still initializing, ignoring window blur');
+        return;
+      }
+
       setShowTabWarning(true);
       console.log('⚠️ Window lost focus');
       
-      // Try to regain focus immediately
+      // Auto-hide warning after 3 seconds
       setTimeout(() => {
+        setShowTabWarning(false);
         window.focus();
-      }, 100);
+      }, 3000);
     };
 
     const handleWindowFocus = () => {
-      setShowTabWarning(false);
-      console.log('✅ Window regained focus');
+      if (securityInitialized && !isFullscreenTransition) {
+        setShowTabWarning(false);
+        console.log('✅ Window regained focus');
+      }
     };
 
     // Fullscreen change handler
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
+      if (!document.fullscreenElement && securityInitialized && !isFullscreenTransition) {
         console.log('⚠️ Exited fullscreen - attempting to re-enter');
         // Try to re-enter fullscreen after a short delay
         setTimeout(() => {
@@ -184,21 +209,18 @@ export function AssessmentSecurity() {
         </div>
       )}
 
-      {/* Tab Switch Warning */}
+      {/* Tab Switch Warning - Small corner notification */}
       {showTabWarning && (
-        <div className="fixed inset-0 bg-red-600/90 z-[9998] flex items-center justify-center">
-          <div className="bg-white p-8 rounded-lg shadow-2xl text-center max-w-md">
-            <AlertTriangle className="h-16 w-16 text-red-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-red-800 mb-2">
-              Assessment Security Alert
-            </h2>
-            <p className="text-gray-700 mb-4">
-              You have left the assessment window. Please return to the assessment immediately.
-            </p>
-            <p className="text-sm text-gray-600">
-              Switching tabs or applications during the assessment is not permitted.
-            </p>
-          </div>
+        <div className="fixed top-4 right-4 z-[9999] animate-slide-in-right">
+          <Alert className="bg-orange-100 border-orange-500 text-orange-800 shadow-lg max-w-sm">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="font-medium">
+              <div className="text-sm">
+                <div className="font-semibold">Security Alert</div>
+                <div className="text-xs mt-1">Please stay focused on the assessment</div>
+              </div>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
     </>
