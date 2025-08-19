@@ -8,6 +8,7 @@ import { useS3Upload } from '@/hooks/useS3Upload';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
+import PermissionsTest from '@/components/PermissionsTest';
 
 // Sparrow logo component using the Symbol.svg
 const SparrowLogo = () => (
@@ -250,113 +251,155 @@ export default function Dashboard() {
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <div className="space-y-8">
-         <div className="text-center">
-           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-             Assessment Dashboard
-           </h1>
+      <div className="space-y-8">
+        {/* Permissions Test Button */}
+        <div className="flex justify-end">
+          <PermissionsTest />
+        </div>
+        
+        <div className="text-center">
+          
            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-             Choose an assessment to begin your evaluation. Each assessment is designed to test 
-             specific skills and knowledge areas relevant to your role.
-           </p>
-         </div>
 
-         {/* Horizontal scrollable container */}
-         <div className="overflow-x-auto pb-4">
-           <div className="flex gap-6 min-w-max px-1">
-             {assessments.map((assessment) => (
-               <Card 
+
+
+
+             Choose an assessment to begin your evaluation. 
+
+          </p>
+        </div>
+        <br></br>
+        <br></br>
+
+        {/* Horizontal scrollable container with navigation */}
+        <div className="relative">
+          <div className="overflow-x-auto pb-4" id="assessments-container">
+            <div className="flex gap-6 min-w-max px-1">
+               {assessments.map((assessment) => (
+              <Card 
                  key={assessment.assessment_id}
-                 className={`flex-shrink-0 w-72 h-[480px] shadow-sm transition-all duration-200 overflow-hidden ${
+                 className={`flex-shrink-0 w-72 h-[480px] shadow-sm transition-all duration-200 overflow-hidden relative ${
                    assessment.completed 
                      ? 'border-green-200 bg-green-50 dark:bg-green-900/20' 
                      : assessment.unlocked
-                     ? 'border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md'
-                     : 'border-gray-300 bg-gray-50 dark:bg-gray-800 opacity-75'
-                 }`}
-               >
-                 <CardContent className="p-8 h-full flex flex-col justify-between relative">
+                     ? 'border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md cursor-pointer'
+                     : 'border-gray-300 bg-gray-50 dark:bg-gray-800'
+                }`}
+                onClick={() => assessment.unlocked && !assessment.completed && handleStartAssessment(assessment.assessment_id)}
+              >
+                <CardContent className="p-8 h-full flex flex-col justify-between relative">
+                   {/* Locked State Overlay */}
+                   {!assessment.unlocked && (
+                     <div className="absolute inset-0 bg-white/90 dark:bg-gray-700/90 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
+                       <div className="w-16 h-16 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center mb-4">
+                         <Lock className="w-8 h-8 text-gray-600 dark:text-gray-300" />
+                       </div>
+                       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-2">Unlock this</h3>
+                       <p className="text-sm text-gray-600 dark:text-gray-300 text-center px-4">
+                         by completing the previous assessment
+                       </p>
+                     </div>
+                   )}
+
                    {/* Status overlay */}
-                   {assessment.completed ? (
-                     <div className="absolute top-4 right-4">
+                   {assessment.completed && (
+                     <div className="absolute top-4 right-4 z-20">
                        <CheckCircle className="w-6 h-6 text-green-500" />
                      </div>
-                   ) : !assessment.unlocked ? (
-                     <div className="absolute top-4 right-4">
-                       <Lock className="w-6 h-6 text-gray-400" />
-                     </div>
-                   ) : null}
-                   
-                   <div>
-                     {/* Icon Section */}
-                     <div className="bg-gray-100 dark:bg-custom-dark-2 rounded-lg p-6 mb-6 flex items-center justify-center">
+                   )}
+                  
+                  <div className={assessment.unlocked ? '' : 'blur-sm'}>
+                    {/* Icon Section */}
+                    <div className="bg-gray-100 dark:bg-custom-dark-2 rounded-lg p-6 mb-6 flex items-center justify-center">
                        <SparrowLogo />
-                     </div>
-                     
-                     {/* Content Section */}
+                    </div>
+                    
+                    {/* Content Section */}
                      <h3 className={`text-xl font-semibold mb-4 ${
                        assessment.unlocked 
                          ? 'text-gray-900 dark:text-white' 
                          : 'text-gray-500 dark:text-gray-400'
                      }`}>
                        {assessment.assessment_name}
-                     </h3>
+                    </h3>
                      <p className={`text-sm leading-relaxed mb-6 ${
                        assessment.unlocked 
                          ? 'text-gray-600 dark:text-gray-300' 
                          : 'text-gray-400 dark:text-gray-500'
                      }`}>
-                       {assessment.description}
-                     </p>
-                   </div>
-                   
-                   {/* Button Section */}
-                   {assessment.completed ? (
-                     <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm">
-                       <CheckCircle className="h-4 w-4" />
-                       Assessment Completed
-                     </div>
-                   ) : !assessment.unlocked ? (
-                     <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm">
-                       <Lock className="h-4 w-4" />
-                       Complete previous assessments to unlock
-                     </div>
-                   ) : (
-                     <Button
-                       onClick={() => handleStartAssessment(assessment.assessment_id)}
-                       disabled={loadingAssessment === assessment.assessment_id}
-                       className="group relative overflow-hidden w-full" 
-                       size="lg"
-                     >
-                       {loadingAssessment === assessment.assessment_id ? (
-                         <>
-                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                           Starting...
-                         </>
-                       ) : (
-                         <>
-                           <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
-                             Start Now
-                           </span>
-                           <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
-                             <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
-                           </i>
-                         </>
-                       )}
-                     </Button>
-                   )}
-                 </CardContent>
-               </Card>
-             ))}
-           </div>
-         </div>
-       </div>
-
-      {assessments.length === 0 && !loadingAssessments && (
-        <div className="text-center py-12">
-          <p className="text-gray-600 dark:text-gray-300">No assessments available at the moment.</p>
+                      {assessment.description}
+                    </p>
+                  </div>
+                  
+                  {/* Button Section */}
+                  <div className={assessment.unlocked ? '' : 'blur-sm'}>
+                    {assessment.completed ? (
+                      <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm">
+                        <CheckCircle className="h-4 w-4" />
+                        Assessment Completed
+                      </div>
+                    ) : assessment.unlocked ? (
+                      <Button
+                        onClick={() => handleStartAssessment(assessment.assessment_id)}
+                        disabled={loadingAssessment === assessment.assessment_id}
+                        className="group relative overflow-hidden w-full" 
+                        size="lg"
+                      >
+                        {loadingAssessment === assessment.assessment_id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Starting...
+                          </>
+                        ) : (
+                          <>
+                            <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
+                              Start Now
+                            </span>
+                            <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
+                              <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+                            </i>
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm">
+                        <Lock className="h-4 w-4" />
+                        Complete previous assessments to unlock
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          {/* Right arrow indicator */}
+          {assessments.length > 2 && (
+            <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-lg border-gray-200 dark:border-gray-600 hover:bg-white/95 dark:hover:bg-gray-700/95 text-gray-700 dark:text-gray-200"
+                onClick={() => {
+                  const container = document.getElementById('assessments-container');
+                  if (container) {
+                    container.scrollBy({ left: 300, behavior: 'smooth' });
+                  }
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+
+        {assessments.length === 0 && !loadingAssessments && (
+          <div className="text-center py-12">
+            <p className="text-gray-600 dark:text-gray-300">No assessments available at the moment.</p>
+          </div>
+        )}
+      </div>
     </main>
   );
 }

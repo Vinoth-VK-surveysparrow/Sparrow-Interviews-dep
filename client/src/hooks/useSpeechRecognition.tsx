@@ -66,6 +66,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isStartingRef = useRef(false);
   const lastUpdateRef = useRef(0);
+  const wordCountRef = useRef(0);
 
   // Simple browser support check - silent fallback if not supported
   const hasSupport = (() => {
@@ -74,73 +75,133 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   })();
 
   const startListening = useCallback(() => {
-    if (!hasSupport) return;
+    if (!hasSupport) {
+      console.log('Speech recognition not supported in this browser');
+      return;
+    }
 
     try {
+      // Stop any existing recognition
       if (recognitionRef.current) {
         recognitionRef.current.stop();
         recognitionRef.current = null;
       }
 
       const SpeechRecognitionConstructor = (window.SpeechRecognition || window.webkitSpeechRecognition) as SpeechRecognitionConstructor;
+      if (!SpeechRecognitionConstructor) {
+        console.log('SpeechRecognition constructor not available');
+        return;
+      }
+
       const recognition = new SpeechRecognitionConstructor();
       
+      // Configure recognition
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
+        console.log('Speech recognition started');
         setIsListening(true);
       };
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
         try {
-          const lastResult = event.results[event.results.length - 1];
-          
-          if (lastResult && lastResult[0]) {
-            const currentTranscript = lastResult[0].transcript.trim();
-            
-            if (currentTranscript) {
-              // Throttle updates to prevent excessive re-renders
-              const now = Date.now();
-              if (now - lastUpdateRef.current > 500 || lastResult.isFinal) {
-                setTranscript(currentTranscript);
-                lastUpdateRef.current = now;
-              }
+          let finalTranscript = '';
+          let interimTranscript = '';
 
-              if (clearTimeoutRef.current) {
-                clearTimeout(clearTimeoutRef.current);
-                clearTimeoutRef.current = null;
-              }
-
-              if (lastResult.isFinal) {
-                clearTimeoutRef.current = setTimeout(() => {
-                  setTranscript('');
-                  clearTimeoutRef.current = null;
-                }, 3000);
+          // Process all results
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            if (result && result[0]) {
+              const transcript = result[0].transcript;
+              if (result.isFinal) {
+                finalTranscript += transcript;
+              } else {
+                interimTranscript += transcript;
               }
             }
           }
+
+          // Use final transcript if available, otherwise interim
+          const currentTranscript = (finalTranscript || interimTranscript).trim();
+          
+          if (currentTranscript) {
+            // Count words in current transcript
+            const words = currentTranscript.split(/\s+/).filter(word => word.length > 0);
+            
+            // If we exceed 15 words, clear and start fresh with new words
+            if (words.length > 15) {
+              // Keep only the last 15 words (most recent)
+              const recentWords = words.slice(-15);
+              const limitedTranscript = recentWords.join(' ');
+              
+              // Reset word count
+              wordCountRef.current = recentWords.length;
+              
+              setTranscript(limitedTranscript);
+              console.log('Transcript limited to 15 words:', limitedTranscript);
+            } else {
+              // Normal update if under 15 words
+              const now = Date.now();
+              if (now - lastUpdateRef.current > 300 || finalTranscript) {
+                setTranscript(currentTranscript);
+                wordCountRef.current = words.length;
+                lastUpdateRef.current = now;
+                console.log('Transcript updated:', currentTranscript, `(${words.length} words)`);
+              }
+            }
+
+            // Clear transcript after final result (but keep listening for new input)
+            if (finalTranscript) {
+              if (clearTimeoutRef.current) {
+                clearTimeout(clearTimeoutRef.current);
+              }
+              clearTimeoutRef.current = setTimeout(() => {
+                setTranscript('');
+                wordCountRef.current = 0;
+                clearTimeoutRef.current = null;
+                console.log('Transcript cleared, ready for new input');
+              }, 3000);
+            }
+          }
         } catch (error) {
-          // Silent error handling
+          console.error('Error processing speech result:', error);
         }
       };
 
-      recognition.onerror = () => {
+      recognition.onerror = (event: any) => {
+        console.log('Speech recognition error:', event.error);
         setIsListening(false);
-        // Silent error handling - no retries or logs
+        
+        // Auto-restart on certain errors
+        if (event.error === 'no-speech' || event.error === 'audio-capture') {
+          setTimeout(() => {
+            if (recognitionRef.current === recognition) {
+              startListening();
+            }
+          }, 1000);
+        }
       };
 
       recognition.onend = () => {
+        console.log('Speech recognition ended');
         setIsListening(false);
-        // No auto-restart - keep it simple
+        
+        // Auto-restart if we're still supposed to be listening
+        if (recognitionRef.current === recognition) {
+          setTimeout(() => {
+            startListening();
+          }, 100);
+        }
       };
 
       recognitionRef.current = recognition;
       recognition.start();
+      console.log('Starting speech recognition...');
       
     } catch (error) {
-      // Silent fallback if speech recognition fails
+      console.error('Failed to start speech recognition:', error);
       setIsListening(false);
     }
   }, [hasSupport]);
@@ -167,6 +228,8 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       clearTimeoutRef.current = null;
     }
     setTranscript('');
+    wordCountRef.current = 0;
+    console.log('Transcript manually reset');
   }, []);
 
   useEffect(() => {

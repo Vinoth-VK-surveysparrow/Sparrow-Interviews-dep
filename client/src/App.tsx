@@ -21,6 +21,8 @@ import { LogOut } from "lucide-react";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
 import { AssessmentSecurity } from "@/components/AssessmentSecurity";
 import { BackgroundUploadProvider } from "@/contexts/BackgroundUploadProvider";
+import PermissionsTest from "@/components/PermissionsTest";
+import SecurityRestrictions from "@/components/SecurityRestrictions";
 
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
@@ -84,11 +86,23 @@ function Header() {
   );
 }
 
+function SecurityWrapper() {
+  const [location] = useLocation();
+  
+  // Check if user is in assessment-related routes where restrictions should apply
+  const isInAssessment = location.startsWith('/rules/') || 
+                        location.startsWith('/assessment/') || 
+                        location.startsWith('/question/');
+
+  return isInAssessment ? <SecurityRestrictions /> : null;
+}
+
 function Router() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header />
       <AssessmentSecurity />
+      <SecurityWrapper />
       <Switch>
         <Route path="/login" component={Login} />
         <Route path="/">
@@ -226,13 +240,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BackgroundUploadProvider>
-          <AssessmentProvider>
-            <TooltipProvider>
+        <AssessmentProvider>
+          <TooltipProvider>
               <NavigationBlocker />
-              <Toaster />
-              <Router />
-            </TooltipProvider>
-          </AssessmentProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </AssessmentProvider>
         </BackgroundUploadProvider>
       </ThemeProvider>
     </QueryClientProvider>

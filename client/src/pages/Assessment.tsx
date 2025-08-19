@@ -1,53 +1,52 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useS3Upload } from '@/hooks/useS3Upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
-import { Home } from 'lucide-react';
+import { Home, Mic } from 'lucide-react';
 import { Question } from '@/lib/s3Service';
 import { replacePlaceholders } from '@/lib/questionUtils';
 import { useBackgroundUploadContext } from '@/contexts/BackgroundUploadProvider';
-import { memo } from 'react';
-// Circular Timer component with progress circle - Fixed for 60 seconds
+// Enhanced Circular Timer component matching the reference design
 const CircularTimer = memo(({ timeLeft, isActive }: { timeLeft: number; isActive: boolean }) => {
   const totalTime = 60; // Always 60 seconds
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
-  const circumference = 2 * Math.PI * 45; // radius = 45
+  const radius = 45;
+  const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   
   return (
-    <div className="relative w-24 h-24 flex items-center justify-center">
-      <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-        {/* Background circle */}
+    <div className="relative w-32 h-32 flex items-center justify-center">
+      <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+        {/* Background circle - light gray */}
         <circle
-          cx="50"
-          cy="50"
-          r="45"
-          stroke="currentColor"
-          strokeWidth="4"
-          fill="transparent"
-          className="text-gray-200 dark:text-gray-700"
+          cx="60"
+          cy="60"
+          r={radius}
+          stroke="#e5e7eb"
+          strokeWidth="8"
+          fill="#f8fafc"
         />
-        {/* Progress circle */}
+        {/* Progress circle - teal color #4A9CA6 */}
         <circle
-          cx="50"
-          cy="50"
-          r="45"
-          stroke="currentColor"
-          strokeWidth="4"
-          fill="transparent"
+          cx="60"
+          cy="60"
+          r={radius}
+          stroke="#4A9CA6"
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
-          className={`transition-all duration-1000 ${isActive ? 'text-teal-600' : 'text-gray-400'}`}
-          strokeLinecap="round"
+          className="transition-all duration-1000 ease-out"
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className={`text-sm font-bold ${isActive ? 'text-teal-600' : 'text-gray-500'}`}>
+        <div className="text-xl font-bold text-gray-800">
           {minutes}:{seconds.toString().padStart(2, '0')}
         </div>
       </div>
@@ -129,23 +128,23 @@ export default function Assessment() {
     const initializeAssessment = async () => {
       if (loadingQuestions || questions.length === 0) return;
       
-      console.log('Assessment page mounted - starting continuous recording');
-      
-      // Start assessment session if not already started
-      if (params?.assessmentId && !session.assessmentId) {
-        console.log('Starting assessment session for:', params.assessmentId);
+    console.log('Assessment page mounted - starting continuous recording');
+    
+    // Start assessment session if not already started
+    if (params?.assessmentId && !session.assessmentId) {
+      console.log('Starting assessment session for:', params.assessmentId);
         await startSession(params.assessmentId);
-      }
-      
-      startCamera();
+    }
+    
+    startCamera();
       await startContinuousRecording();
-      
-      if (hasSupport) {
-        startListening();
-      }
+    
+    if (hasSupport) {
+      startListening();
+    }
 
-      // Start timer for first question
-      setIsTimerActive(true);
+    // Start timer for first question
+    setIsTimerActive(true);
       setAssessmentStarted(true);
     };
 
@@ -162,7 +161,7 @@ export default function Assessment() {
     if (isS3Ready) {
       console.log('📷 S3 is ready, starting auto-capture...');
       startAutoCapture();
-    }
+      }
   }, [isS3Ready]);
 
   // Timer logic
@@ -252,7 +251,7 @@ export default function Assessment() {
               console.log('✅ Direct upload also successful');
             } catch (uploadError) {
               console.error('❌ Direct upload failed (background upload will retry):', uploadError);
-            }
+        }
           }
         } else {
           console.error('❌ No audio blob received from stopRecording()');
@@ -263,7 +262,7 @@ export default function Assessment() {
         forceCleanup();
         
         console.log('Calling finishAssessment...');
-        await finishAssessment();
+            await finishAssessment();
         
         console.log('Navigating to results page...');
         // Navigate to results
@@ -286,8 +285,8 @@ export default function Assessment() {
   // Removed handlePreviousQuestion - linear progression only with 60sec time limits
 
   if (loadingQuestions) {
-    return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  return (
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
@@ -314,12 +313,11 @@ export default function Assessment() {
   }
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Question Header */}
-      <div className="flex items-center justify-between mb-8">
-        {/* Home Button - maintains space to prevent layout shift */}
-        <div className="flex items-center">
-          {!assessmentStarted && (
+    <div className="min-h-screen">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Header with Home Button (only when assessment hasn't started) */}
+        {!assessmentStarted && (
+          <div className="mb-6">
             <Button
               onClick={() => setLocation('/')}
               variant="outline"
@@ -329,86 +327,128 @@ export default function Assessment() {
               <Home className="h-4 w-4" />
               Home
             </Button>
-          )}
+          </div>
+        )}
+
+        {/* Question Header */}
+        <div className="text-center mb-8">
+          <div className="mb-4">
+            <h1 className="text-xl font-semibold text-gray-800 dark:text-white">
+              Question {currentQuestionIndex + 1} of {questions.length}
+            </h1>
+          </div>
+          
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-8 leading-relaxed max-w-4xl mx-auto">
+            {currentQuestion ? replacePlaceholders(currentQuestion.question_text, user) : 'Loading question...'}
+          </h2>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <div className="text-sm text-gray-500 dark:text-gray-400">
-            Question {currentQuestionIndex + 1} of {questions.length}
-          </div>
-          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full flex-1 max-w-xs">
-            <div 
-              className="h-full bg-teal-600 rounded-full transition-all duration-300"
-              style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-8">
-        {/* Question Section - Reduced width */}
-        <div className="space-y-6">
-          <Card className="p-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
-              {replacePlaceholders(currentQuestion.question_text, user)}
-            </h2>
-          </Card>
-
-          {/* Transcription and Timer Section - Below Question */}
-          <div className="flex flex-col items-center space-y-6">
-            {/* Circular Timer */}
-            <CircularTimer
-              timeLeft={timeLeft}
-              isActive={isTimerActive}
-            />
-            
-            {/* Live Transcription - Display only, no storage */}
-            <div className="text-center max-w-full">
-              <div className="min-h-[80px] flex items-center justify-center">
-                <p className="text-gray-900 dark:text-white text-lg leading-relaxed opacity-75">
-                  {hasSupport ? (transcript || "Start speaking...") : ""}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Navigation Buttons */}
-          <div className="flex justify-end items-center mt-6">
-            <Button
-              onClick={handleNextQuestion}
-              disabled={isFinishing}
-              className="bg-teal-600 hover:bg-teal-700 disabled:opacity-50"
-            >
-              {isFinishing ? 'Finishing...' : (isLastQuestion ? 'Finish Assessment' : 'Next Question')}
-            </Button>
-          </div>
-        </div>
-
-        {/* Camera Section - Aligned with question height, increased width */}
-        <div className="space-y-6">
-          <div className="relative bg-gray-900 dark:bg-gray-800 rounded-lg overflow-hidden" style={{ aspectRatio: '4/3' }}>
+        {/* Main Content Area */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-8">
+          {/* Video Section - Left Side */}
+          <div className="lg:col-span-1">
+            <div className="relative bg-gray-900 rounded-xl overflow-hidden shadow-lg" style={{ aspectRatio: '4/3' }}>
             <video
               ref={videoRef}
               autoPlay
               muted
               playsInline
               className="w-full h-full object-cover"
-              style={{ backgroundColor: '#111827' }}
+                style={{ backgroundColor: '#111827' }}
             />
-            {/* Recording indicator - optimized animation */}
-            <div className="absolute top-4 right-4 flex items-center bg-red-500 text-white px-3 py-1 rounded-full text-sm">
-              <div 
-                className="w-2 h-2 bg-white rounded-full mr-2" 
-                style={{ 
-                  animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                  willChange: 'opacity'
-                }}
-              ></div>
-              REC
+            {/* Recording indicator */}
+              <div className="absolute top-4 right-4 flex items-center bg-red-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                <div 
+                  className="w-2 h-2 bg-white rounded-full mr-2" 
+                  style={{ 
+                    animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    willChange: 'opacity'
+                  }}
+                ></div>
+                REC
+              </div>
+            </div>
+          </div>
+
+          {/* Transcript Section - Right Side (Open Space) */}
+          <div className="lg:col-span-1 flex flex-col justify-between min-h-[400px]">
+            {/* Live Transcript in open space */}
+            <div className="flex-grow">
+              <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed">
+                {hasSupport ? (transcript || "Start speaking to see your transcript here...") : "Speech recognition not available in this browser"}
+              </p>
+            </div>
+
+            {/* AI Voice Input - Positioned above controls */}
+            <div className="flex justify-center mb-6">
+              <div className="w-full py-4">
+                <div className="relative max-w-xl w-full mx-auto flex items-center flex-col gap-2">
+                  {/* Microphone Button */}
+                  <div className="w-16 h-16 rounded-xl flex items-center justify-center bg-none">
+                    <div
+                      className="w-6 h-6 rounded-sm animate-spin bg-gray-800 dark:bg-white cursor-pointer pointer-events-auto"
+                      style={{ animationDuration: "3s" }}
+                    />
+                  </div>
+
+                  {/* Audio Visualizer */}
+                  <div className="h-4 w-64 flex items-center justify-center gap-0.5">
+                    {[...Array(48)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-0.5 rounded-full transition-all duration-300 bg-gray-800/50 dark:bg-white/50 animate-pulse"
+                        style={{
+                          height: `${20 + Math.random() * 80}%`,
+                          animationDelay: `${i * 0.05}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Status Text */}
+                  <p className="h-4 text-xs text-gray-700 dark:text-white/70">
+                    Listening...
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Controls at bottom right - Progress Timer and Next Button */}
+            <div className="flex items-center justify-between w-full mt-4">
+              {/* Circular Progress Timer */}
+              <CircularTimer timeLeft={timeLeft} isActive={isTimerActive} />
+              
+              {/* Next/Finish Button - positioned at the right end */}
+              {currentQuestionIndex < questions.length - 1 ? (
+                <Button 
+                  onClick={handleNextQuestion}
+                  disabled={isFinishing}
+                  className="flex items-center space-x-2 bg-gray-400 hover:bg-gray-500 text-white px-6 py-2 rounded-lg"
+                >
+                  <span>Submit answer</span>
+                </Button>
+              ) : (
+                <Button 
+                  onClick={handleNextQuestion}
+                  className="flex items-center space-x-2 bg-gray-400 hover:bg-gray-500 text-white px-6 py-2 rounded-lg"
+                  disabled={isFinishing}
+                >
+                  {isFinishing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Finishing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Finish Assessment</span>
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
