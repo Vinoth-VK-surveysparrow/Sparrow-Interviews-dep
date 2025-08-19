@@ -1,0 +1,165 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(220 8.9% 12.2%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(220 8.9% 12.2%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(220 8.9% 12.2%);
+  --primary: hsl(180 100% 25%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(220 14.3% 95.9%);
+  --secondary-foreground: hsl(220.9 39.3% 11%);
+  --muted: hsl(220 14.3% 95.9%);
+  --muted-foreground: hsl(220 8.9% 46.1%);
+  --accent: hsl(220 14.3% 95.9%);
+  --accent-foreground: hsl(220.9 39.3% 11%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(210 40% 98%);
+  --border: hsl(220 13% 91%);
+  --input: hsl(220 13% 91%);
+  --ring: hsl(180 100% 25%);
+  --chart-1: hsl(180 100% 25%);
+  --chart-2: hsl(159.7826 100% 36.0784%);
+  --chart-3: hsl(42.0290 92.8251% 56.2745%);
+  --chart-4: hsl(147.1429 78.5047% 41.9608%);
+  --chart-5: hsl(341.4894 75.2000% 50.9804%);
+  --sidebar: hsl(0 0% 100%);
+  --sidebar-foreground: hsl(220 8.9% 12.2%);
+  --sidebar-primary: hsl(180 100% 25%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(220 14.3% 95.9%);
+  --sidebar-accent-foreground: hsl(220.9 39.3% 11%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(180 100% 25%);
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 0.5rem;
+  --teal-primary: hsl(180 100% 25%);
+  --dark-primary: hsl(0 0% 12.2%);
+  --dark-secondary: hsl(0 0% 7.1%);
+}
+
+.dark {
+  /* Base Colors - Using specified palette */
+  --background: hsl(0 0% 11%); /* #1C1C1C - darker grey background */
+  --foreground: hsl(0 0% 92.9%); /* #EDEDED - keep light text */
+  --card: hsl(0 0% 14%); /* #242424 - darker neutral grey */
+  --card-foreground: hsl(0 0% 92.9%); /* #EDEDED */
+  --popover: hsl(0 0% 14%); /* #242424 - darker neutral grey */
+  --popover-foreground: hsl(0 0% 92.9%); /* #EDEDED */
+  
+  /* Primary Accent - Teal */
+  --primary: hsl(180 100% 25%); /* Teal */
+  --primary-foreground: hsl(0 0% 100%); /* White text on teal */
+  
+  /* Secondary - Using #4c4c54 */
+  --secondary: hsl(247 6% 31%); /* #4c4c54 */
+  --secondary-foreground: hsl(0 0% 92.9%); /* #EDEDED */
+  
+  /* Muted - Using #5b5b62 */
+  --muted: hsl(244 5% 37%); /* #5b5b62 */
+  --muted-foreground: hsl(0 0% 70.2%); /* #B3B3B3 */
+  
+  /* Accent - Using #3c3c44 */
+  --accent: hsl(246 8% 26%); /* #3c3c44 */
+  --accent-foreground: hsl(0 0% 92.9%); /* #EDEDED */
+  
+  /* Error - Soft Red #FF5252 */
+  --destructive: hsl(0 82% 65%); /* #FF5252 */
+  --destructive-foreground: hsl(0 0% 100%);
+  
+  /* Borders and Inputs - Using #4c4c54 */
+  --border: hsl(247 6% 31%); /* #4c4c54 */
+  --input: hsl(246 8% 26%); /* #3c3c44 for input backgrounds */
+  --ring: hsl(180 100% 25%); /* Teal for focus rings */
+  
+  /* Chart colors with new palette */
+  --chart-1: hsl(180 100% 25%); /* Teal */
+  --chart-2: hsl(15 91% 67%); /* Secondary Coral #FF7A59 */
+  --chart-3: hsl(123 39% 54%); /* Success Green #4CAF50 */
+  --chart-4: hsl(45 100% 51%); /* Warning Amber #FFC107 */
+  --chart-5: hsl(180 100% 25%); /* Teal instead of cyan */
+  /* Sidebar - matching new theme */
+  --sidebar: hsl(0 0% 11%); /* #1C1C1C */
+  --sidebar-foreground: hsl(0 0% 92.9%); /* #EDEDED */
+  --sidebar-primary: hsl(180 100% 25%); /* Teal */
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(247 6% 31%); /* #4c4c54 */
+  --sidebar-accent-foreground: hsl(0 0% 92.9%); /* #EDEDED */
+  --sidebar-border: hsl(247 6% 31%); /* #4c4c54 */
+  --sidebar-ring: hsl(180 100% 25%); /* Teal */
+  --font-sans: 'Inter', sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 0.5rem;
+  --teal-primary: hsl(180 100% 25%);
+  --dark-primary: hsl(0 0% 12.2%);
+  --dark-secondary: hsl(0 0% 7.1%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+/* Custom dark theme utilities with specified colors */
+@layer utilities {
+  .dark .hover-overlay {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  
+  .dark .active-overlay {
+    background: rgba(255, 255, 255, 0.10);
+  }
+  
+  .dark .surface-elevated {
+    background: hsl(0 0% 14%); /* #242424 - darker neutral grey */
+  }
+  
+  .dark .surface-hover {
+    background: hsl(247 6% 31%); /* #4c4c54 */
+  }
+  
+  .dark .surface-muted {
+    background: hsl(244 5% 37%); /* #5b5b62 */
+  }
+  
+  .dark .text-secondary {
+    color: hsl(0 0% 70.2%); /* #B3B3B3 */
+  }
+  
+  .dark .text-disabled {
+    color: hsl(0 0% 43.1%); /* #6E6E6E */
+  }
+  
+  .dark .border-elevated {
+    border-color: hsl(247 6% 31%); /* #4c4c54 */
+  }
+  
+  .dark .bg-card-custom {
+    background-color: #242424;
+  }
+  
+  .dark .bg-custom-dark-1 {
+    background-color: #3c3c44;
+  }
+  
+  .dark .bg-custom-dark-2 {
+    background-color: #4c4c54;
+  }
+  
+  .dark .bg-custom-dark-3 {
+    background-color: #5b5b62;
+  }
+}
