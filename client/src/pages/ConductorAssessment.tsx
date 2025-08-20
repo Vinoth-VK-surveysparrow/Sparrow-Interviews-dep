@@ -26,6 +26,7 @@ interface AssessmentResult {
   energyAccuracy: number;
   overallScore: number;
   geminiSummary?: string;
+  improvements?: string[];
 }
 
 type AssessmentState = "setup" | "playing" | "feedback";
@@ -248,7 +249,7 @@ export default function ConductorAssessment() {
         }
 
         if (isRecordingRef.current) {
-          requestAnimationFrame(analyzeAudio);
+          setTimeout(() => requestAnimationFrame(analyzeAudio), 200); // Slow down updates to 5 times per second
         }
       };
 
@@ -284,6 +285,8 @@ export default function ConductorAssessment() {
     setIsRecording(false);
     isRecordingRef.current = false;
   }, []);
+
+  // Gemini analysis with audio and meta prompt
 
   // Schedule next energy change
   const scheduleNextChange = useCallback(() => {
@@ -405,17 +408,18 @@ export default function ConductorAssessment() {
     stopRecording();
   }, [stopRecording]);
 
-  // Gemini analysis of audio performance
+  // Gemini analysis with audio and meta prompt
   const analyzeWithGemini = useCallback(async (audioBlob: Blob) => {
     try {
-      console.log('🤖 Starting Gemini analysis...');
+      console.log('🤖 Starting Gemini AI analysis...');
       
       const currentEnergyChanges = energyChangesRef.current;
       const energyOnlyChanges = currentEnergyChanges.filter(change => change.type === "energy");
       const breatheChanges = currentEnergyChanges.filter(change => change.type === "breathe");
 
-      // Create analysis payload
+      // Create analysis payload with performance data
       const analysisData = {
+        gameType: "conductor",
         topic: currentTopic,
         duration: ASSESSMENT_SETTINGS.duration,
         energyChanges: energyOnlyChanges.map(change => ({
@@ -426,45 +430,98 @@ export default function ConductorAssessment() {
         })),
         breatheEvents: breatheChanges.length,
         totalFrequencyPoints: frequencyHistory.length,
-        averageFrequency: frequencyHistory.reduce((sum, freq) => sum + freq, 0) / frequencyHistory.length || 0
+        averageFrequency: frequencyHistory.reduce((sum, freq) => sum + freq, 0) / frequencyHistory.length || 0,
+        totalChanges: energyOnlyChanges.length,
+        breatheRecoveries: breatheChanges.length,
+        userEmail: user?.email,
+        assessmentId: params?.assessmentId
       };
 
-      // Convert audio to base64
+      // Convert audio to base64 for Gemini
       const arrayBuffer = await audioBlob.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
-      // Fix: Convert Uint8Array to base64 in a way compatible with older JS targets
       let binary = '';
       for (let i = 0; i < uint8Array.length; i++) {
         binary += String.fromCharCode(uint8Array[i]);
       }
       const base64Audio = btoa(binary);
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/analyze-conductor-audio`, {
+      // Create FormData for audio upload
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "conductor-assessment.webm");
+      formData.append("gameData", JSON.stringify(analysisData));
+
+      console.log('📊 Sending to Gemini for analysis...');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/analyze-conductor-speech`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          audioData: base64Audio,
-          analysisData,
-          assessmentId: params?.assessmentId,
-          userEmail: user?.email
-        })
+        body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('Gemini analysis failed');
+        throw new Error(`Analysis failed: ${response.status}`);
       }
 
-      const geminiResult = await response.json();
-      console.log('✅ Gemini analysis completed:', geminiResult);
+      const result = await response.json();
+      console.log('✅ Gemini analysis completed:', result);
       
-      return geminiResult.summary || "Great job on completing the Energy Conductor assessment! Your voice energy adaptation shows progress in dynamic speaking skills.";
+      return {
+        summary: result.specific_feedback || "Great work on the Energy Conductor assessment! Your vocal energy adaptation shows developing speaking skills.",
+        improvements: result.next_steps || [
+          "Practice quick vocal energy transitions",
+          "Work on maintaining topic coherence while varying energy",
+          "Explore wider range of vocal expression"
+        ],
+        aiScore: result.confidence_score || 75
+      };
     } catch (error) {
       console.error('❌ Gemini analysis error:', error);
-      return "Assessment completed successfully. Your energy transitions and voice control demonstrate developing speaking skills.";
+      // Fallback to basic analysis
+      return {
+        summary: "Assessment completed successfully. Your energy transitions and voice control demonstrate developing speaking skills.",
+        improvements: [
+          "Practice quick vocal energy transitions",
+          "Work on maintaining topic coherence while varying energy",
+          "Explore wider range of vocal expression"
+        ],
+        aiScore: 70
+      };
     }
-  }, [currentTopic, frequencyHistory, params?.assessmentId, user?.email]);
+  }, [currentTopic, frequencyHistory, user?.email, params?.assessmentId]);
+
+  // Generate AI-style performance summary based on metrics
+  const generatePerformanceSummary = useCallback((energyChanges: EnergyChange[], accuracyScore: number, energyRange: number, breatheCount: number) => {
+    const energyOnlyChanges = energyChanges.filter(change => change.type === "energy");
+    
+    let summary = "Great work on completing the Energy Conductor assessment! ";
+    
+    if (accuracyScore > 80) {
+      summary += "Your frequency control was exceptional, staying within target ranges consistently. ";
+    } else if (accuracyScore > 60) {
+      summary += "Your voice adaptation showed good awareness of energy level changes. ";
+    } else {
+      summary += "Focus on matching your voice pitch to the target energy levels for better results. ";
+    }
+    
+    if (energyRange > 6) {
+      summary += "You demonstrated excellent range versatility, moving between high and low energy effectively. ";
+    } else if (energyRange > 3) {
+      summary += "Good energy range demonstrated across different levels. ";
+    }
+    
+    if (breatheCount > 0) {
+      summary += `You successfully utilized ${breatheCount} breathing moment(s) for natural pacing. `;
+    }
+    
+    if (energyOnlyChanges.length >= 4) {
+      summary += "Excellent responsiveness to energy level changes throughout the assessment. ";
+    } else if (energyOnlyChanges.length >= 2) {
+      summary += "Good adaptation to energy level transitions. ";
+    }
+    
+    summary += "Keep practicing to enhance your dynamic speaking abilities!";
+    
+    return summary;
+  }, []);
 
   // Local analysis of performance
   const performLocalAnalysis = useCallback(async (audioBlob: Blob) => {
@@ -510,40 +567,8 @@ export default function ConductorAssessment() {
       (breatheChanges.length * 10)
     );
 
-    // Get Gemini analysis
-    const geminiSummary = await analyzeWithGemini(audioBlob);
-
-    // Generate AI-style summary based on performance
-    const generatePerformanceSummary = () => {
-      const topics = [
-        "Excellent voice control and energy adaptation!",
-        "Good progress in dynamic speaking skills.",
-        "Strong performance in frequency transitions.",
-        "Well-executed energy level matching."
-      ];
-      
-      let summary = topics[Math.floor(Math.random() * topics.length)];
-      
-      if (energyAccuracy > 80) {
-        summary += " Your frequency control was exceptional, staying within target ranges consistently.";
-      } else if (energyAccuracy > 60) {
-        summary += " Your voice adaptation showed good awareness of energy level changes.";
-      } else {
-        summary += " Focus on matching your voice pitch to the target energy levels for better results.";
-      }
-      
-      if (energyRange > 6) {
-        summary += " You demonstrated excellent range versatility, moving between high and low energy effectively.";
-      }
-      
-      if (breatheChanges.length > 0) {
-        summary += ` You successfully utilized ${breatheChanges.length} breathing moment(s) for natural pacing.`;
-      }
-      
-      summary += ` Overall score: ${Math.min(overallScore, 100)}/100. Keep practicing to enhance your dynamic speaking abilities!`;
-      
-      return summary;
-    };
+    // Get Gemini analysis with audio and meta prompt
+    const geminiAnalysis = await analyzeWithGemini(audioBlob);
 
     const result: AssessmentResult = {
       totalChanges: energyOnlyChanges.length,
@@ -555,7 +580,8 @@ export default function ConductorAssessment() {
       frequencyData: frequencyHistory,
       energyAccuracy: Math.round(energyAccuracy),
       overallScore: Math.min(overallScore, 100),
-      geminiSummary: generatePerformanceSummary()
+      geminiSummary: geminiAnalysis.summary,
+      improvements: geminiAnalysis.improvements
     };
 
     try {
@@ -571,7 +597,7 @@ export default function ConductorAssessment() {
     setIsAnalyzing(false);
     
     console.log('✅ Local analysis completed:', result);
-  }, [frequencyHistory, params?.assessmentId, analyzeWithGemini]);
+  }, [frequencyHistory, params?.assessmentId]);
 
   // Reset assessment
   const resetAssessment = useCallback(() => {
@@ -639,7 +665,7 @@ export default function ConductorAssessment() {
 
   if (assessmentState === "setup") {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background relative">
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="mb-6">
             <Button
@@ -653,7 +679,7 @@ export default function ConductorAssessment() {
             </Button>
           </div>
 
-          <div className="text-center mb-8">
+          <div className="text-center mb-12">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
               Energy Conductor Assessment
             </h1>
@@ -662,39 +688,53 @@ export default function ConductorAssessment() {
             </p>
           </div>
 
-          <Card className="mb-6">
-            <CardContent className="p-6">
-              <div className="text-center space-y-6">
-                <div>
-                  <h2 className="text-2xl font-semibold mb-4">How It Works</h2>
-                  <ul className="space-y-3 text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-                    <li>• Speak about your assigned topic for 1 minute</li>
-                    <li>• Energy level indicators will appear every ~15 seconds</li>
-                    <li>• Adapt your speaking energy to match the level shown</li>
-                    <li>• Watch for "BREATHE" cues for natural pauses</li>
-                    <li>• Your frequency and energy will be analyzed in real-time</li>
-                  </ul>
-                </div>
+          <div className="text-center space-y-8 mb-20">
+            <div>
+              <h2 className="text-2xl font-semibold mb-6">How It Works</h2>
+              <ul className="space-y-4 text-gray-600 dark:text-gray-300 max-w-2xl mx-auto text-left">
+                <li className="flex items-start gap-3">
+                  <span className="text-teal-600 font-bold">1.</span>
+                  <span>Speak about your assigned topic for 1 minute</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-teal-600 font-bold">2.</span>
+                  <span>Energy level indicators will appear every ~15 seconds</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-teal-600 font-bold">3.</span>
+                  <span>Adapt your speaking energy to match the level shown</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-teal-600 font-bold">4.</span>
+                  <span>Watch for "BREATHE" cues for natural pauses</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-teal-600 font-bold">5.</span>
+                  <span>Your frequency and energy will be analyzed in real-time</span>
+                </li>
+              </ul>
+            </div>
 
-                <div className="bg-teal-50 dark:bg-teal-900/20 rounded-lg p-6">
-                  <h3 className="font-semibold mb-2">Assessment Duration</h3>
-                  <p className="text-2xl font-bold text-teal-600">1 Minute</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    Beginner Level • Real-time Frequency Analysis
-                  </p>
-                </div>
+            <div className="bg-teal-50 dark:bg-teal-900/20 rounded-lg p-6 max-w-md mx-auto">
+              <h3 className="font-semibold mb-2">Assessment Duration</h3>
+              <p className="text-2xl font-bold text-teal-600">1 Minute</p>
+              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                Beginner Level • Real-time Frequency Analysis
+              </p>
+            </div>
+          </div>
+        </div>
 
-                <Button 
-                  onClick={startAssessment}
-                  size="lg"
-                  className="bg-teal-600 hover:bg-teal-700"
-                >
-                  <Play className="h-5 w-5 mr-2" />
-                  Start Assessment
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Start button positioned at bottom right */}
+        <div className="fixed bottom-8 right-8">
+          <Button 
+            onClick={startAssessment}
+            size="lg"
+            className="bg-teal-600 hover:bg-teal-700 px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+          >
+            <Play className="h-6 w-6 mr-3" />
+            Start Assessment
+          </Button>
         </div>
       </div>
     );
@@ -869,7 +909,7 @@ export default function ConductorAssessment() {
                         />
                         
                                                  {/* Frequency line graph */}
-                         <svg className="absolute inset-0 w-full h-full">
+                         <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
                            {/* Time-based frequency line graph like reference */}
                            {frequencyHistory.length > 1 && (
                              <polyline
@@ -878,10 +918,12 @@ export default function ConductorAssessment() {
                                strokeWidth="2"
                                points={frequencyHistory
                                  .slice(-100) // Show last 100 points
-                                 .map((freq, index) => {
-                                   const x = (index / Math.max(frequencyHistory.slice(-100).length - 1, 1)) * 100;
-                                   const y = 100 - (Math.min(Math.max(freq || 0, 0), 500) / 500) * 100;
-                                   return `${x}%,${y}%`;
+                                 .map((freq, index, array) => {
+                                   const svgWidth = 100; // SVG viewBox width percentage
+                                   const svgHeight = 100; // SVG viewBox height percentage
+                                   const x = (index / Math.max(array.length - 1, 1)) * svgWidth;
+                                   const y = svgHeight - (Math.min(Math.max(freq || 0, 0), 500) / 500) * svgHeight;
+                                   return `${x},${y}`;
                                  })
                                  .join(' ')}
                              />
@@ -890,26 +932,15 @@ export default function ConductorAssessment() {
                            {/* Current frequency point */}
                            {currentFrequency > 0 && frequencyHistory.length > 0 && (
                              <circle
-                               cx="100%"
-                               cy={`${100 - (Math.min(Math.max(currentFrequency, 0), 500) / 500) * 100}%`}
+                               cx="100"
+                               cy={100 - (Math.min(Math.max(currentFrequency, 0), 500) / 500) * 100}
                                r="4"
                                fill="#059669"
                                className="animate-pulse"
                              />
                            )}
                            
-                           {/* No data message */}
-                           {frequencyHistory.length === 0 && (
-                             <text
-                               x="50%"
-                               y="50%"
-                               textAnchor="middle"
-                               dominantBaseline="middle"
-                               className="text-sm fill-gray-400"
-                             >
-                               Speak to see your frequency
-                             </text>
-                           )}
+
                          </svg>
                       </div>
                     </div>
@@ -967,7 +998,7 @@ export default function ConductorAssessment() {
 
   if (assessmentState === "feedback") {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background relative">
         <div className="max-w-4xl mx-auto px-6 py-8">
                      <div className="text-center mb-8">
              <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
@@ -993,6 +1024,62 @@ export default function ConductorAssessment() {
                          <p className="text-teal-700 dark:text-teal-300 leading-relaxed">
                            {assessmentResult.geminiSummary}
                          </p>
+                       </div>
+                     </div>
+                   </CardContent>
+                 </Card>
+               </div>
+             )}
+             
+             {/* Improvement Suggestions */}
+             {assessmentResult?.improvements && assessmentResult.improvements.length > 0 && (
+               <div className="mt-6 max-w-3xl mx-auto">
+                 <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                   <CardContent className="p-6">
+                     <div className="flex items-start gap-3">
+                       <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                         <span className="text-white text-sm font-bold">💡</span>
+                       </div>
+                       <div className="flex-1">
+                         <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-3">
+                           Improvement Suggestions
+                         </h3>
+                         <ul className="space-y-2">
+                           {assessmentResult.improvements.map((improvement, index) => (
+                             <li key={index} className="flex items-start gap-2 text-blue-700 dark:text-blue-300">
+                               <span className="text-blue-500 mt-1">•</span>
+                               <span className="text-sm leading-relaxed">{improvement}</span>
+                             </li>
+                           ))}
+                         </ul>
+                       </div>
+                     </div>
+                   </CardContent>
+                 </Card>
+               </div>
+             )}
+             
+             {/* Improvement Suggestions */}
+             {assessmentResult?.improvements && assessmentResult.improvements.length > 0 && (
+               <div className="mt-6 max-w-3xl mx-auto">
+                 <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+                   <CardContent className="p-6">
+                     <div className="flex items-start gap-3">
+                       <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                         <span className="text-white text-sm font-bold">💡</span>
+                       </div>
+                       <div className="flex-1">
+                         <h3 className="font-semibold text-blue-800 dark:text-blue-200 mb-3">
+                           Improvement Suggestions
+                         </h3>
+                         <ul className="space-y-2">
+                           {assessmentResult.improvements.map((improvement, index) => (
+                             <li key={index} className="flex items-start gap-2 text-blue-700 dark:text-blue-300">
+                               <span className="text-blue-500 mt-1">•</span>
+                               <span className="text-sm leading-relaxed">{improvement}</span>
+                             </li>
+                           ))}
+                         </ul>
                        </div>
                      </div>
                    </CardContent>
