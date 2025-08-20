@@ -42,6 +42,7 @@ export interface Assessment {
   assessment_name: string;
   order: number;
   description: string;
+  type?: string;
 }
 
 export interface AssessmentsResponse {

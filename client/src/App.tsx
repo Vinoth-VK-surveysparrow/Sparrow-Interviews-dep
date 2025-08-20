@@ -14,6 +14,7 @@ import Rules from "@/pages/Rules";
 import Question from "@/pages/Question";
 import Assessment from "@/pages/Assessment";
 import Results from "@/pages/Results";
+import ConductorAssessment from "@/pages/ConductorAssessment";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
@@ -133,6 +134,11 @@ function Router() {
         <Route path="/assessment/:assessmentId">
           <ProtectedRoute>
             <Assessment />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/conductor/:assessmentId">
+          <ProtectedRoute>
+            <ConductorAssessment />
           </ProtectedRoute>
         </Route>
         <Route path="/question/:assessmentId/:questionNumber">
