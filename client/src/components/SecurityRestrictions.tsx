@@ -2,7 +2,13 @@ import { useEffect } from 'react';
 import { useCustomToast } from '@/hooks/useCustomToast';
 import CustomToaster from '@/components/CustomToaster';
 
-export default function SecurityRestrictions() {
+interface SecurityRestrictionsProps {
+  enableWindowBlurRestriction?: boolean;
+}
+
+export default function SecurityRestrictions({ 
+  enableWindowBlurRestriction = true 
+}: SecurityRestrictionsProps) {
   const { toasterRef, showError, showWarning } = useCustomToast();
 
   useEffect(() => {
@@ -108,7 +114,12 @@ export default function SecurityRestrictions() {
     document.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleWindowBlur);
+    
+    // Only add window blur restriction if enabled (to allow permission dialogs)
+    if (enableWindowBlurRestriction) {
+      window.addEventListener('blur', handleWindowBlur);
+    }
+    
     window.addEventListener('resize', handleWindowResize);
 
     // Apply CSS to prevent text selection
@@ -141,7 +152,12 @@ export default function SecurityRestrictions() {
       document.removeEventListener('contextmenu', handleContextMenu);
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleWindowBlur);
+      
+      // Only remove window blur listener if it was added
+      if (enableWindowBlurRestriction) {
+        window.removeEventListener('blur', handleWindowBlur);
+      }
+      
       window.removeEventListener('resize', handleWindowResize);
       
       // Remove the style element
@@ -149,7 +165,7 @@ export default function SecurityRestrictions() {
         style.parentNode.removeChild(style);
       }
     };
-  }, [showError, showWarning]);
+  }, [showError, showWarning, enableWindowBlurRestriction]);
 
   return <CustomToaster ref={toasterRef} defaultPosition="top-right" />;
 } 

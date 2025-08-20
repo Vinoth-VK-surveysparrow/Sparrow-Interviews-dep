@@ -89,12 +89,22 @@ function Header() {
 function SecurityWrapper() {
   const [location] = useLocation();
   
-  // Check if user is in assessment-related routes where restrictions should apply
-  const isInAssessment = location.startsWith('/rules/') || 
-                        location.startsWith('/assessment/') || 
-                        location.startsWith('/question/');
+  // Apply different levels of restrictions based on the page
+  const isRulesPage = location.startsWith('/rules/');
+  const isActiveAssessment = location.startsWith('/assessment/') || 
+                            location.startsWith('/question/');
 
-  return isInAssessment ? <SecurityRestrictions /> : null;
+  if (isRulesPage) {
+    // On rules page: Basic restrictions but allow window switching for permission dialogs
+    return <SecurityRestrictions enableWindowBlurRestriction={false} />;
+  }
+  
+  if (isActiveAssessment) {
+    // During assessment: Full restrictions including window switching
+    return <SecurityRestrictions enableWindowBlurRestriction={true} />;
+  }
+  
+  return null;
 }
 
 function Router() {
