@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { auth, signInWithGoogle, signOutUser, isAuthorizedEmail, handleSignInRedirect } from '@/lib/firebase';
+import { auth, signInWithGoogle, signOutUser, isAuthorizedEmail } from '@/lib/firebase';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -8,18 +8,6 @@ export const useAuth = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Handle redirect result on app load
-    const handleRedirectOnLoad = async () => {
-      try {
-        await handleSignInRedirect();
-      } catch (error: any) {
-        setError(error.message || 'An error occurred during sign in');
-        setLoading(false);
-      }
-    };
-
-    handleRedirectOnLoad();
-
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Check authorization for the current user
@@ -56,22 +44,12 @@ export const useAuth = () => {
       setLoading(true);
       setError(null);
       
-      const isLocalhost = window.location.hostname === 'localhost' || 
-                         window.location.hostname === '127.0.0.1' ||
-                         window.location.hostname.includes('localhost');
-      
-      if (isLocalhost) {
-        // For localhost, signInWithGoogle returns a user (popup flow)
-        const user = await signInWithGoogle();
-        setUser(user || null);
-        setLoading(false);
-      } else {
-        // For production, signInWithGoogle starts redirect (no return value)
-        await signInWithGoogle();
-        // The actual sign-in will be handled by the redirect result in useEffect
-      }
+      // signInWithGoogle always returns a user (popup flow)
+      const user = await signInWithGoogle();
+      setUser(user || null);
     } catch (error: any) {
       setError(error.message || 'An error occurred during sign in');
+    } finally {
       setLoading(false);
     }
   };
