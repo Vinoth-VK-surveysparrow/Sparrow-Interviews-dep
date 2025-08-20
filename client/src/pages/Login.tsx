@@ -32,9 +32,7 @@ export default function Login() {
           className="mb-8"
         >
           <h1 className="text-6xl md:text-7xl lg:text-8xl font-semibold text-white tracking-tighter mb-4">
-            Sparrow
-            <br />
-            Interviews
+            Sparrow Assessment
           </h1>
           <p className="text-lg md:text-2xl lg:text-3xl text-white/70 tracking-tighter">
             Professional Assessment Platform
@@ -48,9 +46,6 @@ export default function Login() {
         >
           <Card className="w-full max-w-md bg-white/10 backdrop-blur-md border-white/20 shadow-2xl">
             <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl font-bold text-white text-center">
-                Welcome Back
-              </CardTitle>
               <CardDescription className="text-white/70 text-center">
                 Sign in to access your assessment dashboard
               </CardDescription>

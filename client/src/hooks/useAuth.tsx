@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { auth, signInWithGoogle, signOutUser } from '@/lib/firebase';
+import { auth, signInWithGoogle, signOutUser, isAuthorizedEmail, handleSignInRedirect } from '@/lib/firebase';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -8,8 +8,43 @@ export const useAuth = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    // Handle redirect result on app load
+    const handleRedirectOnLoad = async () => {
+      try {
+        await handleSignInRedirect();
+      } catch (error: any) {
+        setError(error.message || 'An error occurred during sign in');
+        setLoading(false);
+      }
+    };
+
+    handleRedirectOnLoad();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Check authorization for the current user
+        try {
+          const authorized = await isAuthorizedEmail(user.email);
+          if (!authorized) {
+            // Sign out unauthorized users immediately
+            await signOutUser();
+            setUser(null);
+            setError('User not authorized.');
+          } else {
+            setUser(user);
+            setError(null); // Clear any previous errors for authorized users
+          }
+        } catch (error) {
+          console.error('Error checking user authorization:', error);
+          // If authorization check fails, sign out for safety
+          await signOutUser();
+          setUser(null);
+          setError('Authorization check failed. Please try again.');
+        }
+      } else {
+        setUser(null);
+        setError(null);
+      }
       setLoading(false);
     });
 
@@ -20,11 +55,23 @@ export const useAuth = () => {
     try {
       setLoading(true);
       setError(null);
-      const user = await signInWithGoogle();
-      setUser(user);
+      
+      const isLocalhost = window.location.hostname === 'localhost' || 
+                         window.location.hostname === '127.0.0.1' ||
+                         window.location.hostname.includes('localhost');
+      
+      if (isLocalhost) {
+        // For localhost, signInWithGoogle returns a user (popup flow)
+        const user = await signInWithGoogle();
+        setUser(user || null);
+        setLoading(false);
+      } else {
+        // For production, signInWithGoogle starts redirect (no return value)
+        await signInWithGoogle();
+        // The actual sign-in will be handled by the redirect result in useEffect
+      }
     } catch (error: any) {
       setError(error.message || 'An error occurred during sign in');
-    } finally {
       setLoading(false);
     }
   };

@@ -9,8 +9,20 @@ import { Home, Mic } from 'lucide-react';
 import { Question } from '@/lib/s3Service';
 import { replacePlaceholders } from '@/lib/questionUtils';
 import { useBackgroundUploadContext } from '@/contexts/BackgroundUploadProvider';
-// Enhanced Circular Timer component matching the reference design
-const CircularTimer = memo(({ timeLeft, isActive }: { timeLeft: number; isActive: boolean }) => {
+// Enhanced Circular Timer component that serves as Next button
+const CircularTimer = memo(({ 
+  timeLeft, 
+  isActive, 
+  onClick, 
+  isFinishing, 
+  isLastQuestion 
+}: { 
+  timeLeft: number; 
+  isActive: boolean; 
+  onClick: () => void; 
+  isFinishing: boolean;
+  isLastQuestion: boolean;
+}) => {
   const totalTime = 60; // Always 60 seconds
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
   const minutes = Math.floor(timeLeft / 60);
@@ -20,7 +32,10 @@ const CircularTimer = memo(({ timeLeft, isActive }: { timeLeft: number; isActive
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   
   return (
-    <div className="relative w-32 h-32 flex items-center justify-center">
+    <div 
+      className="relative w-32 h-32 flex items-center justify-center cursor-pointer group transition-all duration-300 hover:scale-105"
+      onClick={onClick}
+    >
       <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
         {/* Background circle - light gray */}
         <circle
@@ -30,6 +45,7 @@ const CircularTimer = memo(({ timeLeft, isActive }: { timeLeft: number; isActive
           stroke="#e5e7eb"
           strokeWidth="8"
           fill="#f8fafc"
+          className="group-hover:fill-[#4A9CA6] transition-all duration-300"
         />
         {/* Progress circle - teal color #4A9CA6 */}
         <circle
@@ -46,8 +62,22 @@ const CircularTimer = memo(({ timeLeft, isActive }: { timeLeft: number; isActive
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="text-xl font-bold text-gray-800">
-          {minutes}:{seconds.toString().padStart(2, '0')}
+        <div className="text-center">
+          <div className="text-lg font-bold text-gray-800 group-hover:text-white transition-colors duration-300 group-hover:hidden">
+            {minutes}:{seconds.toString().padStart(2, '0')}
+          </div>
+          <div className="hidden group-hover:block text-sm font-bold text-white">
+            {isFinishing ? (
+              <div className="flex flex-col items-center">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mb-1"></div>
+                <span className="text-xs">Finishing...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center">
+                <span className="text-sm">{isLastQuestion ? 'Finish' : 'Next'}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -139,8 +169,12 @@ export default function Assessment() {
     startCamera();
       await startContinuousRecording();
     
+    // Start speech recognition with a slight delay to ensure everything is initialized
     if (hasSupport) {
-      startListening();
+      setTimeout(() => {
+        startListening();
+        console.log('🎤 Speech recognition started for assessment');
+      }, 1000);
     }
 
     // Start timer for first question
@@ -276,6 +310,13 @@ export default function Assessment() {
       setTimeLeft(60); // Always exactly 60 seconds per question
       setIsTimerActive(true);
       resetTranscript(); // Clear previous transcript for new question
+      
+      // Restart speech recognition for the new question
+      if (hasSupport) {
+        setTimeout(() => {
+          startListening();
+        }, 500); // Small delay to ensure transcript is reset
+      }
     } catch (error) {
       console.error('Error in handleNextQuestion:', error);
       setIsFinishing(false);
@@ -331,23 +372,17 @@ export default function Assessment() {
         )}
 
         {/* Question Header */}
-        <div className="text-center mb-8">
-          <div className="mb-4">
-            <h1 className="text-xl font-semibold text-gray-800 dark:text-white">
-              Question {currentQuestionIndex + 1} of {questions.length}
-            </h1>
-          </div>
-          
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-8 leading-relaxed max-w-4xl mx-auto">
+        <div className="text-center mb-12">
+          <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed max-w-5xl mx-auto">
             {currentQuestion ? replacePlaceholders(currentQuestion.question_text, user) : 'Loading question...'}
           </h2>
         </div>
 
         {/* Main Content Area */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-8 mt-8">
           {/* Video Section - Left Side */}
           <div className="lg:col-span-1">
-            <div className="relative bg-gray-900 rounded-xl overflow-hidden shadow-lg" style={{ aspectRatio: '4/3' }}>
+            <div className="relative bg-gray-900 rounded-xl overflow-hidden shadow-lg mt-6" style={{ aspectRatio: '4/3' }}>
             <video
               ref={videoRef}
               autoPlay
@@ -372,12 +407,12 @@ export default function Assessment() {
 
           {/* Transcript Section - Right Side (Open Space) */}
           <div className="lg:col-span-1 flex flex-col justify-between min-h-[400px]">
-            {/* Live Transcript in open space */}
-            <div className="flex-grow">
+            {/* Live Transcript in open space - aligned with camera height */}
+            <div className="flex-grow mt-6">
               <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed">
-                {hasSupport ? (transcript || "Start speaking to see your transcript here...") : "Speech recognition not available in this browser"}
+                {hasSupport ? (transcript || "....") : "Speech recognition not available in this browser"}
               </p>
-            </div>
+            </div>  
 
             {/* AI Voice Input - Positioned above controls */}
             <div className="flex justify-center mb-6">
@@ -413,38 +448,25 @@ export default function Assessment() {
               </div>
             </div>
 
-            {/* Controls at bottom right - Progress Timer and Next Button */}
-            <div className="flex items-center justify-between w-full mt-4">
-              {/* Circular Progress Timer */}
-              <CircularTimer timeLeft={timeLeft} isActive={isTimerActive} />
-              
-              {/* Next/Finish Button - positioned at the right end */}
-              {currentQuestionIndex < questions.length - 1 ? (
-                <Button 
+            {/* Controls at bottom right - Interactive Circular Timer */}
+            <div className="flex flex-col items-end w-full mt-4">
+              {/* Interactive Circular Progress Timer that serves as Next/Finish button */}
+              <div className="flex flex-col items-center">
+                <CircularTimer 
+                  timeLeft={timeLeft} 
+                  isActive={isTimerActive}
                   onClick={handleNextQuestion}
-                  disabled={isFinishing}
-                  className="flex items-center space-x-2 bg-gray-400 hover:bg-gray-500 text-white px-6 py-2 rounded-lg"
-                >
-                  <span>Submit answer</span>
-                </Button>
-              ) : (
-                <Button 
-                  onClick={handleNextQuestion}
-                  className="flex items-center space-x-2 bg-gray-400 hover:bg-gray-500 text-white px-6 py-2 rounded-lg"
-                  disabled={isFinishing}
-                >
-                  {isFinishing ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Finishing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Finish Assessment</span>
-                    </>
-                  )}
-                </Button>
-              )}
+                  isFinishing={isFinishing}
+                  isLastQuestion={currentQuestionIndex >= questions.length - 1}
+                />
+                
+                {/* Question count centered below the circular progress */}
+                <div className="mt-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Question {currentQuestionIndex + 1} of {questions.length}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

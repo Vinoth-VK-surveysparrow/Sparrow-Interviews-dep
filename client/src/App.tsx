@@ -55,7 +55,7 @@ function Header() {
               </g>
             </svg>
             <h1 className="text-xl font-semibold text-foreground">
-              Sparrow Interviews
+              Sparrow Assessment
             </h1>
           </div>
           

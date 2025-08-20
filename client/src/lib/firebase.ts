@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, User } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, signInWithPopup, getRedirectResult, signOut, User } from "firebase/auth";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -24,13 +24,113 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-// Google Sign In
+// Add scopes if needed
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
+
+// API endpoint for authorization check
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kl85uizp68.execute-api.us-west-2.amazonaws.com/api';
+
+// Cache for authorization results to avoid repeated API calls
+const authorizationCache = new Map<string, { authorized: boolean; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Check authorization via API for non-@surveysparrow.com emails
+const checkEmailAuthorization = async (email: string): Promise<boolean> => {
+  // Check cache first
+  const cached = authorizationCache.get(email);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.authorized;
+  }
+
+  try {
+    // Send email directly without URL encoding the @ symbol
+    const response = await fetch(`${API_BASE_URL}/check-authorization/${email}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Authorization check failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const authorized = data.authorized === true;
+    
+    // Cache the result
+    authorizationCache.set(email, { authorized, timestamp: Date.now() });
+    
+    return authorized;
+  } catch (error) {
+    console.error('Error checking email authorization:', error);
+    // If API fails, deny access for non-surveysparrow emails
+    return false;
+  }
+};
+
+// Email domain validation with API fallback
+export const isAuthorizedEmail = async (email: string | null): Promise<boolean> => {
+  if (!email) return false;
+  
+  // If it's a surveysparrow.com email, allow immediately
+  if (email.endsWith('@surveysparrow.com')) {
+    return true;
+  }
+  
+  // For other domains, check via API
+  return await checkEmailAuthorization(email);
+};
+
+// Google Sign In with Redirect (fallback to popup for localhost)
 export const signInWithGoogle = async () => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
+    // Use popup for localhost/development to avoid CORS issues
+    const isLocalhost = window.location.hostname === 'localhost' || 
+                       window.location.hostname === '127.0.0.1' ||
+                       window.location.hostname.includes('localhost');
+    
+    if (isLocalhost) {
+      // Use popup for local development
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // Check authorization immediately for popup flow
+      const authorized = await isAuthorizedEmail(result.user.email);
+      if (!authorized) {
+        await signOut(auth);
+        throw new Error('User not authorized.');
+      }
+      
+      return result.user;
+    } else {
+      // Use redirect for production
+      await signInWithRedirect(auth, googleProvider);
+      // Note: The actual sign-in result will be handled by getRedirectResult in useAuth
+    }
   } catch (error) {
-    console.error("Error signing in with Google:", error);
+    console.error("Error starting Google sign-in:", error);
+    throw error;
+  }
+};
+
+// Handle redirect result after sign-in
+export const handleSignInRedirect = async () => {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result?.user) {
+      // Check if the user's email is authorized (async API call)
+      const authorized = await isAuthorizedEmail(result.user.email);
+      if (!authorized) {
+        // Sign out the user immediately if unauthorized
+        await signOut(auth);
+        throw new Error('User not authorized.');
+      }
+      return result.user;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error handling sign-in redirect:", error);
     throw error;
   }
 };

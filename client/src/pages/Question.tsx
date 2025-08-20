@@ -154,7 +154,7 @@ export default function Question() {
           </h3>
           <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 min-h-[100px] text-center">
             <p className="text-gray-700 dark:text-gray-300">
-              {transcript || "Start speaking to see your transcript here..."}
+              {transcript || "...."}
             </p>
             <div className="mt-3 flex items-center justify-center">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse mr-2"></div>
