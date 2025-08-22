@@ -158,7 +158,7 @@ export default function Rules() {
                 </div>
                 <div className="flex items-start">
                   <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Total assessment contains questions ranging from 3 to 15</span>
+                  <span>Each assessment contains questions ranging from 3 to 15</span>
                 </div>
               </div>
             </CardContent>
