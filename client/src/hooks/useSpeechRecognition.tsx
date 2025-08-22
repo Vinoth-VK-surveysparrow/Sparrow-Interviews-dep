@@ -61,6 +61,7 @@ interface SpeechRecognitionConstructor {
 export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [transcript, setTranscript] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [shouldKeepListening, setShouldKeepListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const clearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -79,6 +80,8 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       console.log('Speech recognition not supported in this browser');
       return;
     }
+
+    setShouldKeepListening(true);
 
     try {
       // Stop any existing recognition
@@ -174,10 +177,10 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         console.log('Speech recognition error:', event.error);
         setIsListening(false);
         
-        // Auto-restart on certain errors
-        if (event.error === 'no-speech' || event.error === 'audio-capture') {
+        // Only auto-restart on certain errors and if we should keep listening
+        if (shouldKeepListening && (event.error === 'no-speech' || event.error === 'audio-capture')) {
           setTimeout(() => {
-            if (recognitionRef.current === recognition) {
+            if (recognitionRef.current === recognition && shouldKeepListening) {
               startListening();
             }
           }, 1000);
@@ -188,10 +191,12 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         console.log('Speech recognition ended');
         setIsListening(false);
         
-        // Auto-restart if we're still supposed to be listening
-        if (recognitionRef.current === recognition) {
+        // Only auto-restart if we should keep listening
+        if (recognitionRef.current === recognition && shouldKeepListening) {
           setTimeout(() => {
-            startListening();
+            if (shouldKeepListening) {
+              startListening();
+            }
           }, 100);
         }
       };
@@ -207,6 +212,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   }, [hasSupport]);
 
   const stopListening = useCallback(() => {
+    setShouldKeepListening(false); // Stop auto-restart
     try {
       if (recognitionRef.current) {
         recognitionRef.current.stop();

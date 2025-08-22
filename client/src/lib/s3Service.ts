@@ -1,15 +1,35 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+export interface AssessmentInteraction {
+  question: string;
+  question_id?: string;
+  start_time: string;
+  end_time: string;
+  duration_seconds: number;
+}
+
+export interface AssessmentLogs {
+  session_start: string;
+  user_agent?: string;
+  interactions: AssessmentInteraction[];
+  performance_metrics?: {
+    loading_time?: number;
+    recording_duration?: number;
+  };
+}
+
 export interface InitiateAssessmentRequest {
   user_email: string;
   assessment_id: string;
   answered_at?: string;
   duration?: number;
+  // Removed logs parameter - now handled separately
 }
 
 export interface InitiateAssessmentResponse {
   status?: string;
   message?: string;
+  session_id?: string;
   audio_key?: string;
   audio?: {
     key: string;
@@ -89,6 +109,34 @@ interface CompletedAssessmentCache {
   };
 }
 
+export interface LogsUploadRequest {
+  user_email: string;
+  assessment_id: string;
+  logs: AssessmentLogs;
+}
+
+export interface LogsUploadResponse {
+  status: string;
+  message: string;
+  logs_key: string;
+}
+
+export interface AudioVerificationRequest {
+  user_email: string;
+  assessment_id: string;
+}
+
+export interface AudioVerificationResponse {
+  status: string;
+  message: string;
+  data: {
+    user_email: string;
+    assessment_id: string;
+    presence: boolean;
+    audio_key?: string;
+  };
+}
+
 export class S3Service {
   private static assessmentCache: AssessmentCache | null = null;
   private static completedAssessmentCache: CompletedAssessmentCache = {};
@@ -97,6 +145,11 @@ export class S3Service {
 
   static async initiateAssessment(request: InitiateAssessmentRequest): Promise<InitiateAssessmentResponse> {
     try {
+      console.log('📤 Sending initiate request:', {
+        url: `${API_BASE_URL}/assessment-responses/initiate`,
+        request: JSON.stringify(request, null, 2)
+      });
+
       const response = await fetch(`${API_BASE_URL}/assessment-responses/initiate`, {
         method: 'POST',
         headers: {
@@ -251,6 +304,69 @@ export class S3Service {
       console.log('✅ Image upload successful!');
     } catch (error) {
       console.error('Error uploading image:', error);
+      throw error;
+    }
+  }
+
+  static async uploadLogs(request: LogsUploadRequest): Promise<LogsUploadResponse> {
+    try {
+      console.log('📤 Uploading logs to /log-upload:', {
+        url: `${API_BASE_URL}/log-upload`,
+        user_email: request.user_email,
+        assessment_id: request.assessment_id,
+        interactions_count: request.logs.interactions.length
+      });
+
+      const response = await fetch(`${API_BASE_URL}/log-upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Logs upload error:', errorText);
+        throw new Error(`Failed to upload logs: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Logs uploaded successfully:', result);
+      return result;
+    } catch (error) {
+      console.error('Error uploading logs:', error);
+      throw error;
+    }
+  }
+
+  static async verifyAudio(request: AudioVerificationRequest): Promise<AudioVerificationResponse> {
+    try {
+      console.log('🔍 Verifying audio presence:', {
+        url: `${API_BASE_URL}/verify-audio`,
+        user_email: request.user_email,
+        assessment_id: request.assessment_id
+      });
+
+      const response = await fetch(`${API_BASE_URL}/verify-audio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Audio verification error:', errorText);
+        throw new Error(`Failed to verify audio: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Audio verification completed:', result);
+      return result;
+    } catch (error) {
+      console.error('Error verifying audio:', error);
       throw error;
     }
   }
@@ -440,6 +556,8 @@ export class S3Service {
       timestamp: now
     });
   }
+
+
 
   // Method to check if assessment is completed from cache
   static isAssessmentCompleted(userEmail: string, assessmentId: string): boolean {

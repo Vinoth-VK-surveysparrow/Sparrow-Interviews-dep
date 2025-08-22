@@ -6,22 +6,24 @@ import { useS3Upload } from '@/hooks/useS3Upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { Home, Mic } from 'lucide-react';
-import { Question } from '@/lib/s3Service';
+import { Question, S3Service } from '@/lib/s3Service';
 import { replacePlaceholders } from '@/lib/questionUtils';
-import { useBackgroundUploadContext } from '@/contexts/BackgroundUploadProvider';
+
 // Enhanced Circular Timer component that serves as Next button
 const CircularTimer = memo(({ 
   timeLeft, 
   isActive, 
   onClick, 
   isFinishing, 
-  isLastQuestion 
+  isLastQuestion,
+  isUploading
 }: { 
   timeLeft: number; 
   isActive: boolean; 
   onClick: () => void; 
   isFinishing: boolean;
   isLastQuestion: boolean;
+  isUploading: boolean;
 }) => {
   const totalTime = 60; // Always 60 seconds
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
@@ -33,8 +35,12 @@ const CircularTimer = memo(({
   
   return (
     <div 
-      className="relative w-32 h-32 flex items-center justify-center cursor-pointer group transition-all duration-300 hover:scale-105"
-      onClick={onClick}
+      className={`relative w-32 h-32 flex items-center justify-center transition-all duration-300 ${
+        isFinishing 
+          ? 'cursor-not-allowed opacity-75' 
+          : 'cursor-pointer group hover:scale-105'
+      }`}
+      onClick={isFinishing ? undefined : onClick}
     >
       <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
         {/* Background circle - light gray */}
@@ -44,8 +50,10 @@ const CircularTimer = memo(({
           r={radius}
           stroke="#e5e7eb"
           strokeWidth="8"
-          fill="#f8fafc"
-          className="group-hover:fill-[#4A9CA6] transition-all duration-300"
+          fill={isFinishing ? "#4A9CA6" : "#f8fafc"}
+          className={`transition-all duration-300 ${
+            isFinishing ? '' : 'group-hover:fill-[#4A9CA6]'
+          }`}
         />
         {/* Progress circle - teal color #4A9CA6 */}
         <circle
@@ -63,21 +71,24 @@ const CircularTimer = memo(({
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-lg font-bold text-gray-800 group-hover:text-white transition-colors duration-300 group-hover:hidden">
-            {minutes}:{seconds.toString().padStart(2, '0')}
-          </div>
-          <div className="hidden group-hover:block text-sm font-bold text-white">
-            {isFinishing ? (
-              <div className="flex flex-col items-center">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mb-1"></div>
-                <span className="text-xs">Finishing...</span>
+          {/* Show finishing state when finishing, otherwise show timer */}
+          {isFinishing ? (
+            <div className="flex flex-col items-center">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mb-1"></div>
+              <span className="text-xs text-white">Finishing...</span>
+            </div>
+          ) : (
+            <>
+              <div className="text-lg font-bold text-gray-800 group-hover:text-white transition-colors duration-300 group-hover:hidden">
+                {minutes}:{seconds.toString().padStart(2, '0')}
               </div>
-            ) : (
-              <div className="flex flex-col items-center">
-                <span className="text-sm">{isLastQuestion ? 'Finish' : 'Next'}</span>
+              <div className="hidden group-hover:block text-sm font-bold text-white">
+                <div className="flex flex-col items-center">
+                  <span className="text-sm">{isLastQuestion ? 'Finish' : 'Next'}</span>
+                </div>
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -100,20 +111,69 @@ export default function Assessment() {
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [assessmentStarted, setAssessmentStarted] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   // Removed responses state - not storing transcripts anymore
   
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
   
-  const { session, finishAssessment, addTranscript, startSession, isS3Ready, uploadAudioToS3 } = useAssessment();
+  const { 
+    session, 
+    finishAssessment, 
+    addTranscript, 
+    startSession, 
+    isS3Ready, 
+    uploadAudioToS3,
+    startQuestionLog,
+    endQuestionLog,
+    handleQuestionTransition
+  } = useAssessment();
   const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
   const { startContinuousRecording, stopContinuousRecording, isRecording, recordingDuration, forceCleanup } = useContinuousAudioRecording();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition();
   const { fetchQuestions } = useS3Upload();
   const { user, loading: authLoading } = useAuth();
-  const { saveAudioLocally, forceUploadNow } = useBackgroundUploadContext();
 
+  // Audio verification with retry mechanism
+  const verifyAudioWithRetry = async (maxRetries: number = 5, delayMs: number = 2000): Promise<boolean> => {
+    if (!user?.email || !params?.assessmentId) {
+      console.error('❌ Missing user email or assessment ID for audio verification');
+      return false;
+    }
 
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔍 Audio verification attempt ${attempt}/${maxRetries}`);
+        
+        const verification = await S3Service.verifyAudio({
+          user_email: user.email,
+          assessment_id: params.assessmentId
+        });
+
+        if (verification.data.presence) {
+          console.log('✅ Audio verified successfully:', verification.data.audio_key);
+          return true;
+        } else {
+          console.log(`⚠️ Audio not present on attempt ${attempt}/${maxRetries}`);
+          
+          if (attempt < maxRetries) {
+            console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Audio verification failed on attempt ${attempt}:`, error);
+        
+        if (attempt < maxRetries) {
+          console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    console.error(`❌ Audio verification failed after ${maxRetries} attempts`);
+    return false;
+  };
 
   // Fetch questions when component mounts and authentication is ready
   useEffect(() => {
@@ -179,7 +239,14 @@ export default function Assessment() {
 
     // Start timer for first question
     setIsTimerActive(true);
-      setAssessmentStarted(true);
+    setAssessmentStarted(true);
+    
+
+    
+    // Start logging for the first question
+    if (questions.length > 0) {
+      startQuestionLog(questions[0].question_text, questions[0].question_id, 0);
+    }
     };
 
     initializeAssessment();
@@ -200,15 +267,16 @@ export default function Assessment() {
 
   // Timer logic
   useEffect(() => {
-    if (!isTimerActive || timeLeft <= 0 || isFinishing) return;
+    if (!isTimerActive || timeLeft <= 0 || isFinishing || isUploading) return;
 
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           setIsTimerActive(false);
-          // Use setTimeout to avoid state conflicts
+          // Auto-finish when timer reaches 0
           setTimeout(() => {
-            if (!isFinishing) {
+            if (!isFinishing && !isUploading) {
+              console.log('⏰ Timer auto-finishing assessment');
               handleNextQuestion();
             }
           }, 100);
@@ -219,13 +287,13 @@ export default function Assessment() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isTimerActive, timeLeft, currentQuestionIndex, isFinishing]);
+  }, [isTimerActive, timeLeft, currentQuestionIndex, isFinishing, isUploading]);
 
   // Images are now uploaded automatically in useCameraCapture hook - no need for separate effect
 
   const handleNextQuestion = async () => {
-    if (isFinishing) {
-      console.log('Already finishing assessment, ignoring click');
+    if (isFinishing || isUploading) {
+      console.log('Already finishing/uploading assessment, ignoring click');
       return;
     }
 
@@ -257,55 +325,98 @@ export default function Assessment() {
         });
         
         if (finalAudio) {
-          // Always save audio locally first
-          if (user?.email && params?.assessmentId) {
-            console.log('💾 Saving audio locally before upload...');
-            try {
-              const audioId = await saveAudioLocally(finalAudio, params.assessmentId, user.email);
-              console.log('✅ Audio saved locally with ID:', audioId);
-              
-              // Force immediate background upload attempt
-              console.log('🚀 Triggering immediate upload attempt...');
-              setTimeout(() => {
-                forceUploadNow();
-              }, 1000); // Small delay to ensure local save completes
-              
-            } catch (localSaveError) {
-              console.error('❌ Failed to save audio locally:', localSaveError);
-            }
-          } else {
-            console.error('❌ Missing user email or assessment ID for local save');
-          }
+          console.log('🎵 Final audio received:', {
+            size: finalAudio.size,
+            type: finalAudio.type,
+            isS3Ready,
+            hasS3Config: !!session.s3Config,
+            hasAudioConfig: !!session.s3Config?.audio
+          });
 
-          // Legacy direct upload as fallback (will be removed later)
+          // Direct upload to S3 only - no local storage
           if (isS3Ready) {
-            console.log('⚠️ Also attempting direct upload as fallback...');
+            console.log('🚀 Uploading audio directly to S3...');
+            setIsUploading(true);
             try {
               await uploadAudioToS3(finalAudio);
-              console.log('✅ Direct upload also successful');
+              console.log('✅ Audio upload completed successfully');
+              
+              // Verify audio was actually uploaded before proceeding
+              console.log('🔍 Verifying audio upload...');
+              const audioVerified = await verifyAudioWithRetry();
+              
+              if (audioVerified) {
+                console.log('✅ Audio verified - proceeding with logs upload');
+                // Now send logs after successful audio verification
+                console.log('📤 Sending logs after audio verification...');
+                await finishAssessment();
+                console.log('✅ Logs sent successfully after audio verification');
+              } else {
+                console.error('❌ Audio verification failed - audio may be lost');
+                // Try to re-upload audio if verification failed
+                console.log('🔄 Attempting to re-upload audio...');
+                try {
+                  await uploadAudioToS3(finalAudio);
+                  console.log('✅ Audio re-upload completed');
+                  
+                  // Verify again
+                  const reVerifyAudio = await verifyAudioWithRetry();
+                  if (reVerifyAudio) {
+                    console.log('✅ Audio re-verified - proceeding with logs');
+                    await finishAssessment();
+                  } else {
+                    console.error('❌ Audio verification still failing after re-upload');
+                    // Continue with logs even if audio fails
+                    await finishAssessment();
+                  }
+                } catch (reUploadError) {
+                  console.error('❌ Audio re-upload failed:', reUploadError);
+                  // Continue with logs even if audio fails
+                  await finishAssessment();
+                }
+              }
+              
             } catch (uploadError) {
-              console.error('❌ Direct upload failed (background upload will retry):', uploadError);
-        }
+              console.error('❌ Audio upload failed:', uploadError);
+              // Still try to send logs even if audio upload fails
+              console.log('📤 Sending logs despite audio upload failure...');
+              await finishAssessment();
+            } finally {
+              setIsUploading(false);
+            }
+          } else {
+            console.warn('⚠️ S3 not ready, skipping audio upload', {
+              isS3Ready,
+              s3Config: session.s3Config
+            });
+            // Send logs even without audio upload
+            await finishAssessment();
           }
         } else {
           console.error('❌ No audio blob received from stopRecording()');
+          // Send logs even without audio
+          await finishAssessment();
         }
         
         // Force cleanup any remaining recording processes
         console.log('Force cleanup recording...');
         forceCleanup();
         
-        console.log('Calling finishAssessment...');
-            await finishAssessment();
-        
-        console.log('Navigating to results page...');
-        // Navigate to results
+        // Only navigate after audio upload and logs are complete
+        console.log('✅ Assessment completion successful - navigating to results page...');
         setLocation(`/results/${params?.assessmentId}`);
         return;
       }
 
       // Move to next question
       const nextIndex = currentQuestionIndex + 1;
+      const nextQuestion = questions[nextIndex];
+      
+      // Handle question transition with logging
+      if (nextQuestion) {
+        handleQuestionTransition(nextQuestion.question_text, nextQuestion.question_id, nextIndex);
+      }
+      
       setCurrentQuestionIndex(nextIndex);
       setTimeLeft(60); // Always exactly 60 seconds per question
       setIsTimerActive(true);
@@ -371,9 +482,29 @@ export default function Assessment() {
           </div>
         )}
 
+        {/* Progress Bar */}
+        <div className="mb-8">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Progress: {currentQuestionIndex + 1} of {questions.length}
+              </span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {Math.round(((currentQuestionIndex + 1) / questions.length) * 100)}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div 
+                className="bg-[#4A9CA6] h-3 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${((currentQuestionIndex + 1) / questions.length) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Question Header */}
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed max-w-5xl mx-auto">
+        <div className="text-center mb-8">
+          <h2 className="text-5xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed max-w-6xl mx-auto">
             {currentQuestion ? replacePlaceholders(currentQuestion.question_text, user) : 'Loading question...'}
           </h2>
         </div>
@@ -458,6 +589,7 @@ export default function Assessment() {
                   onClick={handleNextQuestion}
                   isFinishing={isFinishing}
                   isLastQuestion={currentQuestionIndex >= questions.length - 1}
+                  isUploading={isUploading}
                 />
                 
                 {/* Question count centered below the circular progress */}
@@ -466,6 +598,8 @@ export default function Assessment() {
                     Question {currentQuestionIndex + 1} of {questions.length}
                   </p>
                 </div>
+                
+
               </div>
             </div>
           </div>
