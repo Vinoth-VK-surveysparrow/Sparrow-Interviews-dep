@@ -40,7 +40,7 @@ export default function Question() {
   const currentQuestion = questions[currentQuestionNumber - 1];
   
   const { videoRef, startCamera, startAutoCapture, stopAutoCapture, captureImage, capturedImages } = useCameraCapture();
-  const { transcript, startListening, resetTranscript, hasSupport } = useSpeechRecognition();
+  const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(false); // Disable auto-restart for question page
   const { user } = useAuth();
 
 
@@ -59,8 +59,11 @@ export default function Question() {
     }
 
     return () => {
-      console.log('Question page unmounting, stopping auto capture');
+      console.log('Question page unmounting, stopping auto capture and speech recognition');
       stopAutoCapture();
+      if (hasSupport) {
+        stopListening();
+      }
     };
   }, [currentQuestionNumber]); // Re-run when question changes
 

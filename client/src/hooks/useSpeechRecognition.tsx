@@ -58,7 +58,7 @@ interface SpeechRecognitionConstructor {
   new (): SpeechRecognition;
 }
 
-export function useSpeechRecognition(): UseSpeechRecognitionReturn {
+export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpeechRecognitionReturn {
   const [transcript, setTranscript] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [shouldKeepListening, setShouldKeepListening] = useState(false);
@@ -177,8 +177,10 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         console.log('Speech recognition error:', event.error);
         setIsListening(false);
         
-        // Only auto-restart on certain errors and if we should keep listening
-        if (shouldKeepListening && (event.error === 'no-speech' || event.error === 'audio-capture')) {
+        // Don't auto-restart on network errors or other critical errors
+        if (enableAutoRestart && shouldKeepListening && 
+            (event.error === 'no-speech' || event.error === 'audio-capture') &&
+            event.error !== 'network' && event.error !== 'aborted') {
           setTimeout(() => {
             if (recognitionRef.current === recognition && shouldKeepListening) {
               startListening();
@@ -191,8 +193,8 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         console.log('Speech recognition ended');
         setIsListening(false);
         
-        // Only auto-restart if we should keep listening
-        if (recognitionRef.current === recognition && shouldKeepListening) {
+        // Only auto-restart if we should keep listening and auto-restart is enabled
+        if (enableAutoRestart && recognitionRef.current === recognition && shouldKeepListening) {
           setTimeout(() => {
             if (shouldKeepListening) {
               startListening();

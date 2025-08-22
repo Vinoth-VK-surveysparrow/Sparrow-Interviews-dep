@@ -15,7 +15,6 @@ import Question from "@/pages/Question";
 import Assessment from "@/pages/Assessment";
 import Results from "@/pages/Results";
 import Login from "@/pages/Login";
-import TestLogger from "@/pages/TestLogger";
 import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";

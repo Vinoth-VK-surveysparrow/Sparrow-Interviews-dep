@@ -13,6 +13,15 @@ interface AssessmentSession {
   isActive: boolean;
 }
 
+// Cache for presigned URLs per assessment
+interface PresignedUrlCache {
+  [assessmentId: string]: {
+    s3Config: any;
+    timestamp: number;
+    expiresAt: number; // 7 hours from creation
+  };
+}
+
 interface AssessmentContextType {
   session: AssessmentSession;
   startSession: (assessmentId: string) => Promise<void>;
@@ -26,6 +35,8 @@ interface AssessmentContextType {
   startQuestionLog: (questionText: string, questionId?: string, questionIndex?: number) => void;
   endQuestionLog: () => void;
   handleQuestionTransition: (newQuestionText: string, newQuestionId?: string, newQuestionIndex?: number) => void;
+  // Presigned URL management
+  clearAllPresignedUrls: () => void;
 }
 
 const AssessmentContext = createContext<AssessmentContextType | undefined>(undefined);
@@ -40,8 +51,95 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     isActive: false,
   });
 
+  // Cache for presigned URLs per assessment
+  const [presignedUrlCache, setPresignedUrlCache] = useState<PresignedUrlCache>({});
+
   const { initiateAssessment, uploadAudio, uploadImage } = useS3Upload();
   const { user } = useAuth();
+
+  // Cleanup expired presigned URLs every hour
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      let hasExpired = false;
+      
+      setPresignedUrlCache(prev => {
+        const newCache = { ...prev };
+        
+        Object.keys(newCache).forEach(assessmentId => {
+          if (now >= newCache[assessmentId].expiresAt) {
+            delete newCache[assessmentId];
+            hasExpired = true;
+            console.log('⏰ Cleared expired presigned URLs for assessment:', assessmentId);
+          }
+        });
+        
+        return newCache;
+      });
+      
+      if (hasExpired) {
+        console.log('🧹 Cleaned up expired presigned URLs');
+      }
+    }, 60 * 60 * 1000); // Check every hour
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
+  // Check if cached presigned URLs are still valid
+  const isPresignedUrlValid = useCallback((assessmentId: string): boolean => {
+    const cached = presignedUrlCache[assessmentId];
+    if (!cached) return false;
+    
+    const now = Date.now();
+    return now < cached.expiresAt;
+  }, [presignedUrlCache]);
+
+  // Get cached presigned URLs if valid
+  const getCachedPresignedUrls = useCallback((assessmentId: string) => {
+    const cached = presignedUrlCache[assessmentId];
+    if (isPresignedUrlValid(assessmentId)) {
+      console.log('📦 Using cached presigned URLs for assessment:', assessmentId);
+      return cached.s3Config;
+    }
+    return null;
+  }, [presignedUrlCache, isPresignedUrlValid]);
+
+
+
+  // Cache presigned URLs for an assessment
+  const cachePresignedUrls = useCallback((assessmentId: string, s3Config: any) => {
+    const now = Date.now();
+    const expiresAt = now + (7 * 60 * 60 * 1000); // 7 hours from now
+    
+    setPresignedUrlCache(prev => ({
+      ...prev,
+      [assessmentId]: {
+        s3Config,
+        timestamp: now,
+        expiresAt
+      }
+    }));
+    
+    console.log('💾 Cached presigned URLs for assessment:', assessmentId, 'expires at:', new Date(expiresAt).toISOString());
+  }, []);
+
+
+
+  // Clear presigned URLs for a specific assessment
+  const clearPresignedUrls = useCallback((assessmentId: string) => {
+    setPresignedUrlCache(prev => {
+      const newCache = { ...prev };
+      delete newCache[assessmentId];
+      return newCache;
+    });
+    console.log('🗑️ Cleared presigned URLs for assessment:', assessmentId);
+  }, []);
+
+  // Clear all presigned URLs (useful for logout, account switch, etc.)
+  const clearAllPresignedUrls = useCallback(() => {
+    setPresignedUrlCache({});
+    console.log('🗑️ Cleared all presigned URLs');
+  }, []);
 
   const startSession = useCallback(async (assessmentId: string) => {
     console.log('🚀 Starting assessment session:', assessmentId);
@@ -62,11 +160,55 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       assessmentLogger.startAssessment(assessmentId, user.email);
     }
 
-    // Always get fresh S3 configuration for each assessment
-    if (user?.email) {
+    // Check if we have valid cached presigned URLs for this assessment
+    const cachedS3Config = getCachedPresignedUrls(assessmentId);
+    
+    if (cachedS3Config) {
+      console.log('📦 Using cached presigned URLs for assessment:', assessmentId);
+      setSession(prev => ({
+        ...prev,
+        assessmentId,
+        startTime: new Date(),
+        s3Config: cachedS3Config,
+        sessionId: cachedS3Config?.session_id || null,
+        isActive: true,
+      }));
+    } else if (user?.email) {
       console.log('🔧 Getting fresh S3 configuration for assessment:', assessmentId);
+      
+      // Retry mechanism for /initiate call
+      const getS3ConfigWithRetry = async (maxRetries: number = 3, delayMs: number = 2000): Promise<any> => {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            console.log(`🔄 S3 configuration attempt ${attempt}/${maxRetries}`);
+            const s3Config = await initiateAssessment(assessmentId, 3600);
+            
+            if (s3Config?.audio && s3Config?.images_upload) {
+              console.log(`✅ S3 configuration successful on attempt ${attempt}`);
+              return s3Config;
+            } else {
+              throw new Error('Invalid S3 configuration received');
+            }
+          } catch (error) {
+            console.error(`❌ S3 configuration failed on attempt ${attempt}:`, error);
+            
+            if (attempt < maxRetries) {
+              console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              
+              // Increase delay for subsequent retries (exponential backoff)
+              delayMs = Math.min(delayMs * 1.5, 10000); // Max 10 seconds
+            } else {
+              throw new Error(`Failed to get S3 configuration after ${maxRetries} attempts: ${error}`);
+            }
+          }
+        }
+        throw new Error('Max retries exceeded for S3 configuration');
+      };
+
       try {
-        const s3Config = await initiateAssessment(assessmentId, 3600);
+        const s3Config = await getS3ConfigWithRetry();
+        
         console.log('✅ Fresh S3 configuration received:', {
           hasAudio: !!s3Config?.audio,
           hasImages: !!s3Config?.images_upload,
@@ -74,6 +216,9 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           imagesPrefix: s3Config?.images_upload?.prefix,
           sessionId: s3Config?.session_id
         });
+        
+        // Cache the presigned URLs for this assessment
+        cachePresignedUrls(assessmentId, s3Config);
         
         setSession(prev => ({
           ...prev,
@@ -84,17 +229,23 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           isActive: true,
         }));
       } catch (error) {
-        console.error('❌ Failed to get fresh S3 configuration:', error);
+        console.error('❌ Failed to get S3 configuration after all retries:', error);
         throw error;
       }
     } else {
       console.error('❌ User email not available for S3 configuration');
       throw new Error('User email required for S3 configuration');
     }
-  }, [initiateAssessment, user?.email]);
+  }, [initiateAssessment, user?.email, getCachedPresignedUrls, cachePresignedUrls]);
 
   const endSession = useCallback(async () => {
     console.log('Ending assessment session');
+    
+    // Clear presigned URLs for this assessment
+    if (session.assessmentId) {
+      clearPresignedUrls(session.assessmentId);
+    }
+    
     setSession(prev => ({
       ...prev,
       endTime: new Date(),
@@ -102,7 +253,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       s3Config: null, // Clear S3 config to prevent reuse
       sessionId: null, // Clear session ID
     }));
-  }, []);
+  }, [session.assessmentId, clearPresignedUrls]);
 
   const finishAssessment = useCallback(async () => {
     console.log('🏁 Finishing assessment - submitting final logs to external API');
@@ -222,6 +373,8 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         startQuestionLog,
         endQuestionLog,
         handleQuestionTransition,
+        // Presigned URL management
+        clearAllPresignedUrls,
       }}
     >
       {children}

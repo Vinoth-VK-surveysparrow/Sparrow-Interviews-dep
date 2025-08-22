@@ -35,10 +35,10 @@ const CircularTimer = memo(({
   
   return (
     <div 
-      className={`relative w-32 h-32 flex items-center justify-center transition-all duration-300 ${
+      className={`relative w-32 h-32 flex items-center justify-center ${
         isFinishing 
           ? 'cursor-not-allowed opacity-75' 
-          : 'cursor-pointer group hover:scale-105'
+          : 'cursor-pointer group'
       }`}
       onClick={isFinishing ? undefined : onClick}
     >
@@ -51,9 +51,7 @@ const CircularTimer = memo(({
           stroke="#e5e7eb"
           strokeWidth="8"
           fill={isFinishing ? "#4A9CA6" : "#f8fafc"}
-          className={`transition-all duration-300 ${
-            isFinishing ? '' : 'group-hover:fill-[#4A9CA6]'
-          }`}
+          className={isFinishing ? '' : 'group-hover:fill-[#4A9CA6] transition-colors duration-200'}
         />
         {/* Progress circle - teal color #4A9CA6 */}
         <circle
@@ -79,7 +77,7 @@ const CircularTimer = memo(({
             </div>
           ) : (
             <>
-              <div className="text-lg font-bold text-gray-800 group-hover:text-white transition-colors duration-300 group-hover:hidden">
+              <div className="text-lg font-bold text-gray-800 group-hover:text-white transition-colors duration-200 group-hover:hidden">
                 {minutes}:{seconds.toString().padStart(2, '0')}
               </div>
               <div className="hidden group-hover:block text-sm font-bold text-white">
@@ -130,7 +128,7 @@ export default function Assessment() {
   } = useAssessment();
   const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
   const { startContinuousRecording, stopContinuousRecording, isRecording, recordingDuration, forceCleanup } = useContinuousAudioRecording();
-  const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition();
+  const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true); // Enable auto-restart for assessment
   const { fetchQuestions } = useS3Upload();
   const { user, loading: authLoading } = useAuth();
 
@@ -252,7 +250,11 @@ export default function Assessment() {
     initializeAssessment();
 
     return () => {
-      console.log('Assessment page unmounting - NOT stopping recordings (continue in background)');
+      console.log('Assessment page unmounting - stopping speech recognition');
+      // Stop speech recognition when leaving the page
+      if (hasSupport) {
+        stopListening();
+      }
       // Don't stop recordings - let them continue in background
     };
       }, [loadingQuestions, questions.length, params?.assessmentId]);

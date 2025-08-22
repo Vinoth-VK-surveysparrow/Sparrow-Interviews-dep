@@ -134,7 +134,7 @@ export function useCameraCapture(): UseCameraCaptureReturn {
     intervalRef.current = setInterval(() => {
       console.log('📷 Auto capture interval triggered - capturing and uploading image...');
       captureImage();
-    }, 5000); // Capture every 5 seconds
+    }, 20000); // Capture every 20 seconds
   }, [captureImage]);
 
   const stopAutoCapture = useCallback(() => {
