@@ -61,16 +61,12 @@ export function useCameraCapture(): UseCameraCaptureReturn {
 
   const captureImage = useCallback((): string | null => {
     if (!videoRef.current) {
-      console.log('Cannot capture image - no video element');
+      
       return null;
     }
 
     if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
-      console.log('Cannot capture image - video not ready', {
-        width: videoRef.current.videoWidth,
-        height: videoRef.current.videoHeight,
-        readyState: videoRef.current.readyState
-      });
+      
       return null;
     }
 
@@ -84,31 +80,24 @@ export function useCameraCapture(): UseCameraCaptureReturn {
     context.drawImage(videoRef.current, 0, 0);
     const imageUrl = canvas.toDataURL('image/jpeg', 0.8);
     
-    console.log('Image captured successfully', { 
-      width: canvas.width, 
-      height: canvas.height,
-      imageSize: imageUrl.length
-    });
+    
     
     // Add to local state for UI display
     setCapturedImages(prev => [...prev, imageUrl]);
     
     // Upload to S3 immediately if ready
     if (isS3Ready) {
-      console.log('Uploading captured image to S3 immediately...');
+      
       
       // Convert canvas to blob synchronously and upload immediately
       canvas.toBlob((blob) => {
         if (blob) {
-          console.log('Image blob created, uploading to S3:', {
-            size: blob.size,
-            type: blob.type
-          });
+          
           
           // Upload immediately - don't just catch errors, log success too
           uploadImageToS3(blob)
             .then(() => {
-              console.log('✅ Image uploaded successfully to S3');
+              
             })
             .catch(error => {
               console.error('❌ Failed to upload image to S3:', error);
@@ -126,13 +115,13 @@ export function useCameraCapture(): UseCameraCaptureReturn {
 
   const startAutoCapture = useCallback(() => {
     if (intervalRef.current) {
-      console.log('📷 Auto capture already running');
+      
       return;
     }
     
-    console.log('📷 Starting auto capture every 5 seconds');
+    
     intervalRef.current = setInterval(() => {
-      console.log('📷 Auto capture interval triggered - capturing and uploading image...');
+      
       captureImage();
     }, 20000); // Capture every 20 seconds
   }, [captureImage]);
@@ -141,7 +130,7 @@ export function useCameraCapture(): UseCameraCaptureReturn {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
-      console.log('📷 Auto capture stopped');
+      
     }
   }, []);
 

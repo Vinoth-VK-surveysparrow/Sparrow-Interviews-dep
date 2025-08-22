@@ -19,7 +19,7 @@ export function AssessmentSecurity() {
   useEffect(() => {
     if (!isInSecureMode) return;
 
-    console.log('🔒 Entering secure assessment mode');
+    
 
     // Request fullscreen when entering assessment
     const enterFullscreen = async () => {
@@ -32,7 +32,7 @@ export function AssessmentSecurity() {
         } else if ((document.documentElement as any).msRequestFullscreen) {
           await (document.documentElement as any).msRequestFullscreen();
         }
-        console.log('✅ Fullscreen mode activated');
+        
         
         // Allow time for fullscreen transition to complete
         setTimeout(() => {
@@ -57,7 +57,7 @@ export function AssessmentSecurity() {
       
       if (hasActiveModals !== null) {
         setPermissionDialogOpen(true);
-        console.log('🔓 Permission dialog detected - security relaxed');
+        
       } else {
         setPermissionDialogOpen(false);
       }
@@ -74,7 +74,7 @@ export function AssessmentSecurity() {
     // Prevent text selection and copying (only when no permission dialogs)
     const preventCopy = (e: Event) => {
       if (permissionDialogOpen) {
-        console.log('🔓 Permission dialog open - allowing interaction');
+        
         return;
       }
       
@@ -87,12 +87,12 @@ export function AssessmentSecurity() {
       e.preventDefault();
       setShowCopyWarning(true);
       setTimeout(() => setShowCopyWarning(false), 3000);
-      console.log('🚫 Copy attempt blocked');
+      
     };
 
     const preventKeyboardShortcuts = (e: KeyboardEvent) => {
       if (permissionDialogOpen) {
-        console.log('🔓 Permission dialog open - allowing keyboard interaction');
+        
         return;
       }
 
@@ -101,7 +101,7 @@ export function AssessmentSecurity() {
         e.preventDefault();
         setShowCopyWarning(true);
         setTimeout(() => setShowCopyWarning(false), 3000);
-        console.log('🚫 Keyboard shortcut blocked:', e.key);
+        
       }
 
       // Prevent F12, Ctrl+Shift+I (Dev Tools)
@@ -110,13 +110,13 @@ export function AssessmentSecurity() {
           (e.ctrlKey && e.shiftKey && e.key === 'J') ||
           (e.ctrlKey && e.key === 'U')) {
         e.preventDefault();
-        console.log('🚫 Developer tools shortcut blocked');
+        
       }
 
       // Prevent Alt+Tab (Windows) and Cmd+Tab (Mac)
       if ((e.altKey && e.key === 'Tab') || (e.metaKey && e.key === 'Tab')) {
         e.preventDefault();
-        console.log('🚫 Tab switching blocked');
+        
       }
     };
 
@@ -132,19 +132,19 @@ export function AssessmentSecurity() {
       }
       
       e.preventDefault();
-      console.log('🚫 Context menu blocked');
+      
     };
 
     // Detect when user leaves the tab/window (only after security is fully initialized)
     const handleVisibilityChange = () => {
       if (!securityInitialized || isFullscreenTransition || permissionDialogOpen) {
-        console.log('🔄 Security still initializing or permission dialog open, ignoring visibility change');
+        
         return;
       }
 
       if (document.hidden) {
         setShowTabWarning(true);
-        console.log('⚠️ User left the tab - showing warning');
+        
         
         // Auto-hide warning after 3 seconds and try to regain focus
         setTimeout(() => {
@@ -156,14 +156,14 @@ export function AssessmentSecurity() {
         }, 3000);
       } else {
         setShowTabWarning(false);
-        console.log('✅ User returned to tab');
+        
       }
     };
 
     // Prevent window blur (losing focus) - only after initialization and when no permission dialog
     const handleWindowBlur = () => {
       if (!securityInitialized || isFullscreenTransition || permissionDialogOpen) {
-        console.log('🔄 Security still initializing or permission dialog open, ignoring window blur');
+        
         return;
       }
 
@@ -171,7 +171,7 @@ export function AssessmentSecurity() {
       setTimeout(() => {
         if (!permissionDialogOpen) {
           setShowTabWarning(true);
-          console.log('⚠️ Window lost focus');
+          
           
           // Auto-hide warning after 3 seconds
           setTimeout(() => {
@@ -185,14 +185,14 @@ export function AssessmentSecurity() {
     const handleWindowFocus = () => {
       if (securityInitialized && !isFullscreenTransition) {
         setShowTabWarning(false);
-        console.log('✅ Window regained focus');
+        
       }
     };
 
     // Fullscreen change handler
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement && securityInitialized && !isFullscreenTransition) {
-        console.log('⚠️ Exited fullscreen - attempting to re-enter');
+        
         // Try to re-enter fullscreen after a short delay
         setTimeout(() => {
           if (isInSecureMode) {
@@ -217,11 +217,10 @@ export function AssessmentSecurity() {
     // Disable text selection via CSS
     document.body.style.userSelect = 'none';
     document.body.style.webkitUserSelect = 'none';
-    document.body.style.msUserSelect = 'none';
 
     // Cleanup function
     return () => {
-      console.log('🔓 Exiting secure assessment mode');
+      
       
       // Disconnect permission observer
       permissionObserver.disconnect();
@@ -240,14 +239,13 @@ export function AssessmentSecurity() {
       // Restore text selection
       document.body.style.userSelect = '';
       document.body.style.webkitUserSelect = '';
-      document.body.style.msUserSelect = '';
 
       // Exit fullscreen
       if (document.exitFullscreen && document.fullscreenElement) {
         document.exitFullscreen().catch(console.warn);
       }
     };
-  }, [isInSecureMode]);
+  }, [isInSecureMode, permissionDialogOpen, securityInitialized, isFullscreenTransition]);
 
   // Don't render anything if not in secure mode
   if (!isInSecureMode) return null;
@@ -268,7 +266,7 @@ export function AssessmentSecurity() {
 
       {/* Tab Switch Warning - Small corner notification */}
       {showTabWarning && (
-        <div className="fixed top-4 right-4 z-[9999] animate-slide-in-right">
+        <div className="fixed top-4 right-4 z-[9999] animate-in slide-in-from-right duration-300">
           <Alert className="bg-orange-100 border-orange-500 text-orange-800 shadow-lg max-w-sm">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription className="font-medium">

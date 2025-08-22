@@ -53,20 +53,20 @@ export default function Dashboard() {
     const fetchAssessments = async () => {
       // Don't fetch if auth is still loading
       if (authLoading) {
-        console.log('🔄 Authentication still loading, waiting...');
+        
         return;
       }
 
       // Don't fetch if no user email
       if (!user?.email) {
-        console.log('❌ No user email available, skipping assessment fetch');
+        
         setLoadingAssessments(false);
         return;
       }
 
       try {
         setError(null);
-        console.log('📝 Fetching assessments for user:', user.email);
+        
         
         const fetchedAssessments = await S3Service.getAssessments();
         const dashboardAssessments: DashboardAssessment[] = [];
@@ -76,7 +76,7 @@ export default function Dashboard() {
           const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
           const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
           
-          console.log(`📊 Assessment ${assessment.assessment_name}: completed=${completed}, unlocked=${unlocked}`);
+          
           
           dashboardAssessments.push({
             ...assessment,
@@ -86,7 +86,7 @@ export default function Dashboard() {
         }
         
         setAssessments(dashboardAssessments);
-        console.log('✅ Assessments loaded successfully:', dashboardAssessments.length);
+        
       } catch (error) {
         console.error('❌ Failed to fetch assessments:', error);
         setError('Failed to load assessments. Please try again later.');
@@ -108,7 +108,7 @@ export default function Dashboard() {
     if (!user?.email) return;
     
     try {
-      console.log('🔄 Refreshing assessment states...');
+      
       const fetchedAssessments = await S3Service.getAssessments();
       const dashboardAssessments: DashboardAssessment[] = [];
       
@@ -125,7 +125,7 @@ export default function Dashboard() {
       }
       
       setAssessments(dashboardAssessments);
-      console.log('✅ Assessment states refreshed');
+      
     } catch (error) {
       console.error('❌ Error refreshing assessment states:', error);
     }
@@ -158,22 +158,22 @@ export default function Dashboard() {
     
     try {
       // Always show "Starting..." first
-      console.log('🚀 Starting assessment:', assessmentId);
+      
       
       // Step 1: Fetch questions first (this will check completion status)
-      console.log('📝 Step 1: Fetching questions for assessment:', assessmentId);
+      
       const questions = await fetchQuestions(assessmentId);
-      console.log('✅ Questions fetched successfully:', questions.length, 'questions');
+      
       
       // Step 2: Then initiate assessment for S3 configuration (don't check completion here)
-      console.log('🔍 Step 2: Initiating S3 configuration for:', assessmentId);
+      
       const response = await initiateAssessment(assessmentId, 3600);
       
       if (response?.audio && response?.images_upload) {
         // Both API calls successful - proceed to rules page
-        console.log('🚀 Both steps successful, starting assessment:', assessmentId);
-        console.log('📋 Questions ready:', questions.length);
-        console.log('☁️ S3 configuration ready');
+        
+        
+        
         
         setLocation(`/rules/${assessmentId}`);
       } else {
@@ -187,12 +187,12 @@ export default function Dashboard() {
         const completionDataStr = error.message.replace('ASSESSMENT_COMPLETED:', '');
         const completionData = JSON.parse(completionDataStr);
         
-        console.log('✅ Assessment already completed:', completionData.message);
+        
         
         // CRITICAL: Mark assessment as completed in S3Service cache
         if (user?.email) {
           S3Service.markAssessmentCompleted(user.email, assessmentId);
-          console.log('📦 Synced completion status to cache for:', assessmentId);
+          
         }
         
         // Refresh all assessments to update unlock status

@@ -70,7 +70,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (now >= newCache[assessmentId].expiresAt) {
             delete newCache[assessmentId];
             hasExpired = true;
-            console.log('⏰ Cleared expired presigned URLs for assessment:', assessmentId);
+            
           }
         });
         
@@ -78,7 +78,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       });
       
       if (hasExpired) {
-        console.log('🧹 Cleaned up expired presigned URLs');
+        
       }
     }, 60 * 60 * 1000); // Check every hour
 
@@ -98,7 +98,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const getCachedPresignedUrls = useCallback((assessmentId: string) => {
     const cached = presignedUrlCache[assessmentId];
     if (isPresignedUrlValid(assessmentId)) {
-      console.log('📦 Using cached presigned URLs for assessment:', assessmentId);
+      
       return cached.s3Config;
     }
     return null;
@@ -120,7 +120,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     }));
     
-    console.log('💾 Cached presigned URLs for assessment:', assessmentId, 'expires at:', new Date(expiresAt).toISOString());
+    
   }, []);
 
 
@@ -132,17 +132,17 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       delete newCache[assessmentId];
       return newCache;
     });
-    console.log('🗑️ Cleared presigned URLs for assessment:', assessmentId);
+    
   }, []);
 
   // Clear all presigned URLs (useful for logout, account switch, etc.)
   const clearAllPresignedUrls = useCallback(() => {
     setPresignedUrlCache({});
-    console.log('🗑️ Cleared all presigned URLs');
+    
   }, []);
 
   const startSession = useCallback(async (assessmentId: string) => {
-    console.log('🚀 Starting assessment session:', assessmentId);
+    
 
     // Clear any previous session data to ensure fresh start
     setSession(prev => ({
@@ -164,7 +164,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const cachedS3Config = getCachedPresignedUrls(assessmentId);
     
     if (cachedS3Config) {
-      console.log('📦 Using cached presigned URLs for assessment:', assessmentId);
+      
       setSession(prev => ({
         ...prev,
         assessmentId,
@@ -174,17 +174,17 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isActive: true,
       }));
     } else if (user?.email) {
-      console.log('🔧 Getting fresh S3 configuration for assessment:', assessmentId);
+      
       
       // Retry mechanism for /initiate call
       const getS3ConfigWithRetry = async (maxRetries: number = 3, delayMs: number = 2000): Promise<any> => {
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
-            console.log(`🔄 S3 configuration attempt ${attempt}/${maxRetries}`);
+            
             const s3Config = await initiateAssessment(assessmentId, 3600);
             
             if (s3Config?.audio && s3Config?.images_upload) {
-              console.log(`✅ S3 configuration successful on attempt ${attempt}`);
+              
               return s3Config;
             } else {
               throw new Error('Invalid S3 configuration received');
@@ -193,7 +193,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             console.error(`❌ S3 configuration failed on attempt ${attempt}:`, error);
             
             if (attempt < maxRetries) {
-              console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+              
               await new Promise(resolve => setTimeout(resolve, delayMs));
               
               // Increase delay for subsequent retries (exponential backoff)
@@ -209,13 +209,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         const s3Config = await getS3ConfigWithRetry();
         
-        console.log('✅ Fresh S3 configuration received:', {
-          hasAudio: !!s3Config?.audio,
-          hasImages: !!s3Config?.images_upload,
-          audioKey: s3Config?.audio?.key,
-          imagesPrefix: s3Config?.images_upload?.prefix,
-          sessionId: s3Config?.session_id
-        });
+        
         
         // Cache the presigned URLs for this assessment
         cachePresignedUrls(assessmentId, s3Config);
@@ -239,7 +233,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [initiateAssessment, user?.email, getCachedPresignedUrls, cachePresignedUrls]);
 
   const endSession = useCallback(async () => {
-    console.log('Ending assessment session');
+    
     
     // Clear presigned URLs for this assessment
     if (session.assessmentId) {
@@ -256,7 +250,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [session.assessmentId, clearPresignedUrls]);
 
   const finishAssessment = useCallback(async () => {
-    console.log('🏁 Finishing assessment - submitting final logs to external API');
+    
     
     // End logging session and get final logs
     const finalLogs = assessmentLogger.endAssessment();
@@ -267,18 +261,14 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Get properly formatted logs for API submission
         const formattedLogs = assessmentLogger.getFormattedLogs();
         
-        console.log('📤 Uploading logs to /log-upload endpoint:', {
-          user_email: user.email,
-          assessment_id: session.assessmentId,
-          interactions_count: formattedLogs.interactions.length
-        });
+        
         
         await S3Service.uploadLogs({
           user_email: user.email,
           assessment_id: session.assessmentId,
           logs: formattedLogs
         });
-        console.log('✅ Assessment logs uploaded successfully');
+        
       } catch (error) {
         console.error('❌ Failed to upload logs:', error);
         // Continue with cleanup even if logs upload fails
@@ -293,7 +283,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const addTranscript = useCallback((questionId: number, transcript: string) => {
     // We don't store transcripts anymore since we're not using IndexedDB
-    console.log('Transcript for question', questionId, ':', transcript);
+    
   }, []);
 
   const uploadImageToS3 = useCallback(async (imageBlob: Blob) => {
@@ -305,27 +295,15 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const randomId = Math.random().toString(36).substr(2, 9);
     const filename = `image_${timestamp}_${randomId}.jpg`;
     
-    console.log('🖼️ Starting image upload to S3:', {
-      filename,
-      blobSize: imageBlob.size,
-      blobType: imageBlob.type,
-      s3ConfigPresent: !!session.s3Config,
-      imagesUploadPresent: !!session.s3Config.images_upload
-    });
+    
     
     // Upload immediately and wait for completion
     await uploadImage(imageBlob, filename);
-    console.log('🖼️ Image upload completed:', filename);
+    
   }, [session.s3Config, uploadImage]);
 
   const uploadAudioToS3 = useCallback(async (audioBlob: Blob) => {
-    console.log('🎵 uploadAudioToS3 called:', {
-      blobSize: audioBlob.size,
-      blobType: audioBlob.type,
-      hasS3Config: !!session.s3Config,
-      hasAudioConfig: !!session.s3Config?.audio,
-      audioConfig: session.s3Config?.audio
-    });
+    
 
     if (!session.s3Config?.audio) {
       const error = 'S3 not configured for audio upload';
@@ -333,12 +311,12 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       throw new Error(error);
     }
 
-    console.log('✅ S3 audio config found, starting upload...');
+    
     
     try {
       // Wait for upload completion
       await uploadAudio(audioBlob);
-      console.log('✅ Audio upload completed successfully');
+      
     } catch (error) {
       console.error('❌ Audio upload failed in context:', error);
       throw error;

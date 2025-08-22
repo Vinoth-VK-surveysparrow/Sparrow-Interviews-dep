@@ -145,10 +145,7 @@ export class S3Service {
 
   static async initiateAssessment(request: InitiateAssessmentRequest): Promise<InitiateAssessmentResponse> {
     try {
-      console.log('📤 Sending initiate request:', {
-        url: `${API_BASE_URL}/assessment-responses/initiate`,
-        request: JSON.stringify(request, null, 2)
-      });
+      
 
       const response = await fetch(`${API_BASE_URL}/assessment-responses/initiate`, {
         method: 'POST',
@@ -194,11 +191,7 @@ export class S3Service {
 
   static async uploadAudio(presignedUrl: string, audioBlob: Blob): Promise<void> {
     try {
-      console.log('Uploading audio blob to S3:', {
-        size: audioBlob.size,
-        type: audioBlob.type,
-        url: presignedUrl.substring(0, 100) + '...'
-      });
+      
       
       const response = await fetch(presignedUrl, {
         method: 'PUT',
@@ -214,7 +207,7 @@ export class S3Service {
         throw new Error(`Failed to upload audio: ${response.status} ${response.statusText}`);
       }
       
-      console.log('Audio uploaded successfully to S3');
+      
     } catch (error) {
       console.error('Error uploading audio:', error);
       throw error;
@@ -223,10 +216,10 @@ export class S3Service {
 
   static async uploadImage(presignedPost: any, imageBlob: Blob, filename: string): Promise<void> {
     try {
-      console.log('=== S3 Image Upload Debug ===');
-      console.log('Presigned POST:', presignedPost);
-      console.log('Image blob:', { size: imageBlob.size, type: imageBlob.type });
-      console.log('Filename:', filename);
+      
+      
+      
+      
 
       const formData = new FormData();
       
@@ -244,31 +237,31 @@ export class S3Service {
         }
       }
       
-      console.log('Using content type:', contentType);
+      
 
       // IMPORTANT: Always add Content-Type first, even if not in presigned fields
       formData.append('Content-Type', contentType);
-      console.log('✓ Added Content-Type:', contentType);
+      
 
       // Add all other fields from the presigned POST
       Object.keys(presignedPost.fields).forEach(key => {
         if (key === 'key') {
           const keyValue = presignedPost.fields[key].replace('${filename}', filename);
           formData.append(key, keyValue);
-          console.log(`✓ Added ${key}: ${keyValue}`);
+          
         } else if (key !== 'Content-Type') {
           // Skip Content-Type if it's in presigned fields since we already added it
           formData.append(key, presignedPost.fields[key]);
-          console.log(`✓ Added ${key}: ${presignedPost.fields[key].substring(0, 20)}...`);
+          
         }
       });
       
       // Add the file last - this is crucial!
       formData.append('file', imageBlob, filename);
-      console.log('✓ Added file to form data');
       
-      console.log('Uploading to:', presignedPost.url);
-      console.log('Form data keys:', Array.from(formData.keys()));
+      
+      
+      
 
       const response = await fetch(presignedPost.url, {
         method: 'POST',
@@ -276,8 +269,8 @@ export class S3Service {
         // Don't set Content-Type header - browser will set multipart/form-data with boundary
       });
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -301,7 +294,7 @@ export class S3Service {
         throw new Error(`Failed to upload image: ${response.status} ${response.statusText}`);
       }
       
-      console.log('✅ Image upload successful!');
+      
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
@@ -310,12 +303,7 @@ export class S3Service {
 
   static async uploadLogs(request: LogsUploadRequest): Promise<LogsUploadResponse> {
     try {
-      console.log('📤 Uploading logs to /log-upload:', {
-        url: `${API_BASE_URL}/log-upload`,
-        user_email: request.user_email,
-        assessment_id: request.assessment_id,
-        interactions_count: request.logs.interactions.length
-      });
+      
 
       const response = await fetch(`${API_BASE_URL}/log-upload`, {
         method: 'POST',
@@ -332,7 +320,7 @@ export class S3Service {
       }
 
       const result = await response.json();
-      console.log('✅ Logs uploaded successfully:', result);
+      
       return result;
     } catch (error) {
       console.error('Error uploading logs:', error);
@@ -342,11 +330,7 @@ export class S3Service {
 
   static async verifyAudio(request: AudioVerificationRequest): Promise<AudioVerificationResponse> {
     try {
-      console.log('🔍 Verifying audio presence:', {
-        url: `${API_BASE_URL}/verify-audio`,
-        user_email: request.user_email,
-        assessment_id: request.assessment_id
-      });
+      
 
       const response = await fetch(`${API_BASE_URL}/verify-audio`, {
         method: 'POST',
@@ -363,7 +347,7 @@ export class S3Service {
       }
 
       const result = await response.json();
-      console.log('✅ Audio verification completed:', result);
+      
       return result;
     } catch (error) {
       console.error('Error verifying audio:', error);
@@ -388,11 +372,11 @@ export class S3Service {
       
       // Check if we have valid cache
       if (this.assessmentCache && (now - this.assessmentCache.timestamp) < this.CACHE_DURATION) {
-        console.log('📦 Using cached assessments (age:', Math.round((now - this.assessmentCache.timestamp) / 1000), 'seconds)');
+        
         return this.assessmentCache.data;
       }
 
-      console.log('🔍 Fetching assessments from API...');
+      
       
       const response = await fetch(`${API_BASE_URL}/assessments`, {
         method: 'GET',
@@ -407,7 +391,7 @@ export class S3Service {
         
         // If we have cached data and the API fails, return cached data
         if (this.assessmentCache) {
-          console.log('⚠️ API failed, using cached assessments as fallback');
+          
           return this.assessmentCache.data;
         }
         
@@ -419,14 +403,14 @@ export class S3Service {
       
       // Check if response has changed compared to cache
       if (this.assessmentCache && this.assessmentCache.hash === responseHash) {
-        console.log('📋 API response unchanged, updating cache timestamp');
+        
         this.assessmentCache.timestamp = now;
         return this.assessmentCache.data;
       }
 
       // Parse the response
       const data: AssessmentsResponse = JSON.parse(responseText);
-      console.log('✅ Assessments fetched successfully:', data.assessments.length, 'assessments');
+      
       
       // Sort by order
       const sortedAssessments = data.assessments.sort((a, b) => a.order - b.order);
@@ -439,9 +423,9 @@ export class S3Service {
       };
       
       if (this.assessmentCache.hash !== responseHash) {
-        console.log('🔄 Assessment data changed, cache updated');
+        
       } else {
-        console.log('📦 Assessment data cached for future requests');
+        
       }
       
       return sortedAssessments;
@@ -450,7 +434,7 @@ export class S3Service {
       
       // If we have cached data and there's an error, return cached data
       if (this.assessmentCache) {
-        console.log('⚠️ Error occurred, using cached assessments as fallback');
+        
         return this.assessmentCache.data;
       }
       
@@ -460,13 +444,13 @@ export class S3Service {
 
   // Method to manually clear the cache if needed
   static clearAssessmentCache(): void {
-    console.log('🗑️ Clearing assessment cache');
+    
     this.assessmentCache = null;
   }
 
   // Method to clear completion cache (for debugging)
   static clearCompletionCache(): void {
-    console.log('🗑️ Clearing completion cache');
+    
     this.completedAssessmentCache = {};
   }
 
@@ -481,12 +465,12 @@ export class S3Service {
         const cacheAge = now - cachedCompletion.timestamp;
         
         if (cacheAge < this.COMPLETION_CACHE_DURATION) {
-          console.log('📦 Using cached completion status for:', request.assessment_id);
+          
           throw new Error(`ASSESSMENT_COMPLETED:${JSON.stringify(cachedCompletion)}`);
         }
       }
       
-      console.log('📝 Fetching questions for assessment:', request.assessment_id);
+      
       
       const response = await fetch(`${API_BASE_URL}/fetch-questions`, {
         method: 'POST',
@@ -506,7 +490,7 @@ export class S3Service {
       
       // Check if assessment is already completed
       if (data.status === 'completed') {
-        console.log('⚠️ Assessment already completed:', data.message);
+        
         
         // Cache the completion status
         this.cacheCompletedAssessment(request.user_email, request.assessment_id, {
@@ -524,7 +508,7 @@ export class S3Service {
         throw new Error('No questions returned from the API');
       }
       
-      console.log('✅ Questions fetched successfully:', data.questions.length, 'questions');
+      
       
       // Sort by order
       const sortedQuestions = data.questions.sort((a, b) => a.order - b.order);
@@ -543,7 +527,7 @@ export class S3Service {
     }
     
     this.completedAssessmentCache[userEmail][assessmentId] = completionData;
-    console.log('📦 Cached completion status for:', assessmentId);
+    
   }
 
   // Method to mark assessment as completed (call this after successful submission)
@@ -578,14 +562,14 @@ export class S3Service {
       // Find the target assessment
       const targetAssessment = assessments.find(a => a.assessment_id === assessmentId);
       if (!targetAssessment) {
-        console.log('❌ Assessment not found:', assessmentId);
+        
         return false;
       }
 
       // First assessment (lowest order) is always unlocked
       const lowestOrder = Math.min(...assessments.map(a => a.order));
       if (targetAssessment.order === lowestOrder) {
-        console.log('✅ First assessment is always unlocked:', targetAssessment.assessment_name);
+        
         return true;
       }
 
@@ -594,12 +578,12 @@ export class S3Service {
       
       for (const prevAssessment of previousAssessments) {
         if (!this.isAssessmentCompleted(userEmail, prevAssessment.assessment_id)) {
-          console.log('🔒 Assessment locked - previous assessment not completed:', prevAssessment.assessment_name);
+          
           return false;
         }
       }
 
-      console.log('✅ Assessment unlocked - all previous assessments completed');
+      
       return true;
     } catch (error) {
       console.error('Error checking assessment unlock status:', error);
@@ -618,16 +602,16 @@ export class S3Service {
           // Check if it's unlocked
           const isUnlocked = await this.isAssessmentUnlocked(userEmail, assessment.assessment_id);
           if (isUnlocked) {
-            console.log('➡️ Next unlocked assessment:', assessment.assessment_name);
+            
             return assessment;
           } else {
-            console.log('🔒 Next assessment is locked:', assessment.assessment_name);
+            
             return null; // If next incomplete assessment is locked, no unlocked assessments available
           }
         }
       }
 
-      console.log('✅ All assessments completed');
+      
       return null;
     } catch (error) {
       console.error('Error getting next unlocked assessment:', error);
@@ -643,7 +627,7 @@ export class S3Service {
       // Find current assessment
       const currentAssessment = assessments.find(a => a.assessment_id === currentAssessmentId);
       if (!currentAssessment) {
-        console.log('❌ Current assessment not found:', currentAssessmentId);
+        
         return null;
       }
       
@@ -651,10 +635,10 @@ export class S3Service {
       const nextAssessment = assessments.find(a => a.order > currentAssessment.order);
       
       if (nextAssessment) {
-        console.log('➡️ Next assessment found:', nextAssessment.assessment_name, 'order:', nextAssessment.order);
+        
         return nextAssessment;
       } else {
-        console.log('✅ No more assessments - this was the last one');
+        
         return null;
       }
     } catch (error) {

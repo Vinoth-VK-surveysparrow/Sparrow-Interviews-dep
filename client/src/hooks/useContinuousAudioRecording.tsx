@@ -23,11 +23,11 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
   const startContinuousRecording = useCallback(async () => {
     try {
       if (isRecording) {
-        console.log('⚠️ Continuous recording already in progress');
+        
         return;
       }
 
-      console.log('🎤 Starting continuous audio recording for entire assessment...');
+      
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -51,7 +51,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          console.log('📊 Continuous audio data chunk:', event.data.size, 'bytes');
+          
           audioChunksRef.current.push(event.data);
           
           // Update preview URL every 30 seconds to show progress
@@ -59,11 +59,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
             try {
               const currentBlob = new Blob([...audioChunksRef.current], { type: 'audio/webm' });
               const url = URL.createObjectURL(currentBlob);
-              console.log('🔄 Updating continuous audio preview:', {
-                totalSize: currentBlob.size,
-                chunks: audioChunksRef.current.length,
-                duration: recordingDuration
-              });
+              
               setAudioUrl(url);
             } catch (error) {
               console.error('❌ Error creating continuous audio preview:', error);
@@ -73,7 +69,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
       };
 
       mediaRecorder.onstart = () => {
-        console.log('✅ Continuous audio recording started successfully');
+        
         setIsRecording(true);
       };
 
@@ -83,7 +79,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
       };
 
       mediaRecorder.onstop = () => {
-        console.log('⏹️ Continuous audio recording stopped');
+        
         setIsRecording(false);
         
         if (durationIntervalRef.current) {
@@ -94,7 +90,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
 
       // Start recording in chunks of 10 seconds for better data flow
       mediaRecorder.start(10000);
-      console.log('🎙️ Continuous recording started with 10-second chunks');
+      
 
     } catch (error) {
       console.error('❌ Error starting continuous audio recording:', error);
@@ -105,29 +101,21 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
   const stopContinuousRecording = useCallback(async (): Promise<Blob | null> => {
     return new Promise((resolve) => {
       if (!mediaRecorderRef.current || !isRecording) {
-        console.log('⚠️ stopContinuousRecording: No active recording to stop');
+        
         resolve(null);
         return;
       }
 
-      console.log('⏹️ Stopping continuous recording...');
+      
       const mediaRecorder = mediaRecorderRef.current;
       
       // Calculate and preserve final duration before stopping
       const finalDuration = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      console.log('📊 Final recording duration will be:', finalDuration, 'seconds');
+      
 
       mediaRecorder.onstop = () => {
         try {
-          console.log('📦 Processing continuous recording chunks:', {
-            chunksCount: audioChunksRef.current.length,
-            finalDuration: finalDuration,
-            chunksDetails: audioChunksRef.current.map((chunk, i) => ({ 
-              index: i, 
-              size: chunk.size, 
-              type: chunk.type 
-            }))
-          });
+          
 
           if (audioChunksRef.current.length === 0) {
             console.error('❌ No audio chunks available from continuous recording');
@@ -138,12 +126,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
           }
 
           const finalAudioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          console.log('✅ Continuous recording complete:', {
-            finalSize: finalAudioBlob.size,
-            finalType: finalAudioBlob.type,
-            finalDurationSeconds: finalDuration,
-            chunksUsed: audioChunksRef.current.length
-          });
+          
 
           const url = URL.createObjectURL(finalAudioBlob);
           setAudioUrl(url);
@@ -155,9 +138,9 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
           // Stop all tracks to release the microphone
           const stream = streamRef.current || mediaRecorder.stream;
           if (stream) {
-            console.log('🔇 Stopping microphone tracks after continuous recording');
+            
             stream.getTracks().forEach(track => {
-              console.log('Stopping track:', track.kind, track.readyState);
+              
               track.stop();
             });
             streamRef.current = null;
@@ -172,11 +155,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
           // Clear the media recorder reference
           mediaRecorderRef.current = null;
 
-          console.log('✅ Continuous recording stopped successfully:', {
-            finalBlobSize: finalAudioBlob.size,
-            finalDuration: finalDuration,
-            recordingStopped: true
-          });
+          
           resolve(finalAudioBlob);
         } catch (error) {
           console.error('❌ Error processing continuous recording stop:', error);
@@ -201,7 +180,7 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
   }, [isRecording]);
 
   const forceCleanup = useCallback(() => {
-    console.log('🧹 Force cleanup continuous recording...');
+    
     
     // Preserve final duration before cleanup
     const finalDuration = startTimeRef.current > 0 ? 
@@ -234,21 +213,21 @@ export function useContinuousAudioRecording(): UseContinuousAudioRecordingReturn
     // Keep the final duration, don't reset to 0
     if (finalDuration > 0) {
       setRecordingDuration(finalDuration);
-      console.log('✅ Preserving final recording duration:', finalDuration, 'seconds');
+      
     }
     
     // Don't clear audio chunks in case we need them for recovery
-    console.log('✅ Continuous recording cleanup complete, duration preserved:', finalDuration);
+    
   }, [recordingDuration]);
 
   // Reset function for starting new assessment
   const resetRecording = useCallback(() => {
-    console.log('🔄 Resetting recording state for new assessment...');
+    
     setRecordingDuration(0);
     setAudioUrl(null);
     audioChunksRef.current = [];
     startTimeRef.current = 0;
-    console.log('✅ Recording state reset complete');
+    
   }, []);
 
   return {

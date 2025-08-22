@@ -89,19 +89,19 @@ export const isAuthorizedEmail = async (email: string | null): Promise<boolean> 
 export const signInWithGoogle = async () => {
   try {
     // Always use popup flow for better user experience and reliability
-    console.log('🔑 Starting Google sign-in with popup...');
+    
     const result = await signInWithPopup(auth, googleProvider);
     
-    console.log('✅ Google sign-in successful, checking authorization...');
+    
     // Check authorization immediately for popup flow
     const authorized = await isAuthorizedEmail(result.user.email);
     if (!authorized) {
-      console.log('❌ User not authorized, signing out...');
+      
       await signOut(auth);
       throw new Error('User not authorized.');
     }
     
-    console.log('✅ User authorized, sign-in complete');
+    
     return result.user;
   } catch (error: any) {
     console.error("Error starting Google sign-in:", error);

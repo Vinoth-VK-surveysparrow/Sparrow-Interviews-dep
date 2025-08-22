@@ -7,13 +7,7 @@ export const useAssessmentLogger = () => {
     const interval = setInterval(() => {
       const sessionInfo = assessmentLogger.getSessionInfo();
       if (sessionInfo) {
-        console.log('📊 Assessment Logger Status (Memory Only):', {
-          assessment_id: sessionInfo.assessment_id,
-          current_question: sessionInfo.current_question_index,
-          total_logs: sessionInfo.logs.length,
-          session_duration: assessmentLogger.getSessionDuration(),
-          note: 'Data in memory only - will be sent to API on completion'
-        });
+        
       }
     }, 30000); // Every 30 seconds
 

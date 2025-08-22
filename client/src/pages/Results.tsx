@@ -29,7 +29,7 @@ export default function Results() {
     const initializeResults = async () => {
       // Mark assessment as completed in cache
       if (params?.assessmentId && user?.email) {
-        console.log('📝 Marking assessment as completed:', params.assessmentId);
+        
         S3Service.markAssessmentCompleted(user.email, params.assessmentId);
       }
       
@@ -41,9 +41,9 @@ export default function Results() {
           setNextAssessment(next);
           
           if (next) {
-            console.log('➡️ Next unlocked assessment available:', next.assessment_name);
+            
           } else {
-            console.log('✅ No more unlocked assessments available');
+            
         }
       } catch (error) {
           console.error('❌ Error getting next unlocked assessment:', error);
@@ -58,12 +58,12 @@ export default function Results() {
         try {
           setLoadingAudio(true);
           setAudioError(false);
-          console.log('🎵 Fetching audio download URL for:', params.assessmentId);
+          
           
           const audioDownloadUrl = await getAudioDownloadUrl(params.assessmentId);
           if (audioDownloadUrl) {
             setAudioUrl(audioDownloadUrl);
-            console.log('✅ Audio download URL fetched successfully');
+            
           } else {
             console.warn('⚠️ No audio download URL received');
             setAudioError(true);

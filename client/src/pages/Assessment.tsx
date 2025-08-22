@@ -141,7 +141,7 @@ export default function Assessment() {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`🔍 Audio verification attempt ${attempt}/${maxRetries}`);
+        
         
         const verification = await S3Service.verifyAudio({
           user_email: user.email,
@@ -149,13 +149,13 @@ export default function Assessment() {
         });
 
         if (verification.data.presence) {
-          console.log('✅ Audio verified successfully:', verification.data.audio_key);
+          
           return true;
         } else {
-          console.log(`⚠️ Audio not present on attempt ${attempt}/${maxRetries}`);
+          
           
           if (attempt < maxRetries) {
-            console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+            
             await new Promise(resolve => setTimeout(resolve, delayMs));
           }
         }
@@ -163,7 +163,7 @@ export default function Assessment() {
         console.error(`❌ Audio verification failed on attempt ${attempt}:`, error);
         
         if (attempt < maxRetries) {
-          console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+          
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
@@ -183,7 +183,7 @@ export default function Assessment() {
 
       // Wait for authentication to complete
       if (authLoading) {
-        console.log('🔄 Authentication still loading, waiting...');
+        
         return;
       }
 
@@ -195,10 +195,10 @@ export default function Assessment() {
 
       try {
         setLoadingQuestions(true);
-        console.log('📝 Fetching questions for assessment:', params.assessmentId);
+        
         const fetchedQuestions = await fetchQuestions(params.assessmentId);
         setQuestions(fetchedQuestions);
-        console.log('✅ Questions loaded:', fetchedQuestions.length, 'questions');
+        
       } catch (error) {
         console.error('❌ Failed to fetch questions:', error);
         // If questions fetch fails, redirect to dashboard
@@ -216,11 +216,11 @@ export default function Assessment() {
     const initializeAssessment = async () => {
       if (loadingQuestions || questions.length === 0) return;
       
-    console.log('Assessment page mounted - starting continuous recording');
+    
     
     // Start assessment session if not already started
     if (params?.assessmentId && !session.assessmentId) {
-      console.log('Starting assessment session for:', params.assessmentId);
+      
         await startSession(params.assessmentId);
     }
     
@@ -231,7 +231,7 @@ export default function Assessment() {
     if (hasSupport) {
       setTimeout(() => {
         startListening();
-        console.log('🎤 Speech recognition started for assessment');
+        
       }, 1000);
     }
 
@@ -250,7 +250,7 @@ export default function Assessment() {
     initializeAssessment();
 
     return () => {
-      console.log('Assessment page unmounting - stopping speech recognition');
+      
       // Stop speech recognition when leaving the page
       if (hasSupport) {
         stopListening();
@@ -262,7 +262,7 @@ export default function Assessment() {
   // Start auto-capture only when S3 is ready
   useEffect(() => {
     if (isS3Ready) {
-      console.log('📷 S3 is ready, starting auto-capture...');
+      
       startAutoCapture();
       }
   }, [isS3Ready]);
@@ -278,7 +278,7 @@ export default function Assessment() {
           // Auto-finish when timer reaches 0
           setTimeout(() => {
             if (!isFinishing && !isUploading) {
-              console.log('⏰ Timer auto-finishing assessment');
+              
               handleNextQuestion();
             }
           }, 100);
@@ -295,76 +295,64 @@ export default function Assessment() {
 
   const handleNextQuestion = async () => {
     if (isFinishing || isUploading) {
-      console.log('Already finishing/uploading assessment, ignoring click');
+      
       return;
     }
 
     try {
-      console.log('handleNextQuestion called, currentQuestionIndex:', currentQuestionIndex, 'isLastQuestion:', isLastQuestion);
+      
       
       if (isLastQuestion) {
         setIsFinishing(true);
-        console.log('Finishing assessment - stopping all recording activities');
+        
         setIsTimerActive(false);
         
         // Stop all recording activities immediately
-        console.log('Stopping auto capture...');
+        
         stopAutoCapture();
         
-        console.log('Stopping speech recognition...');
+        
         stopListening();
         
-        console.log('Stopping audio recording and uploading to S3...');
+        
         
         // Stop continuous recording
         const finalAudio = await stopContinuousRecording();
-        console.log('🎤 Audio recording stopped:', {
-          hasAudio: !!finalAudio,
-          audioSize: finalAudio?.size || 0,
-          audioType: finalAudio?.type || 'none',
-          isS3Ready,
-          s3Config: session.s3Config
-        });
+        
         
         if (finalAudio) {
-          console.log('🎵 Final audio received:', {
-            size: finalAudio.size,
-            type: finalAudio.type,
-            isS3Ready,
-            hasS3Config: !!session.s3Config,
-            hasAudioConfig: !!session.s3Config?.audio
-          });
+          
 
           // Direct upload to S3 only - no local storage
           if (isS3Ready) {
-            console.log('🚀 Uploading audio directly to S3...');
+            
             setIsUploading(true);
             try {
               await uploadAudioToS3(finalAudio);
-              console.log('✅ Audio upload completed successfully');
+              
               
               // Verify audio was actually uploaded before proceeding
-              console.log('🔍 Verifying audio upload...');
+              
               const audioVerified = await verifyAudioWithRetry();
               
               if (audioVerified) {
-                console.log('✅ Audio verified - proceeding with logs upload');
+                
                 // Now send logs after successful audio verification
-                console.log('📤 Sending logs after audio verification...');
+                
                 await finishAssessment();
-                console.log('✅ Logs sent successfully after audio verification');
+                
               } else {
                 console.error('❌ Audio verification failed - audio may be lost');
                 // Try to re-upload audio if verification failed
-                console.log('🔄 Attempting to re-upload audio...');
+                
                 try {
                   await uploadAudioToS3(finalAudio);
-                  console.log('✅ Audio re-upload completed');
+                  
                   
                   // Verify again
                   const reVerifyAudio = await verifyAudioWithRetry();
                   if (reVerifyAudio) {
-                    console.log('✅ Audio re-verified - proceeding with logs');
+                    
                     await finishAssessment();
                   } else {
                     console.error('❌ Audio verification still failing after re-upload');
@@ -381,7 +369,7 @@ export default function Assessment() {
             } catch (uploadError) {
               console.error('❌ Audio upload failed:', uploadError);
               // Still try to send logs even if audio upload fails
-              console.log('📤 Sending logs despite audio upload failure...');
+              
               await finishAssessment();
             } finally {
               setIsUploading(false);
@@ -401,11 +389,11 @@ export default function Assessment() {
         }
         
         // Force cleanup any remaining recording processes
-        console.log('Force cleanup recording...');
+        
         forceCleanup();
         
         // Only navigate after audio upload and logs are complete
-        console.log('✅ Assessment completion successful - navigating to results page...');
+        
         setLocation(`/results/${params?.assessmentId}`);
         return;
       }

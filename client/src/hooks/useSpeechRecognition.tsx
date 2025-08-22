@@ -77,7 +77,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
 
   const startListening = useCallback(() => {
     if (!hasSupport) {
-      console.log('Speech recognition not supported in this browser');
+      
       return;
     }
 
@@ -92,7 +92,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
 
       const SpeechRecognitionConstructor = (window.SpeechRecognition || window.webkitSpeechRecognition) as SpeechRecognitionConstructor;
       if (!SpeechRecognitionConstructor) {
-        console.log('SpeechRecognition constructor not available');
+        
         return;
       }
 
@@ -104,7 +104,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
-        console.log('Speech recognition started');
+        
         setIsListening(true);
       };
 
@@ -143,7 +143,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
               wordCountRef.current = recentWords.length;
               
               setTranscript(limitedTranscript);
-              console.log('Transcript limited to 15 words:', limitedTranscript);
+              
             } else {
               // Normal update if under 15 words
               const now = Date.now();
@@ -151,7 +151,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
                 setTranscript(currentTranscript);
                 wordCountRef.current = words.length;
                 lastUpdateRef.current = now;
-                console.log('Transcript updated:', currentTranscript, `(${words.length} words)`);
+                
               }
             }
 
@@ -164,7 +164,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
                 setTranscript('');
                 wordCountRef.current = 0;
                 clearTimeoutRef.current = null;
-                console.log('Transcript cleared, ready for new input');
+                
               }, 3000);
             }
           }
@@ -174,7 +174,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
       };
 
       recognition.onerror = (event: any) => {
-        console.log('Speech recognition error:', event.error);
+        
         setIsListening(false);
         
         // Don't auto-restart on network errors or other critical errors
@@ -190,7 +190,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
       };
 
       recognition.onend = () => {
-        console.log('Speech recognition ended');
+        
         setIsListening(false);
         
         // Only auto-restart if we should keep listening and auto-restart is enabled
@@ -205,7 +205,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
 
       recognitionRef.current = recognition;
       recognition.start();
-      console.log('Starting speech recognition...');
+      
       
     } catch (error) {
       console.error('Failed to start speech recognition:', error);
@@ -237,7 +237,7 @@ export function useSpeechRecognition(enableAutoRestart: boolean = true): UseSpee
     }
     setTranscript('');
     wordCountRef.current = 0;
-    console.log('Transcript manually reset');
+    
   }, []);
 
   useEffect(() => {

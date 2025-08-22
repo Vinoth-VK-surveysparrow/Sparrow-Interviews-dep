@@ -20,7 +20,7 @@ export const NavigationBlocker = () => {
       ) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('🚫 Refresh attempt blocked');
+        
         return false;
       }
 
@@ -32,7 +32,7 @@ export const NavigationBlocker = () => {
       ) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('🚫 Developer tools blocked');
+        
         return false;
       }
 
@@ -45,7 +45,7 @@ export const NavigationBlocker = () => {
       ) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('🚫 Navigation shortcut blocked');
+        
         return false;
       }
     };
@@ -84,7 +84,7 @@ export const NavigationBlocker = () => {
       }
 
       // No alert - silent blocking
-      console.log('🚫 Back/Forward navigation silently blocked');
+      
       return false;
     };
 
@@ -99,14 +99,14 @@ export const NavigationBlocker = () => {
         window.focus();
       }, 0);
       
-      console.log('🚫 Page unload attempt blocked');
+      
       return '';
     };
 
     // Handle visibility change to detect tab switching attempts
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        console.log('⚠️ Tab hidden - user may be trying to navigate away');
+        
         // Immediately try to regain focus when tab becomes visible again
         const focusInterval = setInterval(() => {
           if (!document.hidden) {
@@ -153,17 +153,17 @@ export const NavigationBlocker = () => {
     const originalGo = window.history.go;
 
     window.history.back = () => {
-      console.log('🚫 history.back() silently blocked');
+      
       // Silent block - no action taken
     };
 
     window.history.forward = () => {
-      console.log('🚫 history.forward() silently blocked');
+      
       // Silent block - no action taken
     };
 
     window.history.go = () => {
-      console.log('🚫 history.go() silently blocked');
+      
       // Silent block - no action taken
     };
 

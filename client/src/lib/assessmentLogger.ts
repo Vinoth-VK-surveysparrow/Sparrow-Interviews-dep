@@ -33,7 +33,7 @@ export class AssessmentLogger {
 
   // Initialize a new assessment session
   startAssessment(assessmentId: string, userEmail: string): void {
-    console.log('📊 Starting assessment logging:', { assessmentId, userEmail });
+    
     
     this.session = {
       assessment_id: assessmentId,
@@ -43,7 +43,7 @@ export class AssessmentLogger {
       current_question_index: 0
     };
 
-    console.log('✅ Assessment session initialized (memory only)');
+    
   }
 
   // Start logging for a specific question
@@ -58,7 +58,7 @@ export class AssessmentLogger {
       this.endCurrentQuestion();
     }
 
-    console.log('📝 Starting question log:', { questionText, questionId, questionIndex });
+    
     
     this.currentQuestionStartTime = new Date();
     
@@ -76,10 +76,7 @@ export class AssessmentLogger {
 
     this.session.logs.push(newLog);
     
-    console.log('✅ Question started:', {
-      question_index: this.session.current_question_index,
-      start_time: newLog.start_time
-    });
+    
   }
 
   // End the current question
@@ -98,11 +95,7 @@ export class AssessmentLogger {
       this.session.logs[lastLogIndex].end_time = endTime.toISOString();
       this.session.logs[lastLogIndex].duration_seconds = duration;
       
-      console.log('⏱️ Question ended:', {
-        question_index: this.session.current_question_index,
-        duration_seconds: duration,
-        end_time: endTime.toISOString()
-      });
+      
     }
 
     this.currentQuestionStartTime = null;
@@ -123,12 +116,7 @@ export class AssessmentLogger {
     // Mark session as ended
     this.session.session_end = new Date().toISOString();
 
-    console.log('🏁 Assessment session ended:', {
-      assessment_id: this.session.assessment_id,
-      total_questions: this.session.logs.length,
-      session_duration: this.getSessionDuration(),
-      logs: this.session.logs
-    });
+    
 
     return [...this.session.logs];
   }
@@ -155,7 +143,7 @@ export class AssessmentLogger {
 
   // Clear current session
   clearSession(): void {
-    console.log('🗑️ Clearing assessment session (memory only)');
+    
     this.session = null;
     this.currentQuestionStartTime = null;
   }
@@ -164,7 +152,7 @@ export class AssessmentLogger {
 
   // Handle question transitions (memory only)
   handleQuestionTransition(newQuestionText: string, newQuestionId?: string, newQuestionIndex?: number): void {
-    console.log('🔄 Question transition detected (memory only)');
+    
     
     // End current question
     this.endCurrentQuestion();
@@ -214,15 +202,7 @@ export class AssessmentLogger {
 
   // Debug method to log current state (memory only)
   debugCurrentState(): void {
-    console.log('🔍 Assessment Logger Debug State (Memory Only):', {
-      hasSession: !!this.session,
-      sessionInfo: this.session,
-      currentQuestionActive: !!this.currentQuestionStartTime,
-      currentQuestionStartTime: this.currentQuestionStartTime?.toISOString(),
-      totalLogs: this.session?.logs.length || 0,
-      sessionDuration: this.getSessionDuration(),
-      note: 'All data is in memory only - no local storage used'
-    });
+    
   }
 }
 

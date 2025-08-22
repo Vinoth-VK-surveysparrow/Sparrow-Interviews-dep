@@ -41,14 +41,7 @@ export const useS3Upload = () => {
   }, [user?.email, authLoading]);
 
   const uploadAudio = useCallback(async (audioBlob: Blob) => {
-    console.log('🎵 useS3Upload.uploadAudio called:', {
-      blobSize: audioBlob.size,
-      blobType: audioBlob.type,
-      hasUploadConfig: !!uploadConfig,
-      hasAudioConfig: !!uploadConfig?.audio,
-      hasPresignedUrl: !!uploadConfig?.audio?.presigned_url,
-      presignedUrlStart: uploadConfig?.audio?.presigned_url?.substring(0, 50) + '...'
-    });
+    
 
     if (!uploadConfig?.audio?.presigned_url) {
       const error = 'No audio upload configuration available';
@@ -57,9 +50,9 @@ export const useS3Upload = () => {
     }
 
     try {
-      console.log('✅ Calling S3Service.uploadAudio...');
+      
       await S3Service.uploadAudio(uploadConfig.audio.presigned_url, audioBlob);
-      console.log('✅ S3Service.uploadAudio completed successfully');
+      
     } catch (err: any) {
       console.error('❌ S3Service.uploadAudio failed:', err);
       setError(err.message || 'Failed to upload audio');

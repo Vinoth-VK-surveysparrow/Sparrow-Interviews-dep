@@ -162,7 +162,7 @@ function App() {
         e.key === 'F5'
       ) {
         e.preventDefault();
-        console.log('🚫 Manual refresh prevented');
+        
         return false;
       }
     };
@@ -193,7 +193,7 @@ function App() {
         }
       }, 0);
       
-      console.log('🚫 Back navigation silently blocked');
+      
       
       // No alert - silent blocking
       return false;
@@ -211,7 +211,7 @@ function App() {
     const handleHashChange = (e: HashChangeEvent) => {
       e.preventDefault();
       window.location.hash = '';
-      console.log('🚫 Hash navigation prevented');
+      
     };
 
     // Initial setup

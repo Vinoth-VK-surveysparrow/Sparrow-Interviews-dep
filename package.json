@@ -7,7 +7,7 @@
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "vite build",
     "build:clean": "vite build && npm run remove-console",
-    "remove-console": "node -e \"const fs=require('fs');const path=require('path');function removeConsole(dir){const files=fs.readdirSync(dir);files.forEach(file=>{const filePath=path.join(dir,file);const stat=fs.statSync(filePath);if(stat.isDirectory()){removeConsole(filePath);}else if(file.endsWith('.js')||file.endsWith('.mjs')){let content=fs.readFileSync(filePath,'utf8');content=content.replace(/console\\.(log|debug|info|trace|table|group|count|time)\\([^)]*\\);?/g,'');fs.writeFileSync(filePath,content);console.log('Cleaned:',filePath);}}})}removeConsole('dist');\"",
+    "remove-console": "node -e \"const fs=require('fs');const path=require('path');function removeConsole(dir){const files=fs.readdirSync(dir);files.forEach(file=>{const filePath=path.join(dir,file);const stat=fs.statSync(filePath);if(stat.isDirectory()){removeConsole(filePath);}else if(file.endsWith('.js')||file.endsWith('.mjs')){let content=fs.readFileSync(filePath,'utf8');content=content.replace(/console\\.(log|debug|info|trace|table|group|count|time)\\([^)]*\\);?/g,'');fs.writeFileSync(filePath,content);}}})}removeConsole('dist');\"",
     "build:server": "esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",

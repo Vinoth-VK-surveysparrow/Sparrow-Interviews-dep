@@ -46,7 +46,7 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
         
         if (currentQuestion) {
             startQuestion(currentQuestion.question, currentQuestion.id.toString(), 0);
-            console.log('📊 Assessment started with first question');
+            
         }
     }, []); // Only run once on mount
 
@@ -57,7 +57,7 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
             [currentQuestion.id]: value
         }));
 
-        console.log('📝 Answer changed for question:', currentQuestion.id, 'Length:', value.length);
+        
     };
 
     // Handle next button click
@@ -77,7 +77,7 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
             // Move to next question
             setCurrentQuestionIndex(prev => prev + 1);
 
-            console.log('➡️ Moved to next question:', nextQuestion.id);
+            
         }
     };
 
@@ -98,7 +98,7 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
             // Move to next question
             setCurrentQuestionIndex(prev => prev + 1);
 
-            console.log('⏰ Auto-advanced to question:', nextQuestion.id);
+            
         }
     };
 
@@ -107,14 +107,14 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
         setIsCompleting(true);
 
         try {
-            console.log('🏁 Completing assessment...');
+            
 
             // End the session and get final logs
             const finalLogs = endAssessment();
 
-            console.log('✅ Assessment completed with logs:', finalLogs);
-            console.log('📊 Session info:', getSessionInfo());
-            console.log('📤 Final logs will be uploaded to /log-upload endpoint by the assessment context');
+            
+            
+            
 
             onComplete?.();
         } catch (error) {
@@ -169,58 +169,5 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
                     placeholder="Type your answer here..."
                     className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows={4}
-                    onFocus={() => console.log('📝 Answer field focused for question:', currentQuestion.id)}
-                    onBlur={() => console.log('📝 Answer field blurred for question:', currentQuestion.id)}
-                />
-            </div>
-
-            <div className="flex justify-between items-center">
-                <button
-                    onClick={() => console.log('❓ Help requested for question:', currentQuestion.id)}
-                    className="px-4 py-2 text-blue-600 hover:text-blue-800 transition-colors"
-                >
-                    Need Help?
-                </button>
-
-                <div className="space-x-3">
-                    {/* Debug button */}
-                    <button
-                        onClick={debugState}
-                        className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
-                    >
-                        Debug Logs
-                    </button>
-
-                    {/* Example auto-advance button for testing */}
-                    <button
-                        onClick={handleAutoAdvance}
-                        className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors"
-                    >
-                        Auto Advance (Test)
-                    </button>
-
-                    <button
-                        onClick={handleNext}
-                        disabled={isCompleting}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {isCompleting ? 'Completing...' : isLastQuestion ? 'Complete Assessment' : 'Next Question'}
-                    </button>
-                </div>
-            </div>
-
-            {/* Debug info (remove in production) */}
-            <div className="mt-6 p-3 bg-gray-100 rounded text-xs">
-                <strong>Debug Info:</strong>
-                <br />
-                Current Question ID: {currentQuestion.id}
-                <br />
-                Answers Count: {Object.keys(answers).length}
-                <br />
-                Current Logs: {getCurrentLogs().length}
-                <br />
-                Session Info: {getSessionInfo() ? 'Active' : 'Inactive'}
-            </div>
-        </div>
-    );
+                    onFocus={() => 
 };

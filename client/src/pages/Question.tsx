@@ -46,7 +46,7 @@ export default function Question() {
 
 
   useEffect(() => {
-    console.log('Question page mounted, starting camera and capture');
+    
     startCamera();
     
     // Delay auto capture to ensure video is ready
@@ -59,7 +59,7 @@ export default function Question() {
     }
 
     return () => {
-      console.log('Question page unmounting, stopping auto capture and speech recognition');
+      
       stopAutoCapture();
       if (hasSupport) {
         stopListening();
