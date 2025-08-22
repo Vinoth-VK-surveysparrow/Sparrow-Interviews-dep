@@ -138,7 +138,15 @@ export default function Rules() {
                 </div>
                 <div className="flex items-start">
                   <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Your camera and microphone will be recording throughout</span>
+                  <span>Your camera and microphone will be recorded throughout the assessment</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  <span>Do not close the browser window or navigate away from the page during the assessment</span>
+                </div>
+                <div className="flex items-start">
+                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  <span>Once you start the assessment, you should not stop or refresh the page until the assessment is complete</span>
                 </div>
                 <div className="flex items-start">
                   <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
@@ -150,7 +158,7 @@ export default function Rules() {
                 </div>
                 <div className="flex items-start">
                   <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Total assessment contains 5 questions</span>
+                  <span>Total assessment contains questions ranging from 3 to 15</span>
                 </div>
               </div>
             </CardContent>
