@@ -128,33 +128,16 @@ interface GameResult {
 
 type GameState = "setup" | "playing" | "feedback";
 
-// Hardcoded content for reliable testing
-const MAIN_TOPICS = [
-  "Innovation in technology",
-  "The future of work", 
-  "Building meaningful relationships",
-  "Overcoming personal challenges",
-  "The power of creativity",
-  "Leadership in modern times",
-  "Sustainable living",
-  "The importance of education",
-  "Digital transformation",
-  "Mental health awareness",
-  "Entrepreneurship journey",
-  "Climate change solutions",
-  "Artificial intelligence impact",
-  "Social media influence",
-  "Work-life balance"
-];
+// Main topic is hardcoded for this assessment
 
-// Word Categories (60 words total)
+// Hardcoded word categories for this assessment
 const WORD_CATEGORIES = {
-  objects: ["pumpkin", "microwave", "telescope", "bicycle", "umbrella", "keyboard", "sandwich", "camera", "pillow", "guitar"],
-  emotions: ["nostalgia", "excitement", "curiosity", "frustration", "serenity", "anxiety", "joy", "melancholy", "confidence", "wonder"],
-  places: ["library", "mountain", "cafe", "beach", "forest", "city", "garden", "desert", "bridge", "marketplace"],
-  actions: ["dancing", "cooking", "traveling", "reading", "exercising", "painting", "singing", "writing", "exploring", "building"],
-  abstract: ["freedom", "justice", "beauty", "wisdom", "courage", "harmony", "progress", "tradition", "innovation", "balance"],
-  nature: ["ocean", "sunrise", "storm", "flower", "river", "tree", "wind", "rain", "snow", "lightning"]
+  "Integration/Workflow": ["Integration/Workflow"],
+  "Smart Reach": ["Smart Reach"],
+  "Distribution": ["Distribution"],
+  "AI-Copilot": ["AI-Copilot"],
+  "CogniVue": ["CogniVue"],
+  "Analysis/Reporting": ["Analysis/Reporting"]
 };
 
 // Flatten all words into a single array
@@ -188,9 +171,9 @@ export default function TripleStepAssessment() {
 
   const [gameState, setGameState] = useState<GameState>("setup");
   const [settings, setSettings] = useState<GameSettings>({
-    ...DIFFICULTY_PRESETS.beginner,
-    mainTopic: "",
-    wordTypes: [], // Will be populated from hardcoded data
+    ...DIFFICULTY_PRESETS.intermediate,
+    mainTopic: "You're speaking with the Head of Customer Success at a B2B SaaS company that processes 10,000+ support tickets monthly. Their current CSAT response rate is only 8%, they rely on manual follow-up processes, and they're struggling to identify patterns in customer dissatisfaction after support interactions.",
+    wordTypes: Object.keys(WORD_CATEGORIES), // Use hardcoded word categories
   });
   const [activeWords, setActiveWords] = useState<WordDrop[]>([]);
   const [completedWords, setCompletedWords] = useState<WordDrop[]>([]);
@@ -243,7 +226,7 @@ export default function TripleStepAssessment() {
   }>({
     activeWords: [],
     completedWords: [],
-    mainTopic: "",
+    mainTopic: "You're speaking with the Head of Customer Success at a B2B SaaS company that processes 10,000+ support tickets monthly. Their current CSAT response rate is only 8%, they rely on manual follow-up processes, and they're struggling to identify patterns in customer dissatisfaction after support interactions.",
   });
 
   // Ref to store endGame function to avoid circular dependencies
@@ -274,19 +257,15 @@ export default function TripleStepAssessment() {
       };
       
       // Use hardcoded data
-      const shuffledTopics = shuffleArray([...MAIN_TOPICS]);
       const shuffledWords = shuffleArray([...ALL_WORDS]);
       
-      setAvailableTopics(shuffledTopics);
+      setAvailableTopics([]); // No topics needed since main topic is hardcoded
       setAvailableWords(shuffledWords);
       
-      // Set initial topic
-      if (shuffledTopics.length > 0) {
-        setSettings(prev => ({ ...prev, mainTopic: shuffledTopics[0] }));
-      }
+      // Keep the hardcoded main topic - don't override it
       
       console.log('[TRIPLE-STEP] Content generated successfully:', {
-        topics: shuffledTopics.length,
+        topics: 0, // No topics since main topic is hardcoded
         words: shuffledWords.length,
         categories: Object.keys(WORD_CATEGORIES)
       });
@@ -299,10 +278,9 @@ export default function TripleStepAssessment() {
         variant: "destructive",
       });
       
-      // Clear any existing content on error
+      // Clear any existing content on error (but keep the main topic)
       setAvailableTopics([]);
       setAvailableWords([]);
-      setSettings(prev => ({ ...prev, mainTopic: "" }));
     } finally {
       setIsGeneratingContent(false);
     }
@@ -330,12 +308,12 @@ export default function TripleStepAssessment() {
       console.error('[TRIPLE-STEP] Error fetching assessment data:', error);
       // Set fallback data if API fails
       setAssessmentData({
-        assessmentId: params.assessmentId || 'triple-steps-001',
-        assessmentName: 'Challenge your vocabulary',
-        description: 'Show your knowledge and passion',
+        assessmentId: params.assessmentId || '',
+        assessmentName: '',
+        description: '',
         order: 0,
-        timeLimit: 30,
-        type: 'Triple'
+        timeLimit: 0,
+        type: ''
       });
     } finally {
       setLoadingAssessmentData(false);
@@ -1170,10 +1148,10 @@ export default function TripleStepAssessment() {
               </div>
               <div>
                 <h1 className="text-4xl font-bold text-foreground mb-2">
-                  {assessmentData?.assessmentName || "Triple Step Assessment"}
+                  Triple Step Assessment
                 </h1>
                 <p className="text-xl text-muted-foreground">
-                  {assessmentData?.description || "Master integration under pressure"}
+                  Master integration under pressure
                 </p>
               </div>
             </div>
@@ -1224,9 +1202,8 @@ export default function TripleStepAssessment() {
                     <h3 className="text-lg font-semibold mb-3">Your Speaking Topic</h3>
                     {settings.mainTopic ? (
                       <div
-                        className="text-2xl font-bold text-primary cursor-pointer hover:text-primary/80 transition-colors p-4 rounded-lg hover:bg-muted/50 border-2 border-dashed border-muted hover:border-primary/50"
-                        onClick={() => setSettings((prev) => ({ ...prev, mainTopic: getRandomTopic() }))}
-                        title="Click to change topic"
+                        className="text-2xl font-bold text-primary p-4 rounded-lg border-2 border-dashed border-muted"
+                        title="Your speaking topic for this assessment"
                       >
                         {settings.mainTopic}
                       </div>

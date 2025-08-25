@@ -162,7 +162,7 @@ export default function Dashboard() {
       setLocation(`/conductor/${assessmentId}`);
       return;
     }
-    if (assessment?.type === "Triple") {
+    if (assessment?.type === "triple-step") {
       // Route directly to triple-step assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting triple-step assessment (skipping questions fetch):', assessmentId);
       setLocation(`/triple-step/${assessmentId}`);

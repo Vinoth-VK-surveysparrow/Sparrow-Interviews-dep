@@ -39,16 +39,7 @@ const loadConductorConfig = () => {
   }
 };
 
-const loadTripleStepAssessment = () => {
-  try {
-    const filePath = join(process.cwd(), 'server', 'data', 'triple-assessment.json');
-    const data = readFileSync(filePath, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Failed to load triple step assessment:', error);
-    return null;
-  }
-};
+
 
 // Configure multer for file uploads
 const upload = multer({ 
@@ -260,23 +251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { assessmentId } = req.params;
       console.log('[DYNAMODB] Fetching assessment data for:', assessmentId);
       
-      // Handle Triple Step assessment from local JSON
-      if (assessmentId === 'triple-steps-001') {
-        const tripleStepAssessment = loadTripleStepAssessment();
-        if (tripleStepAssessment) {
-          const normalizedData = {
-            assessmentId: tripleStepAssessment.assessment_id.S,
-            assessmentName: tripleStepAssessment.assessment_name.S,
-            description: tripleStepAssessment.description.S,
-            order: parseInt(tripleStepAssessment.order.N),
-            timeLimit: parseInt(tripleStepAssessment.time_limit.N),
-            type: tripleStepAssessment.type.S
-          };
-          
-          console.log('[DYNAMODB] Returning Triple Step assessment data from JSON:', normalizedData);
-          return res.json(normalizedData);
-        }
-      }
+
       
       // Handle Conductor assessment from local JSON
       if (assessmentId === 'conductor-001') {
@@ -296,29 +271,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // For other assessments, return hardcoded data that matches the DynamoDB structure
-      // In a real implementation, you would query DynamoDB here
-      const assessmentData = {
-        assessment_id: { S: assessmentId },
-        assessment_name: { S: "Generic Assessment" },
-        description: { S: "Default assessment description" },
-        order: { N: "0" },
-        time_limit: { N: "30" },
-        type: { S: "Generic" }
-      };
-      
-      // Transform DynamoDB format to regular JSON
-      const normalizedData = {
-        assessmentId: assessmentData.assessment_id.S,
-        assessmentName: assessmentData.assessment_name.S,
-        description: assessmentData.description.S,
-        order: parseInt(assessmentData.order.N),
-        timeLimit: parseInt(assessmentData.time_limit.N),
-        type: assessmentData.type.S
-      };
-      
-      console.log('[DYNAMODB] Returning assessment data:', normalizedData);
-      res.json(normalizedData);
+      // For other assessments, this endpoint should not be called
+      // The assessment data should come from the main assessments list
+      console.log('[DYNAMODB] Assessment not found in local data, redirecting to main API');
+      res.status(404).json({ error: 'Assessment not found' });
       
     } catch (error) {
       console.error('[DYNAMODB] Error fetching assessment data:', error);
@@ -342,6 +298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
            const existingData = await existingResponse.json();
            const existingAssessments = existingData.assessments || existingData || [];
            console.log('✅ Loaded existing assessments:', existingAssessments.length);
+           
            allAssessments = [...existingAssessments];
          } else {
            console.log('⚠️ Could not fetch existing assessments, continuing with local only');
@@ -373,28 +330,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
          }
        }
 
-       // 3. Add triple step assessment from local JSON
-       const tripleStepAssessment = loadTripleStepAssessment();
-       if (tripleStepAssessment) {
-         // Transform DynamoDB format to simple format
-         const tripleStepData = {
-           assessment_id: tripleStepAssessment.assessment_id.S,
-           assessment_name: tripleStepAssessment.assessment_name.S,
-           description: tripleStepAssessment.description.S,
-           order: parseInt(tripleStepAssessment.order.N),
-           time_limit: parseInt(tripleStepAssessment.time_limit.N),
-           type: tripleStepAssessment.type.S
-         };
-         
-         // Check if triple step already exists in external data
-         const existingTripleStep = allAssessments.find(a => a.assessment_id === tripleStepData.assessment_id);
-         if (!existingTripleStep) {
-           console.log('✅ Adding triple step assessment:', tripleStepData);
-           allAssessments.push(tripleStepData);
-         } else {
-           console.log('ℹ️ Triple step assessment already exists in external data');
-         }
-       }
+
 
        // Sort by order
        allAssessments.sort((a, b) => a.order - b.order);
@@ -426,19 +362,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
          });
        }
        
-       // Add triple step if available
-       const tripleStepAssessment = loadTripleStepAssessment();
-       if (tripleStepAssessment) {
-         fallbackAssessments.push({
-           assessment_id: tripleStepAssessment.assessment_id.S,
-           assessment_name: tripleStepAssessment.assessment_name.S,
-           description: tripleStepAssessment.description.S,
-           order: parseInt(tripleStepAssessment.order.N),
-           time_limit: parseInt(tripleStepAssessment.time_limit.N),
-           type: tripleStepAssessment.type.S
-         });
-       }
-       
+       console.log('⚠️ Using fallback assessments:', fallbackAssessments.length);
        res.json({ assessments: fallbackAssessments.sort((a, b) => a.order - b.order) });
      }
    });

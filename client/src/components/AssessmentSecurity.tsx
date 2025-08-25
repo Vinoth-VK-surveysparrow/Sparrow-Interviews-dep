@@ -14,7 +14,9 @@ export function AssessmentSecurity() {
   // Check if user is in assessment or rules (security-critical routes)
   const isInSecureMode = location.startsWith('/rules/') || 
                         location.startsWith('/assessment/') || 
-                        location.startsWith('/question/');
+                        location.startsWith('/question/') ||
+                        location.startsWith('/conductor/') ||
+                        location.startsWith('/triple-step/');
 
   useEffect(() => {
     if (!isInSecureMode) return;
