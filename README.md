@@ -29,10 +29,13 @@ This is a React-based professional interview assessment platform that allows use
 - **Express.js** with TypeScript
 - **Drizzle ORM** with PostgreSQL
 - **Zod** for validation
+- **AWS Chalice** for audio service API
+- **AWS S3** for audio file storage
 
 ### Storage
 - **IndexedDB** for local data persistence
 - **PostgreSQL** (via Neon Database) for production data
+- **AWS S3** for audio recordings
 
 ## Getting Started
 
@@ -56,7 +59,12 @@ npm install
 3. Set up environment variables:
 ```bash
 cp .env.example .env
-# Edit .env with your database credentials
+# Edit .env with your database credentials and API endpoints
+```
+
+For the audio service, also set:
+```bash
+export S3_BUCKET=your-audio-bucket-name
 ```
 
 4. Push database schema:
@@ -73,11 +81,17 @@ The application will be available at `http://localhost:5173`
 
 ## Scripts
 
+### Frontend & Backend
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run check` - Type check with TypeScript
 - `npm run db:push` - Push database schema changes
+
+### Audio Service (Sparrow-assessments/)
+- `chalice local` - Run audio service locally
+- `chalice deploy` - Deploy audio service to AWS
+- `pip install -r requirements.txt` - Install Python dependencies
 
 ## Project Structure
 
@@ -91,6 +105,10 @@ The application will be available at `http://localhost:5173`
 │   │   └── lib/            # Utility libraries
 ├── server/                 # Backend Express server
 ├── shared/                 # Shared types and schemas
+├── Sparrow-assessments/    # AWS Chalice audio service
+│   ├── app.py             # Chalice application
+│   ├── api_doc.md         # API documentation
+│   └── requirements.txt   # Python dependencies
 └── attached_assets/        # Static assets
 ```
 
@@ -107,6 +125,44 @@ The application will be available at `http://localhost:5173`
 - **Camera Monitoring**: Real-time video feed with automatic image capture
 - **Speech Recognition**: Live transcription of spoken responses
 - **Permission Management**: Handles camera and microphone permissions
+- **Cloud Audio Storage**: Secure S3 storage with presigned URLs
+- **Audio Service API**: Scalable AWS Chalice-based audio management
+
+## Audio Service
+
+The application includes a separate AWS Chalice-based audio service for handling audio file operations:
+
+### Features
+- **Secure Audio Upload**: Presigned S3 URLs for direct browser uploads
+- **Organized Storage**: Files organized by user ID and assessment round
+- **Multiple Formats**: Support for WebM, MP3, WAV, and M4A files
+- **Efficient Operations**: Direct S3 access with minimal API overhead
+
+### API Endpoints
+- `POST /audio/upload` - Generate upload URL
+- `GET /audio/{id}` - Get audio file info
+- `GET /audio/{id}/download` - Get download URL
+- `DELETE /audio/{id}` - Delete audio file
+- `GET /audio/list` - List user's audio files
+- `GET /health` - Service health check
+
+### Storage Structure
+```
+S3 Bucket/
+└── {user_id}/
+    └── {round_id}/
+        ├── {audio_id}.webm
+        ├── {audio_id}.mp3
+        └── {audio_id}.wav
+```
+
+### Setup
+1. Navigate to `Sparrow-assessments/`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Set environment: `export S3_BUCKET=your-bucket-name`
+4. Deploy: `chalice deploy`
+
+For detailed API documentation, see `Sparrow-assessments/api_doc.md`
 
 ## Contributing
 

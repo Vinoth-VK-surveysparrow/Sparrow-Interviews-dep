@@ -14,6 +14,8 @@ import Rules from "@/pages/Rules";
 import Question from "@/pages/Question";
 import Assessment from "@/pages/Assessment";
 import Results from "@/pages/Results";
+import ConductorAssessment from "@/pages/ConductorAssessment";
+import TripleStepAssessment from "@/pages/TripleStepAssessment";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
@@ -36,7 +38,9 @@ function Header() {
   const isInAssessment = location.startsWith('/rules/') || 
                         location.startsWith('/assessment/') || 
                         location.startsWith('/question/') || 
-                        location.startsWith('/results/');
+                        location.startsWith('/results/') ||
+                        location.startsWith('/conductor/') ||
+                        location.startsWith('/triple-step/');
 
   if (!isAuthenticated) {
     return null;
@@ -92,7 +96,9 @@ function SecurityWrapper() {
   // Apply different levels of restrictions based on the page
   const isRulesPage = location.startsWith('/rules/');
   const isActiveAssessment = location.startsWith('/assessment/') || 
-                            location.startsWith('/question/');
+                            location.startsWith('/question/') ||
+                            location.startsWith('/conductor/') ||
+                            location.startsWith('/triple-step/');
 
   if (isRulesPage) {
     // On rules page: Basic restrictions but allow window switching for permission dialogs
@@ -133,6 +139,16 @@ function Router() {
         <Route path="/assessment/:assessmentId">
           <ProtectedRoute>
             <Assessment />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/conductor/:assessmentId">
+          <ProtectedRoute>
+            <ConductorAssessment />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/triple-step/:assessmentId">
+          <ProtectedRoute>
+            <TripleStepAssessment />
           </ProtectedRoute>
         </Route>
         <Route path="/question/:assessmentId/:questionNumber">
