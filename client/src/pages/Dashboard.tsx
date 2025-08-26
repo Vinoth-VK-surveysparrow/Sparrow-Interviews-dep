@@ -41,6 +41,32 @@ interface TestAssessmentsResponse {
   assessment_count: number;
 }
 
+// Custom unlock logic for test-based assessments
+const isTestAssessmentUnlocked = (userEmail: string, targetAssessment: TestAssessment, allAssessments: TestAssessment[]): boolean => {
+  // Find the minimum order (first assessment)
+  const minOrder = Math.min(...allAssessments.map(a => a.order));
+  
+  // First assessment is always unlocked
+  if (targetAssessment.order === minOrder) {
+    console.log(`🔓 Assessment ${targetAssessment.assessment_name} (order ${targetAssessment.order}) is unlocked - first assessment`);
+    return true;
+  }
+  
+  // Check if all previous assessments (lower order) are completed
+  const previousAssessments = allAssessments.filter(a => a.order < targetAssessment.order);
+  
+  for (const prevAssessment of previousAssessments) {
+    const isCompleted = S3Service.isAssessmentCompleted(userEmail, prevAssessment.assessment_id);
+    if (!isCompleted) {
+      console.log(`🔒 Assessment ${targetAssessment.assessment_name} (order ${targetAssessment.order}) is locked - previous assessment ${prevAssessment.assessment_name} (order ${prevAssessment.order}) not completed`);
+      return false;
+    }
+  }
+  
+  console.log(`🔓 Assessment ${targetAssessment.assessment_name} (order ${targetAssessment.order}) is unlocked - all previous assessments completed`);
+  return true;
+};
+
 export default function Dashboard() {
   const [assessments, setAssessments] = useState<DashboardAssessment[]>([]);
   const [loadingAssessments, setLoadingAssessments] = useState(true);
@@ -128,7 +154,9 @@ export default function Dashboard() {
           };
           
           const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
-          const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
+          
+          // Custom unlock logic for test-based assessments
+          const unlocked = isTestAssessmentUnlocked(user.email, assessment, data.assessments);
           
           dashboardAssessments.push({
             ...assessmentData,
@@ -187,7 +215,9 @@ export default function Dashboard() {
         };
         
         const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
-        const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
+        
+        // Custom unlock logic for test-based assessments
+        const unlocked = isTestAssessmentUnlocked(user.email, assessment, data.assessments);
         
         dashboardAssessments.push({
           ...assessmentData,
@@ -219,8 +249,8 @@ export default function Dashboard() {
     }
 
     // Check if assessment is unlocked before proceeding
-    const isUnlocked = await S3Service.isAssessmentUnlocked(user.email, assessmentId);
-    if (!isUnlocked) {
+    const targetAssessment = assessments.find(a => a.assessment_id === assessmentId);
+    if (!targetAssessment || !targetAssessment.unlocked) {
       toast({
         title: "Assessment Locked",
         description: "Please complete the previous assessments in order to unlock this one.",
