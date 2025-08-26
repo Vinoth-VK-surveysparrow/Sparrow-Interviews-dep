@@ -60,6 +60,23 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
         
     };
 
+    // Handle previous button click
+    const handlePrevious = () => {
+        if (currentQuestionIndex > 0) {
+            const prevQuestion = questions[currentQuestionIndex - 1];
+            
+            // Log the transition
+            handleQuestionTransition(
+                prevQuestion.question, 
+                prevQuestion.id.toString(), 
+                currentQuestionIndex - 1
+            );
+
+            // Move to previous question
+            setCurrentQuestionIndex(prev => prev - 1);
+        }
+    };
+
     // Handle next button click
     const handleNext = async () => {
         if (isLastQuestion) {
@@ -169,5 +186,26 @@ export const AssessmentWithLogging: React.FC<AssessmentWithLoggingProps> = ({
                     placeholder="Type your answer here..."
                     className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     rows={4}
-                    onFocus={() => 
+                    onFocus={() => startQuestion(currentQuestion.question, currentQuestion.id.toString(), currentQuestionIndex)}
+                />
+            </div>
+
+            <div className="flex justify-between">
+                <button
+                    onClick={handlePrevious}
+                    disabled={currentQuestionIndex === 0}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md disabled:opacity-50 hover:bg-gray-400"
+                >
+                    Previous
+                </button>
+
+                <button
+                    onClick={handleNext}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                    {currentQuestionIndex === questions.length - 1 ? 'Submit' : 'Next'}
+                </button>
+            </div>
+        </div>
+    );
 };
