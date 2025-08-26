@@ -20,7 +20,9 @@ const CircularTimer = memo(({
   onClick, 
   isFinishing, 
   label = "Time",
-  totalTime = 180
+  totalTime = 180,
+  canSkip = false,
+  onSkipToNext
 }: { 
   timeLeft: number; 
   isActive: boolean; 
@@ -28,6 +30,8 @@ const CircularTimer = memo(({
   isFinishing?: boolean;
   label?: string;
   totalTime?: number;
+  canSkip?: boolean;
+  onSkipToNext?: () => void;
 }) => {
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
   const minutes = Math.floor(timeLeft / 60);
@@ -36,10 +40,19 @@ const CircularTimer = memo(({
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   
+  const handleClick = () => {
+    if (canSkip && onSkipToNext) {
+      onSkipToNext();
+    } else if (onClick) {
+      onClick();
+    }
+  };
+  
   return (
     <div 
-      className={`relative w-32 h-32 flex items-center justify-center ${onClick ? 'cursor-pointer group transition-all duration-300 hover:scale-105' : ''}`}
-      onClick={onClick}
+      className={`relative w-32 h-32 flex items-center justify-center ${(onClick || canSkip) ? 'cursor-pointer group transition-all duration-300 hover:scale-105' : ''}`}
+      onClick={handleClick}
+      title={canSkip ? "Click to skip to next question and finish current one" : undefined}
     >
       <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
         {/* Background circle - light gray */}
@@ -50,7 +63,7 @@ const CircularTimer = memo(({
           stroke="#e5e7eb"
           strokeWidth="8"
           fill="#f8fafc"
-          className={onClick ? "group-hover:fill-[#4A9CA6] transition-all duration-300" : ""}
+          className={(onClick || canSkip) ? "group-hover:fill-[#4A9CA6] transition-all duration-300" : ""}
         />
         {/* Progress circle - teal color #4A9CA6 */}
         <circle
@@ -68,15 +81,21 @@ const CircularTimer = memo(({
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
-          <div className={`text-lg font-bold text-foreground ${onClick ? 'group-hover:text-white transition-colors duration-300 group-hover:hidden' : ''}`}>
+          <div className={`text-lg font-bold text-foreground ${(onClick || canSkip) ? 'group-hover:text-white transition-colors duration-300 group-hover:hidden' : ''}`}>
             {minutes}:{seconds.toString().padStart(2, '0')}
           </div>
-          {onClick && (
+          {(onClick || canSkip) && (
             <div className="hidden group-hover:block text-sm font-bold text-white">
               {isFinishing ? (
                 <div className="flex flex-col items-center">
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mb-1"></div>
                   <span className="text-xs">Finishing...</span>
+                </div>
+              ) : canSkip ? (
+                <div className="flex flex-col items-center">
+                  <span className="text-xs">Finish</span>
+                  <span className="text-xs">Current</span>
+                  <span className="text-xs">Question</span>
                 </div>
               ) : (
                 <div className="flex flex-col items-center">
@@ -131,10 +150,10 @@ interface GameResult {
 type GameState = "rules" | "playing";
 
 const DIFFICULTY_PRESETS: Record<string, Omit<GameSettings, "mainTopic" | "wordTypes">> = {
-  beginner: { totalWords: 4, dropFrequency: 40, integrationTime: 8, difficulty: "beginner" },
+  beginner: { totalWords: 4, dropFrequency: 30, integrationTime: 8, difficulty: "beginner" },
   intermediate: { totalWords: 6, dropFrequency: 30, integrationTime: 6, difficulty: "intermediate" },
-  advanced: { totalWords: 8, dropFrequency: 20, integrationTime: 5, difficulty: "advanced" },
-  expert: { totalWords: 10, dropFrequency: 15, integrationTime: 4, difficulty: "expert" },
+  advanced: { totalWords: 8, dropFrequency: 30, integrationTime: 5, difficulty: "advanced" },
+  expert: { totalWords: 10, dropFrequency: 30, integrationTime: 4, difficulty: "expert" },
 };
 
 export default function TripleStepAssessment() {
@@ -168,6 +187,12 @@ export default function TripleStepAssessment() {
 
   const [wordsDropped, setWordsDropped] = useState(0);
   const [gameStartTime, setGameStartTime] = useState(0);
+
+  // Multi-question state
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [questionResults, setQuestionResults] = useState<any[]>([]);
+  const [totalQuestions] = useState(3);
   const [currentDuration, setCurrentDuration] = useState(0);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
 
@@ -241,11 +266,19 @@ export default function TripleStepAssessment() {
       console.log('[TRIPLE-STEP] Content fetched successfully:', content);
       setTripleStepContent(content);
       
-      // Get random topic and its words
+      // Get 3 random topics for multi-question assessment
       const topics = Object.keys(content);
       if (topics.length > 0) {
-        const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-        const wordsForTopic = content[randomTopic];
+        // Select 3 random topics (or all if less than 3 available)
+        const shuffledTopics = [...topics].sort(() => Math.random() - 0.5);
+        const selected3Topics = shuffledTopics.slice(0, Math.min(3, topics.length));
+        
+        console.log('[TRIPLE-STEP] Selected topics for 3 questions:', selected3Topics);
+        setSelectedTopics(selected3Topics);
+        
+        // Set the first topic as the current one
+        const firstTopic = selected3Topics[0];
+        const wordsForTopic = content[firstTopic];
         
         // Shuffle words for variety
       const shuffleArray = (array: string[]) => {
@@ -261,14 +294,15 @@ export default function TripleStepAssessment() {
         
         setSettings(prev => ({
           ...prev,
-          mainTopic: randomTopic,
+          mainTopic: firstTopic,
           wordTypes: wordsForTopic
         }));
       setAvailableWords(shuffledWords);
       
-        console.log('[TRIPLE-STEP] Content setup complete:', {
-          topic: randomTopic,
-          words: shuffledWords.length
+        console.log('[TRIPLE-STEP] Content setup complete for question 1:', {
+          topic: firstTopic,
+          words: shuffledWords.length,
+          totalQuestions: selected3Topics.length
         });
       }
       
@@ -545,11 +579,13 @@ export default function TripleStepAssessment() {
       // Continue without video
     }
     
-    const initialTime = settings.totalWords * settings.dropFrequency + 60;
+    // Start with 60 seconds preparation time, then 30 seconds per word
+    const initialTime = 60 + (settings.totalWords * 30);
     console.log('[TRIPLE-STEP] ⏰ Setting initial time:', initialTime, 'seconds', {
       totalWords: settings.totalWords,
-      dropFrequency: settings.dropFrequency,
-      calculation: `${settings.totalWords} * ${settings.dropFrequency} + 60 = ${initialTime}`
+      preparationTime: 60,
+      timePerWord: 30,
+      calculation: `60 + (${settings.totalWords} * 30) = ${initialTime}`
     });
     setTimeRemaining(initialTime);
     
@@ -617,25 +653,29 @@ export default function TripleStepAssessment() {
   }, [settings, startRecording, startListening, hasSpeechSupport, toast]);
 
   const startWordDropSystem = useCallback(() => {
-    // Drop first word immediately
+    console.log('[TRIPLE-STEP] Starting word drop system with 60-second preparation time...');
+    
+    // Wait 60 seconds before dropping the first word (preparation time)
     setTimeout(() => {
+      console.log('[TRIPLE-STEP] 60-second preparation time complete, dropping first word...');
       const currentDropNextWord = dropNextWordRef.current;
       if (currentDropNextWord) {
         currentDropNextWord();
       }
+      
       // Clear any existing countdown timer
       if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
 
-      // Start word dropping interval
+      // Start word dropping interval every 30 seconds
       if (wordDropIntervalRef.current) clearInterval(wordDropIntervalRef.current);
       wordDropIntervalRef.current = setInterval(() => {
         const currentDropNextWord = dropNextWordRef.current;
         if (currentDropNextWord) {
           currentDropNextWord();
         }
-      }, settings.dropFrequency * 1000);
-    }, 1000); // Small delay to ensure game is fully started
-  }, [settings.dropFrequency]);
+      }, 30000); // 30 seconds between words
+    }, 60000); // 60 seconds preparation time
+  }, []);
 
   const startGameFlow = useCallback(() => {
     console.log('[TRIPLE-STEP] Starting game flow with timers...');
@@ -784,26 +824,169 @@ export default function TripleStepAssessment() {
 
 
   // End the game and save data
+  // Function to move to next question
+  const moveToNextQuestion = useCallback(async () => {
+    console.log('[TRIPLE-STEP] 📝 Moving to next question...');
+    
+    // Stop and upload audio for current question first
+    let currentQuestionAudio: Blob | null = null;
+    try {
+      console.log('[TRIPLE-STEP] 🎙️ Stopping recording for current question...');
+      currentQuestionAudio = await stopRecording();
+      console.log('[TRIPLE-STEP] Audio stopped, blob size:', currentQuestionAudio?.size || 'null');
+    } catch (error) {
+      console.error('[TRIPLE-STEP] Error stopping recording for current question:', error);
+    }
+    
+    // Upload current question's audio with question suffix
+    if (currentQuestionAudio && currentQuestionAudio.size > 0 && user?.email) {
+      const questionSuffix = `-${currentQuestionIndex + 1}`; // -1, -2, -3
+      console.log(`[TRIPLE-STEP] 🎙️ Uploading audio for question ${currentQuestionIndex + 1}...`);
+      
+      // Show uploading toast
+      toast({
+        title: `Saving Question ${currentQuestionIndex + 1}`,
+        description: "Uploading your recording...",
+        variant: "default",
+      });
+
+      try {
+        // Upload with question suffix in the assessment ID
+        const result = await AudioUploadService.uploadRecording(
+          currentQuestionAudio,
+          user.email,
+          'triple-step',
+          `${params?.assessmentId || 'unknown'}${questionSuffix}`
+        );
+        
+        console.log(`[TRIPLE-STEP] ✅ Question ${currentQuestionIndex + 1} audio uploaded:`, result.audio_id);
+        
+        toast({
+          title: `Question ${currentQuestionIndex + 1} Saved`,
+          description: "Recording uploaded successfully.",
+          variant: "default",
+        });
+      } catch (error) {
+        console.error(`[TRIPLE-STEP] ❌ Question ${currentQuestionIndex + 1} upload failed:`, error);
+        toast({
+          title: "Upload Failed",
+          description: `Failed to save Question ${currentQuestionIndex + 1} recording.`,
+          variant: "destructive",
+        });
+      }
+    }
+    
+    // Save current question's result
+    const currentResult = {
+      questionIndex: currentQuestionIndex,
+      topic: settings.mainTopic,
+      wordsDropped,
+      activeWords: [...activeWords],
+      completedWords: [...completedWords],
+      transcript: transcript || '',
+      duration: gameStartTime > 0 ? Date.now() - gameStartTime : 0,
+      audioUploaded: !!currentQuestionAudio
+    };
+    
+    setQuestionResults(prev => [...prev, currentResult]);
+    
+    // Check if we have more questions
+    if (currentQuestionIndex + 1 < totalQuestions && selectedTopics.length > currentQuestionIndex + 1) {
+      const nextQuestionIndex = currentQuestionIndex + 1;
+      const nextTopic = selectedTopics[nextQuestionIndex];
+      
+      console.log(`[TRIPLE-STEP] 🎯 Loading question ${nextQuestionIndex + 1}/${totalQuestions}: ${nextTopic}`);
+      
+      if (tripleStepContent && tripleStepContent[nextTopic]) {
+        // Reset state for next question
+        setCurrentQuestionIndex(nextQuestionIndex);
+        setActiveWords([]);
+        setCompletedWords([]);
+        setWordsDropped(0);
+        resetTranscript();
+        
+        // Set new topic and words
+        const wordsForTopic = tripleStepContent[nextTopic];
+        const shuffleArray = (array: string[]) => {
+          const newArray = [...array];
+          for (let i = newArray.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+          }
+          return newArray;
+        };
+        const shuffledWords = shuffleArray([...wordsForTopic]);
+        
+        setSettings(prev => ({
+          ...prev,
+          mainTopic: nextTopic,
+          wordTypes: wordsForTopic
+        }));
+        setAvailableWords(shuffledWords);
+        
+        // Restart the game with new topic
+        toast({
+          title: `Question ${nextQuestionIndex + 1} of ${totalQuestions}`,
+          description: `Get ready for your next topic: ${nextTopic}`,
+          variant: "default",
+        });
+        
+        // Restart recording for next question
+        try {
+          console.log('[TRIPLE-STEP] 🎙️ Restarting recording for next question...');
+          await startRecording();
+          startListening();
+          console.log('[TRIPLE-STEP] ✅ Recording restarted for next question');
+        } catch (error) {
+          console.error('[TRIPLE-STEP] ❌ Failed to restart recording:', error);
+          toast({
+            title: "Recording Error",
+            description: "Unable to restart recording for next question.",
+            variant: "destructive",
+          });
+        }
+        
+        // Keep the game playing, just restart the timers
+        startGame();
+      } else {
+        console.error('[TRIPLE-STEP] ❌ Next topic data not found:', nextTopic);
+        // Fallback to ending assessment
+        endGameFinal();
+      }
+    } else {
+      console.log('[TRIPLE-STEP] 🏁 All questions completed, ending assessment');
+      endGameFinal();
+    }
+  }, [currentQuestionIndex, totalQuestions, selectedTopics, settings.mainTopic, wordsDropped, activeWords, completedWords, transcript, gameStartTime, tripleStepContent, resetTranscript, toast, startGame, stopRecording, user?.email, params?.assessmentId, startRecording, startListening]);
+
+  // Main endGame function - now routes to next question or final end
   const endGame = useCallback(async () => {
     console.log("[TRIPLE-STEP] endGame function called");
+    
+    // Instead of ending immediately, move to next question
+    moveToNextQuestion();
+  }, [moveToNextQuestion]);
+
+  const endGameFinal = useCallback(async () => {
+    console.log("[TRIPLE-STEP] endGameFinal function called - final assessment end");
 
     // Clear all timers first to prevent further execution
     clearAllTimers();
 
-    // Stop recording and speech recognition
-    let audioBlob: Blob | null = null;
+    // Stop recording and speech recognition for the final question
+    let finalQuestionAudio: Blob | null = null;
     try {
-      console.log('[TRIPLE-STEP] Stopping audio recording...');
-      audioBlob = await stopRecording();
-      console.log('[TRIPLE-STEP] Audio recording stopped, blob:', audioBlob?.size || 'null');
+      console.log('[TRIPLE-STEP] Stopping audio recording for final question...');
+      finalQuestionAudio = await stopRecording();
+      console.log('[TRIPLE-STEP] Final question audio stopped, blob:', finalQuestionAudio?.size || 'null');
       
       console.log('[TRIPLE-STEP] Stopping speech recognition...');
       stopListening();
       console.log('[TRIPLE-STEP] Speech recognition stopped');
       
     } catch (error) {
-      console.error('[TRIPLE-STEP] Error stopping recording:', error);
-      audioBlob = null;
+      console.error('[TRIPLE-STEP] Error stopping recording for final question:', error);
+      finalQuestionAudio = null;
     }
 
     // Stop video stream when assessment ends
@@ -816,57 +999,77 @@ export default function TripleStepAssessment() {
       setVideoStream(null);
     }
 
-    // Upload to cloud storage if we have audio and user is authenticated
-    if (audioBlob && audioBlob.size > 0 && user?.email) {
-      console.log('[TRIPLE-STEP] 🎙️ Audio blob size:', audioBlob.size, 'bytes');
+    // Upload final question's audio with question suffix
+    if (finalQuestionAudio && finalQuestionAudio.size > 0 && user?.email) {
+      const finalQuestionSuffix = `-${currentQuestionIndex + 1}`; // Should be -3 for the last question
+      console.log(`[TRIPLE-STEP] 🎙️ Uploading final question ${currentQuestionIndex + 1} audio...`);
 
-      // Always attempt cloud upload
-      AudioUploadService.uploadRecording(
-        audioBlob,
-        user.email,
-        'triple-step',
-        params?.assessmentId || 'unknown'
-      ).then((result) => {
-        console.log('[TRIPLE-STEP] ☁️ Audio uploaded to cloud:', result.audio_id);
+      // Show uploading toast
+      toast({
+        title: `Saving Final Question ${currentQuestionIndex + 1}`,
+        description: "Uploading your final recording...",
+        variant: "default",
+      });
+
+      try {
+        // Upload final question with suffix
+        const result = await AudioUploadService.uploadRecording(
+          finalQuestionAudio,
+          user.email,
+          'triple-step',
+          `${params?.assessmentId || 'unknown'}${finalQuestionSuffix}`
+        );
+        
+        console.log(`[TRIPLE-STEP] ✅ Final question ${currentQuestionIndex + 1} audio uploaded:`, result.audio_id);
+        
         toast({
-          title: "Assessment Complete",
-          description: "Your recording has been saved successfully.",
+          title: `Question ${currentQuestionIndex + 1} Saved`,
+          description: "Final recording uploaded successfully.",
           variant: "default",
         });
-      }).catch((error) => {
-        console.error('[TRIPLE-STEP] Cloud upload failed:', error);
-          toast({
-            title: "Upload Failed",
-            description: "Unable to save recording. Please try again.",
-            variant: "destructive",
-          });
-      });
+      } catch (error) {
+        console.error(`[TRIPLE-STEP] ❌ Final question ${currentQuestionIndex + 1} upload failed:`, error);
+        toast({
+          title: "Upload Failed",
+          description: `Failed to save final Question ${currentQuestionIndex + 1} recording.`,
+          variant: "destructive",
+        });
+      }
     } else if (!user?.email) {
       toast({
         title: "Upload Error",
-        description: "User authentication required for cloud storage.",
+        description: "User authentication required for recording storage.",
+        variant: "destructive",
+      });
+    } else if (!finalQuestionAudio || finalQuestionAudio.size === 0) {
+      toast({
+        title: "No Recording",
+        description: "No audio was recorded for the final question.",
         variant: "destructive",
       });
     }
 
     // Show success message before redirecting
     toast({
-      title: "Assessment Complete!",
-      description: "Your Triple Step assessment has been completed and saved successfully.",
+      title: "All Questions Complete!",
+      description: `Your ${totalQuestions}-question Triple Step assessment has been completed and saved successfully.`,
       variant: "default",
     });
 
     // Navigate to dashboard instead of results page (Triple Step has different flow)
     setTimeout(() => setLocation('/'), 2000); // Small delay to show the success message
-  }, [stopRecording, stopListening, clearAllTimers, videoStream, user?.email, params?.assessmentId, toast, setLocation]);
+  }, [stopRecording, stopListening, clearAllTimers, videoStream, user?.email, params?.assessmentId, toast, setLocation, totalQuestions, currentQuestionIndex]);
 
   const resetGame = useCallback(() => {
     setGameState("rules");
     setActiveWords([]);
     setCompletedWords([]);
     setTimeRemaining(0);
-
-
+    
+    // Reset multi-question state
+    setCurrentQuestionIndex(0);
+    setQuestionResults([]);
+    
     setWordsDropped(0);
     setDetectedWords(new Set());
 
@@ -995,21 +1198,44 @@ export default function TripleStepAssessment() {
       <div className="min-h-screen bg-background">
         <div className="max-w-6xl mx-auto px-6 py-8">
           
-          {/* Topic Header with proper spacing */}
-          <div className="relative mb-12">
-            {/* Topic Centered */}
-            <h2 className="text-3xl font-bold text-foreground mb-6 leading-relaxed 
-                          max-w-5xl mx-auto text-center">
-              {settings.mainTopic}
-            </h2>
+          {/* Topic Header with improved layout */}
+          <div className="mb-12">
+            <div className="flex items-start justify-between gap-8">
+              {/* Topic - Takes most of the space */}
+              <div className="flex-1 min-w-0">
+                <div className="text-center">
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Question {currentQuestionIndex + 1} of {totalQuestions}
+                  </div>
+                  <h2 className="text-3xl font-bold text-foreground leading-relaxed">
+                    {settings.mainTopic}
+                  </h2>
+                </div>
+              </div>
 
-            {/* Timer Aligned Right */}
-            <div className="absolute right-0 top-1/2 -translate-y-1/2">
-              <CircularTimer 
-                timeLeft={timeRemaining} 
-                isActive={true}
-                label="Assessment"
-              />
+              {/* Timer - Fixed width on the right */}
+              <div className="flex-shrink-0">
+                <CircularTimer 
+                  timeLeft={timeRemaining} 
+                  isActive={true}
+                  label="Assessment"
+                  canSkip={true}
+                  onSkipToNext={() => {
+                    console.log('[TRIPLE-STEP] ⏭️ Skip to next question requested');
+                    const isLastQuestion = currentQuestionIndex + 1 >= totalQuestions;
+                    toast({
+                      title: isLastQuestion ? "Finishing Assessment" : `Moving to Question ${currentQuestionIndex + 2}`,
+                      description: isLastQuestion ? "Completing final question..." : "Moving to next topic...",
+                      variant: "default",
+                    });
+                    // End the current question
+                    const currentEndGame = endGameRef.current;
+                    if (currentEndGame) {
+                      currentEndGame();
+                    }
+                  }}
+                />
+              </div>
             </div>
           </div>
 
