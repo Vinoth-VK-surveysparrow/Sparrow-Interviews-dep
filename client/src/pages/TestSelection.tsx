@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ChevronRight, Loader2, AlertCircle, TestTube } from 'lucide-react';
+import { ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,7 +20,12 @@ interface UserTestsResponse {
   test_count: number;
 }
 
-// Sparrow logo component
+// Interface for fallback API response (all available tests)
+interface AllTestsResponse {
+  tests: Test[];
+}
+
+// Sparrow logo component using the Symbol.svg (same as Dashboard and Assessment screens)
 const SparrowLogo = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.19154398143291473 -0.0020752372220158577 92.23655700683594 101.78607177734375" className="w-16 h-16 mx-auto">
     <g id="bird" fill="#4A9CA6">
@@ -36,6 +41,7 @@ export default function TestSelection() {
   const [loadingTests, setLoadingTests] = useState(true);
   const [loadingTest, setLoadingTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isShowingFallbackTests, setIsShowingFallbackTests] = useState(false); // Track if showing fallback tests
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -71,7 +77,52 @@ export default function TestSelection() {
         const data: UserTestsResponse = await response.json();
         console.log('✅ User tests fetched:', data);
         
-        setTests(data.tests || []);
+        // Check if user has any specific tests assigned
+        if (data.tests && data.tests.length > 0) {
+          setTests(data.tests);
+          setIsShowingFallbackTests(false); // User has assigned tests
+        } else {
+          // =================================================================
+          // TEMPORARY FALLBACK FEATURE - EASY TO REMOVE LATER
+          // =================================================================
+          // When user has no specific tests, fetch all available tests
+          // TODO: Remove this entire fallback section when no longer needed
+          console.log('⚠️ No user-specific tests found, fetching all available tests as fallback');
+          
+          try {
+            const fallbackResponse = await fetch(`${API_BASE_URL}/tests`);
+            
+            if (!fallbackResponse.ok) {
+              throw new Error(`Failed to fetch all tests: ${fallbackResponse.status} ${fallbackResponse.statusText}`);
+            }
+            
+            const fallbackData: AllTestsResponse = await fallbackResponse.json();
+            console.log('✅ Fallback tests fetched:', fallbackData);
+            
+            setTests(fallbackData.tests || []);
+            setIsShowingFallbackTests(true); // Mark as showing fallback tests
+            
+            // Show a notification that we're showing all tests
+            toast({
+              title: "No Assigned Tests",
+              description: "Showing all available tests. Please contact admin for test assignment.",
+              variant: "default",
+            });
+            
+          } catch (fallbackError) {
+            console.error('❌ Failed to fetch fallback tests:', fallbackError);
+            // If fallback also fails, show empty state
+            setTests([]);
+            toast({
+              title: "No Tests Available",
+              description: "No tests found for your account. Please contact admin.",
+              variant: "destructive",
+            });
+          }
+          // =================================================================
+          // END OF TEMPORARY FALLBACK FEATURE
+          // =================================================================
+        }
       } catch (error) {
         console.error('❌ Failed to fetch user tests:', error);
         setError('Failed to load tests. Please try again later.');
@@ -152,9 +203,24 @@ export default function TestSelection() {
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
             Select Your Test
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-            Choose a test to begin your evaluation process.
-          </p>
+          
+          {/* =================================================================
+              TEMPORARY FALLBACK UI INDICATOR - EASY TO REMOVE LATER
+              ================================================================= */}
+          {isShowingFallbackTests && (
+            <div className="max-w-2xl mx-auto mb-4">
+              <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-900/20">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-orange-800 dark:text-orange-200">
+                  <strong>Note:</strong> You have no assigned tests. Showing all available tests. 
+                  Please contact admin for proper test assignment.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          {/* =================================================================
+              END OF TEMPORARY FALLBACK UI INDICATOR
+              ================================================================= */}
         </div>
 
         {/* Test Cards */}
@@ -170,7 +236,7 @@ export default function TestSelection() {
                   <CardContent className="p-8 h-full flex flex-col justify-between relative">
                     {/* Icon Section */}
                     <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 mb-6 flex items-center justify-center">
-                      <TestTube className="w-16 h-16 text-teal-600" />
+                      <SparrowLogo />
                     </div>
                     
                     {/* Content Section */}
