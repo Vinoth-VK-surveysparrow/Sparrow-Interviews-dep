@@ -2,7 +2,7 @@ import { Link, useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ChevronRight, CheckCircle, Loader2, AlertCircle, Lock } from 'lucide-react';
+import { ChevronRight, CheckCircle, Loader2, AlertCircle, Lock, ArrowLeft } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useS3Upload } from '@/hooks/useS3Upload';
 import { useAuth } from '@/hooks/useAuth';
@@ -26,14 +26,30 @@ interface DashboardAssessment extends Assessment {
   unlocked: boolean;
 }
 
+interface TestAssessment {
+  assessment_id: string;
+  assessment_name: string;
+  order: number;
+  description: string;
+  type: string;
+  test_id: string;
+}
+
+interface TestAssessmentsResponse {
+  test_id: string;
+  assessments: TestAssessment[];
+  assessment_count: number;
+}
+
 export default function Dashboard() {
   const [assessments, setAssessments] = useState<DashboardAssessment[]>([]);
   const [loadingAssessments, setLoadingAssessments] = useState(true);
   const [loadingAssessment, setLoadingAssessment] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const { initiateAssessment, fetchQuestions } = useS3Upload();
   const { user, loading: authLoading } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   
   // Debug function for development
@@ -48,47 +64,86 @@ export default function Dashboard() {
     }
   };
 
-  // Fetch assessments on component mount (wait for auth to complete)
+  // Get test_id from URL params or localStorage
   useEffect(() => {
-    const fetchAssessments = async () => {
-      // Don't fetch if auth is still loading
-      if (authLoading) {
-        
+    const urlParams = new URLSearchParams(location.split('?')[1] || '');
+    const testIdFromUrl = urlParams.get('test_id');
+    const testIdFromStorage = localStorage.getItem('selectedTestId');
+    
+    const testId = testIdFromUrl || testIdFromStorage;
+    
+    if (!testId) {
+      // No test selected, redirect to test selection
+      setLocation('/test-selection');
+      return;
+    }
+    
+    setSelectedTestId(testId);
+    
+    // Update URL if test_id came from localStorage
+    if (!testIdFromUrl && testIdFromStorage) {
+      setLocation(`/dashboard?test_id=${testIdFromStorage}`);
+    }
+  }, [location, setLocation]);
+
+  // Fetch assessments based on selected test
+  useEffect(() => {
+    const fetchTestAssessments = async () => {
+      // Don't fetch if auth is still loading or no test selected
+      if (authLoading || !selectedTestId) {
         return;
       }
 
       // Don't fetch if no user email
       if (!user?.email) {
-        
         setLoadingAssessments(false);
         return;
       }
 
       try {
         setError(null);
+        console.log('🔍 Fetching assessments for test:', selectedTestId);
         
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+        const response = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
         
-        const fetchedAssessments = await S3Service.getAssessments();
+        if (!response.ok) {
+          throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
+        }
+        
+        const data: TestAssessmentsResponse = await response.json();
+        console.log('✅ Test assessments fetched:', data);
+        
         const dashboardAssessments: DashboardAssessment[] = [];
         
         // Process each assessment to determine completed and unlocked status
-        for (const assessment of fetchedAssessments) {
+        for (const assessment of data.assessments) {
+          // Convert TestAssessment to Assessment format
+          const assessmentData: Assessment = {
+            assessment_id: assessment.assessment_id,
+            assessment_name: assessment.assessment_name,
+            description: assessment.description,
+            type: assessment.type,
+            order: assessment.order,
+          };
+          
           const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
           const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
           
-          
-          
           dashboardAssessments.push({
-            ...assessment,
+            ...assessmentData,
             completed,
             unlocked,
           });
         }
         
+        // Sort by order
+        dashboardAssessments.sort((a, b) => a.order - b.order);
+        
         setAssessments(dashboardAssessments);
         
       } catch (error) {
-        console.error('❌ Failed to fetch assessments:', error);
+        console.error('❌ Failed to fetch test assessments:', error);
         setError('Failed to load assessments. Please try again later.');
         toast({
           title: "Error",
@@ -100,29 +155,49 @@ export default function Dashboard() {
       }
     };
 
-    fetchAssessments();
-  }, [toast, user?.email, authLoading]);
+    fetchTestAssessments();
+  }, [toast, user?.email, authLoading, selectedTestId]);
 
   // Function to refresh assessment states (completion and unlock status)
   const refreshAssessmentStates = async () => {
-    if (!user?.email) return;
+    if (!user?.email || !selectedTestId) return;
     
     try {
+      console.log('🔄 Refreshing assessment states for test:', selectedTestId);
       
-      const fetchedAssessments = await S3Service.getAssessments();
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+      const response = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to refresh test assessments: ${response.status} ${response.statusText}`);
+      }
+      
+      const data: TestAssessmentsResponse = await response.json();
       const dashboardAssessments: DashboardAssessment[] = [];
       
       // Process each assessment to determine completed and unlocked status
-      for (const assessment of fetchedAssessments) {
+      for (const assessment of data.assessments) {
+        // Convert TestAssessment to Assessment format
+        const assessmentData: Assessment = {
+          assessment_id: assessment.assessment_id,
+          assessment_name: assessment.assessment_name,
+          description: assessment.description,
+          type: assessment.type,
+          order: assessment.order,
+        };
+        
         const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
         const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
         
         dashboardAssessments.push({
-          ...assessment,
+          ...assessmentData,
           completed,
           unlocked,
         });
       }
+      
+      // Sort by order
+      dashboardAssessments.sort((a, b) => a.order - b.order);
       
       setAssessments(dashboardAssessments);
       
@@ -267,20 +342,26 @@ export default function Dashboard() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
-        {/* Permissions Test Button */}
-        <div className="flex justify-end">
+        {/* Header with Back Button and Permissions Test */}
+        <div className="flex justify-between items-center">
+          <Button
+            onClick={() => setLocation('/test-selection')}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Tests
+          </Button>
           <PermissionsTest />
         </div>
         
         <div className="text-center">
-          
-           <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-
-
-
-
-             Choose an assessment to begin your evaluation. 
-
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+            Assessment Rounds
+          </h1>
+          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+            Complete the assessment rounds in order to proceed with your evaluation.
           </p>
         </div>
         <br></br>
