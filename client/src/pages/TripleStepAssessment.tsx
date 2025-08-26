@@ -768,12 +768,21 @@ export default function TripleStepAssessment() {
           if (word.word === wordDrop.word && word.timestamp === wordDrop.timestamp) {
             const newTimeRemaining = word.timeRemaining - 1;
             if (newTimeRemaining <= 0) {
+              // Clear the timer for this word
+              const timerKey = `${wordDrop.word}-${wordDrop.timestamp}`;
+              const timer = wordIntegrationTimersRef.current.get(timerKey);
+              if (timer) {
+                clearInterval(timer);
+                wordIntegrationTimersRef.current.delete(timerKey);
+                console.log(`[TRIPLE-STEP] ⏰ Cleared timer for expired word: ${word.word}`);
+              }
+              
               setTimeout(() => {
                 setActiveWords((current) =>
                   current.filter((w) => !(w.word === word.word && w.timestamp === wordDrop.timestamp)),
                 );
                 setCompletedWords((current) => [...current, { ...word, integrated: false, timeRemaining: 0 }]);
-                console.log(`[TRIPLE-STEP] Word "${word.word}" expired (not integrated)`);
+                console.log(`[TRIPLE-STEP] ❌ Word "${word.word}" expired (not integrated) - moved to recent words`);
               }, 0);
               return { ...word, timeRemaining: 0 };
             }
@@ -822,6 +831,39 @@ export default function TripleStepAssessment() {
   }, []);
 
 
+
+  // Function to start next question with proper timing
+  const startNextQuestion = useCallback(() => {
+    console.log('[TRIPLE-STEP] 🚀 Starting next question with 60-second prep time...');
+    
+    // Clear all existing timers first to prevent interference
+    clearAllTimers();
+    
+    // Reset all question-specific state
+    setActiveWords([]);
+    setCompletedWords([]); // Clear recent words from previous question
+    setWordsDropped(0);
+    setDetectedWords(new Set());
+    setGameStartTime(Date.now());
+    
+    // Calculate total time: 60 seconds prep + (total words * 30 seconds per word)
+    const questionDuration = 60 + (settings.totalWords * 30);
+    setTimeRemaining(questionDuration);
+    
+    console.log('[TRIPLE-STEP] ⏰ Next question timing setup:', {
+      questionNumber: currentQuestionIndex + 1,
+      preparationTime: 60,
+      totalWords: settings.totalWords,
+      timePerWord: 30,
+      totalDuration: questionDuration,
+      topic: settings.mainTopic
+    });
+    
+    // Small delay to ensure state updates are processed, then start the flow
+    setTimeout(() => {
+      startGameFlow();
+    }, 100);
+  }, [settings.totalWords, settings.mainTopic, currentQuestionIndex, startGameFlow, clearAllTimers]);
 
   // End the game and save data
   // Function to move to next question
@@ -898,12 +940,8 @@ export default function TripleStepAssessment() {
       console.log(`[TRIPLE-STEP] 🎯 Loading question ${nextQuestionIndex + 1}/${totalQuestions}: ${nextTopic}`);
       
       if (tripleStepContent && tripleStepContent[nextTopic]) {
-        // Reset state for next question
+        // Update question index
         setCurrentQuestionIndex(nextQuestionIndex);
-        setActiveWords([]);
-        setCompletedWords([]);
-        setWordsDropped(0);
-        resetTranscript();
         
         // Set new topic and words
         const wordsForTopic = tripleStepContent[nextTopic];
@@ -924,7 +962,10 @@ export default function TripleStepAssessment() {
         }));
         setAvailableWords(shuffledWords);
         
-        // Restart the game with new topic
+        // Reset transcript for new question
+        resetTranscript();
+        
+        // Show transition message
         toast({
           title: `Question ${nextQuestionIndex + 1} of ${totalQuestions}`,
           description: `Get ready for your next topic: ${nextTopic}`,
@@ -946,8 +987,9 @@ export default function TripleStepAssessment() {
           });
         }
         
-        // Keep the game playing, just restart the timers
-        startGame();
+        // Start the next question with proper 60-second prep time
+        // (startNextQuestion will handle clearing timers and resetting word-related state)
+        startNextQuestion();
       } else {
         console.error('[TRIPLE-STEP] ❌ Next topic data not found:', nextTopic);
         // Fallback to ending assessment
@@ -957,7 +999,7 @@ export default function TripleStepAssessment() {
       console.log('[TRIPLE-STEP] 🏁 All questions completed, ending assessment');
       endGameFinal();
     }
-  }, [currentQuestionIndex, totalQuestions, selectedTopics, settings.mainTopic, wordsDropped, activeWords, completedWords, transcript, gameStartTime, tripleStepContent, resetTranscript, toast, startGame, stopRecording, user?.email, params?.assessmentId, startRecording, startListening]);
+  }, [currentQuestionIndex, totalQuestions, selectedTopics, settings.mainTopic, wordsDropped, activeWords, completedWords, transcript, gameStartTime, tripleStepContent, resetTranscript, toast, startNextQuestion, stopRecording, user?.email, params?.assessmentId, startRecording, startListening]);
 
   // Main endGame function - now routes to next question or final end
   const endGame = useCallback(async () => {
@@ -1171,6 +1213,25 @@ export default function TripleStepAssessment() {
     dropNextWordRef.current = dropNextWord;
   }, [endGame, dropNextWord]);
 
+  // Handle visibility change to ensure timers continue when tab is hidden
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log('[TRIPLE-STEP] 👁️ Tab hidden - timers will continue running');
+      } else {
+        console.log('[TRIPLE-STEP] 👁️ Tab visible - checking timer states');
+        // When tab becomes visible again, we don't need to do anything special
+        // as our timers use setInterval which continues running in background
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -1239,129 +1300,130 @@ export default function TripleStepAssessment() {
             </div>
           </div>
 
-          {/* Main Assessment Layout - Single Card with Video (80%) and Words (20%) */}
-          <div className="mb-8">
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex gap-4" style={{ height: '500px' }}>
-                  {/* Video Area - 80% width */}
-                  <div className="flex-[0_0_80%]">
-                    <div className="relative bg-secondary rounded-lg overflow-hidden h-full">
-                    {videoStream ? (
-                      <video
-                        ref={videoRef}
-                        className="w-full h-full object-cover"
-                        autoPlay
-                        muted
-                        playsInline
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="text-center">
-                          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 mx-auto">
-                            <MicOff className="w-8 h-8 text-muted-foreground" />
-                          </div>
-                          <div className="text-muted-foreground text-lg font-medium">Camera Off</div>
-                          <div className="text-muted-foreground text-sm">Start assessment to begin video recording</div>
-                        </div>
+          {/* Main Assessment Layout - Video Left, Words Right (like Assessment page) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {/* Video Section - Left Side */}
+            <div className="lg:col-span-1">
+              <div className="relative bg-gray-900 rounded-xl overflow-hidden shadow-lg" style={{ aspectRatio: '4/3' }}>
+                {videoStream ? (
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    muted
+                    playsInline
+                    style={{ backgroundColor: '#111827' }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mb-4 mx-auto">
+                        <MicOff className="w-8 h-8 text-gray-300" />
                       </div>
-                    )}
-                    
-                    {/* Recording Indicator */}
-                    {isRecording && (
-              <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-500 dark:bg-red-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                        <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                        REC
-                      </div>
-                    )}
-                    
-                    {/* Live Transcript Overlay */}
-                    {isRecording && hasSpeechSupport && (
-                      <div className="absolute bottom-4 left-4 right-4 bg-background/80 backdrop-blur-sm border border-border text-foreground p-3 rounded text-sm max-h-32 overflow-y-auto">
-                        <div className="text-center text-xs text-muted-foreground mb-2">Live Transcript</div>
-                        {transcript ? (
-                          <div className="text-center">
-                            {transcript.split(' ').map((word, index) => {
-                              const cleanWord = word.toLowerCase().replace(/[^\w]/g, '');
-                              const isTargetWord = activeWords.some(activeWord => 
-                                activeWord.word.toLowerCase() === cleanWord
-                              );
-                              const isIntegratedWord = completedWords.some(completedWord =>
-                                completedWord.integrated && completedWord.word.toLowerCase() === cleanWord
-                              );
-                              const isDetectedWord = detectedWords.has(cleanWord);
-                              
-                              let className = 'text-foreground';
-                              if (isIntegratedWord || isDetectedWord) {
-                                className = 'text-green-500 dark:text-green-400 font-semibold bg-green-500/20 dark:bg-green-500/30 px-1 rounded';
-                              } else if (isTargetWord) {
-                                className = 'text-orange-500 dark:text-orange-400 font-medium bg-orange-500/30 px-1 rounded';
-                              }
-                              
-                              return (
-                                <span key={index} className={className}>
-                                  {word}{index < transcript.split(' ').length - 1 ? ' ' : ''}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-center text-muted-foreground">Listening...</div>
-                        )}
-                      </div>
-                    )}
-
+                      <div className="text-gray-300 text-lg font-medium">Camera Off</div>
+                      <div className="text-gray-400 text-sm">Start assessment to begin video recording</div>
                     </div>
                   </div>
-                  
-                  {/* Words Area - 20% width */}
-                  <div className="flex-[0_0_20%] flex flex-col gap-4">
-                    {/* Active Words Section */}
-                    <div className="flex-1">
-                      {activeWords.length > 0 ? (
-                        <div className="space-y-3 overflow-y-auto max-h-[250px]">
-                          {activeWords.map((wordDrop, index) => (
-                            <div
-                              key={`${wordDrop.word}-${wordDrop.timestamp}`}
-                              className="bg-primary border border-accent shadow-lg rounded-lg p-3"
-                            >
-                              <div className="text-center">
-                                <div className="text-lg font-bold text-primary-foreground mb-1">{wordDrop.word}</div>
-                                <div className="text-xs text-primary-foreground/90 font-semibold mb-1">{wordDrop.timeRemaining}s</div>
-                                <div className="text-xs text-primary-foreground/80">
-                                  Integrate naturally
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div></div>
-                      )}
-                    </div>
-
-                    {/* Word Integration History */}
-                  {completedWords.length > 0 && (
-                    <div className="mt-6">
-                      <h4 className="font-medium mb-3 text-sm text-muted-foreground">Recent Words</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {completedWords.slice(-6).map((wordDrop, index) => (
-                          <Badge
-                            key={index}
-                            variant="default"
-                            className={`flex items-center gap-1 text-xs bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400`}
-                          >
-                            <CheckCircle className="h-3 w-3" /> 
-                            {wordDrop.word}
-                          </Badge>
-                        ))}
+                )}
+                
+                {/* Recording Indicator */}
+                {isRecording && (
+                  <div className="absolute top-4 right-4 flex items-center bg-red-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                    <div 
+                      className="w-2 h-2 bg-white rounded-full mr-2" 
+                      style={{ 
+                        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        willChange: 'opacity'
+                      }}
+                    ></div>
+                    REC
+                  </div>
+                )}
+                
+                {/* Live Transcript Overlay */}
+                {isRecording && hasSpeechSupport && (
+                  <div className="absolute bottom-4 left-4 right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded text-sm max-h-32 overflow-y-auto">
+                    <div className="text-center text-xs text-gray-300 mb-2">Live Transcript</div>
+                    {transcript ? (
+                      <div className="text-center">
+                        {transcript.split(' ').map((word, index) => {
+                          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '');
+                          const isTargetWord = activeWords.some(activeWord => 
+                            activeWord.word.toLowerCase() === cleanWord
+                          );
+                          const isIntegratedWord = completedWords.some(completedWord =>
+                            completedWord.integrated && completedWord.word.toLowerCase() === cleanWord
+                          );
+                          const isDetectedWord = detectedWords.has(cleanWord);
+                          
+                          let className = 'text-white';
+                          if (isIntegratedWord || isDetectedWord) {
+                            className = 'text-green-400 font-semibold bg-green-500/30 px-1 rounded';
+                          } else if (isTargetWord) {
+                            className = 'text-orange-400 font-medium bg-orange-500/30 px-1 rounded';
+                          }
+                          
+                          return (
+                            <span key={index} className={className}>
+                              {word}{index < transcript.split(' ').length - 1 ? ' ' : ''}
+                            </span>
+                          );
+                        })}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="text-center text-gray-300">Listening...</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Words Section - Right Side */}
+            <div className="lg:col-span-1 flex flex-col justify-between min-h-[400px]">
+              {/* Active Words Section */}
+              <div className="flex-grow">
+                {activeWords.length > 0 ? (
+                  <div className="space-y-4 overflow-y-auto max-h-[300px]">
+                    {activeWords.map((wordDrop, index) => (
+                      <div
+                        key={`${wordDrop.word}-${wordDrop.timestamp}`}
+                        className="bg-primary border border-accent shadow-lg rounded-lg p-4"
+                      >
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-primary-foreground mb-2">{wordDrop.word}</div>
+                          <div className="text-sm text-primary-foreground/90 font-semibold mb-2">{wordDrop.timeRemaining}s</div>
+                          <div className="text-xs text-primary-foreground/80">
+                            Integrate naturally into your speech
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Words Section - Bigger Size */}
+              {completedWords.length > 0 && (
+                <div className="mt-8 pt-6 border-t border-border">
+                  <h4 className="font-semibold mb-4 text-base text-foreground">Recent Words</h4>
+                  <div className="flex flex-wrap gap-3">
+                    {completedWords.slice(-6).map((wordDrop, index) => (
+                      <Badge
+                        key={index}
+                        variant="default"
+                        className="flex items-center gap-2 text-sm px-3 py-2 bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/20"
+                      >
+                        <CheckCircle className="h-4 w-4" /> 
+                        {wordDrop.word}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
           </div>
         </div>
       </div>
