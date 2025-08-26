@@ -156,13 +156,14 @@ export default function Dashboard() {
 
     // Check assessment type to determine routing
     const assessment = assessments.find(a => a.assessment_id === assessmentId);
+    
     if (assessment?.type === "Conductor") {
       // Route directly to conductor assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting conductor assessment (skipping questions fetch):', assessmentId);
       setLocation(`/conductor/${assessmentId}`);
       return;
     }
-    if (assessment?.type === "triple-step") {
+    if (assessment?.type === "triple-step" || assessment?.type === "Games-arena" || assessmentId === "sales-002") {
       // Route directly to triple-step assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting triple-step assessment (skipping questions fetch):', assessmentId);
       setLocation(`/triple-step/${assessmentId}`);

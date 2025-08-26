@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle } from 'lucide-react';
@@ -10,6 +10,10 @@ export function AssessmentSecurity() {
   const [isFullscreenTransition, setIsFullscreenTransition] = useState(false);
   const [securityInitialized, setSecurityInitialized] = useState(false);
   const [permissionDialogOpen, setPermissionDialogOpen] = useState(false);
+  
+  // Refs to prevent infinite loops
+  const fullscreenAttemptedRef = useRef(false);
+  const cleanupExecutedRef = useRef(false);
 
   // Check if user is in assessment or rules (security-critical routes)
   const isInSecureMode = location.startsWith('/rules/') || 
@@ -19,12 +23,23 @@ export function AssessmentSecurity() {
                         location.startsWith('/triple-step/');
 
   useEffect(() => {
-    if (!isInSecureMode) return;
+    if (!isInSecureMode) {
+      // Reset refs when leaving secure mode
+      fullscreenAttemptedRef.current = false;
+      cleanupExecutedRef.current = false;
+      return;
+    }
 
-    
+    // Prevent running multiple times
+    if (cleanupExecutedRef.current) return;
+    cleanupExecutedRef.current = false;
 
     // Request fullscreen when entering assessment
     const enterFullscreen = async () => {
+      // Prevent multiple fullscreen attempts
+      if (fullscreenAttemptedRef.current) return;
+      fullscreenAttemptedRef.current = true;
+      
       try {
         setIsFullscreenTransition(true);
         if (document.documentElement.requestFullscreen) {
@@ -48,7 +63,10 @@ export function AssessmentSecurity() {
       }
     };
 
-    enterFullscreen();
+    // Only attempt fullscreen if not already attempted
+    if (!fullscreenAttemptedRef.current) {
+      enterFullscreen();
+    }
 
     // Detect permission dialogs
     const checkForPermissionDialogs = () => {
@@ -195,10 +213,13 @@ export function AssessmentSecurity() {
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement && securityInitialized && !isFullscreenTransition) {
         
-        // Try to re-enter fullscreen after a short delay
+        // Only try to re-enter fullscreen if we're still in secure mode and haven't attempted recently
         setTimeout(() => {
-          if (isInSecureMode) {
-            enterFullscreen();
+          if (isInSecureMode && !fullscreenAttemptedRef.current) {
+            fullscreenAttemptedRef.current = false; // Reset to allow re-attempt
+            if (!fullscreenAttemptedRef.current) {
+              enterFullscreen();
+            }
           }
         }, 500);
       }
@@ -247,7 +268,7 @@ export function AssessmentSecurity() {
         document.exitFullscreen().catch(console.warn);
       }
     };
-  }, [isInSecureMode, permissionDialogOpen, securityInitialized, isFullscreenTransition]);
+  }, [isInSecureMode]); // Only depend on the route change
 
   // Don't render anything if not in secure mode
   if (!isInSecureMode) return null;
