@@ -98,26 +98,40 @@ export class AudioUploadService {
   }
 
   /**
-   * Complete upload process: get URL and upload file
+   * AWS Chalice API upload for Triple Step assessments ONLY
    */
-  static async uploadRecording(
+  static async uploadRecordingToAWSChalice(
     audioBlob: Blob, 
     userId: string, 
     assessmentType: string,
     assessmentId: string
   ): Promise<{ audio_id: string; audio_key: string }> {
-    const maxRetries = 2;
+    console.log(`[AUDIO-UPLOAD] 🚀 Using AWS Chalice API for ${assessmentType} assessment`);
+    
+    if (!AUDIO_API_BASE) {
+      throw new Error('AWS Chalice API endpoint (VITE_AUDIO_API_BASE) is not configured');
+    }
+    
+    // Validate audio blob
+    const validation = this.validateAudioBlob(audioBlob);
+    if (!validation.valid) {
+      throw new Error(`Invalid audio blob: ${validation.error}`);
+    }
+
+    const maxRetries = 3;
     let lastError: Error = new Error('Unknown upload error');
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[AUDIO-UPLOAD] Upload attempt ${attempt}/${maxRetries} for user:`, userId);
+        console.log(`[AUDIO-UPLOAD] AWS Chalice upload attempt ${attempt}/${maxRetries} for user:`, userId);
         
         const filename = `${assessmentType}-${assessmentId}-${Date.now()}.webm`;
         const contentType = audioBlob.type || 'audio/webm';
         const roundId = `${assessmentType}-${assessmentId}`;
 
-        // Step 1: Get presigned upload URL
+        console.log(`[AUDIO-UPLOAD] Requesting upload URL from: ${AUDIO_API_BASE}/audio/upload`);
+
+        // Step 1: Get presigned upload URL from AWS Chalice API
         const uploadData = await this.getUploadUrl({
           user_id: userId,
           round_id: roundId,
@@ -125,12 +139,12 @@ export class AudioUploadService {
           content_type: contentType
         });
 
-        console.log('[AUDIO-UPLOAD] Got upload URL, audio_id:', uploadData.audio_id);
+        console.log('[AUDIO-UPLOAD] ✅ Got presigned upload URL, audio_id:', uploadData.audio_id);
 
-        // Step 2: Upload the file
+        // Step 2: Upload the file directly to S3 using presigned URL
         await this.uploadAudio(uploadData.upload_url, audioBlob, contentType);
 
-        console.log('[AUDIO-UPLOAD] File uploaded successfully');
+        console.log('[AUDIO-UPLOAD] ✅ AWS Chalice upload successful');
 
         return {
           audio_id: uploadData.audio_id,
@@ -139,24 +153,48 @@ export class AudioUploadService {
 
       } catch (error) {
         lastError = error as Error;
-        console.error(`[AUDIO-UPLOAD] Upload attempt ${attempt} failed:`, error);
+        console.error(`[AUDIO-UPLOAD] ❌ AWS Chalice upload attempt ${attempt} failed:`, error);
         
-        // If it's a 403 or 404 error, don't retry as it's likely a configuration issue
-        if (error instanceof Error && (error.message.includes('403') || error.message.includes('400'))) {
-          console.error('[AUDIO-UPLOAD] Client error - not retrying:', error.message);
-          break;
+        // Check if it's a client error (400-499) - don't retry these
+        if (error instanceof Error) {
+          const is4xxError = error.message.includes('400') || 
+                            error.message.includes('401') || 
+                            error.message.includes('403') || 
+                            error.message.includes('404');
+          
+          if (is4xxError) {
+            console.error('[AUDIO-UPLOAD] ❌ Client error detected - not retrying:', error.message);
+            break;
+          }
         }
         
         if (attempt < maxRetries) {
-          const delay = attempt * 1000; // Exponential backoff
-          console.log(`[AUDIO-UPLOAD] Retrying in ${delay}ms...`);
+          const delay = Math.min(attempt * 1000, 5000); // Exponential backoff with max 5s
+          console.log(`[AUDIO-UPLOAD] ⏳ Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
-    console.error('[AUDIO-UPLOAD] All upload attempts failed');
-    throw lastError || new Error('Upload failed after all retries');
+    console.error('[AUDIO-UPLOAD] ❌ All AWS Chalice upload attempts failed');
+    throw new Error(`AWS Chalice upload failed for Triple Step assessment: ${lastError.message}. Please check your connection and try again.`);
+  }
+
+  /**
+   * Main upload method with clear routing logic
+   */
+  static async uploadRecording(
+    audioBlob: Blob, 
+    userId: string, 
+    assessmentType: string,
+    assessmentId: string
+  ): Promise<{ audio_id: string; audio_key: string }> {
+    console.log(`[AUDIO-UPLOAD] 📋 Starting upload for ${assessmentType} assessment`);
+    
+    // Triple Step → AWS Chalice API
+    console.log('[AUDIO-UPLOAD] 🎯 Triple Step detected → Using AWS Chalice API');
+    return this.uploadRecordingToAWSChalice(audioBlob, userId, assessmentType, assessmentId);
+
   }
 
   /**

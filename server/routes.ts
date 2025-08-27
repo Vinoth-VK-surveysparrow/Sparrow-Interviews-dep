@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+// import { storage } from "./storage"; // Commented out as not used
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import multer from "multer";
@@ -40,6 +40,17 @@ const loadConductorConfig = () => {
 };
 
 
+
+const loadSalesAIAssessment = () => {
+  try {
+    const filePath = join(process.cwd(), 'server', 'data', 'sales-ai-assessment.json');
+    const data = readFileSync(filePath, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Failed to load sales-ai assessment:', error);
+    return null;
+  }
+};
 
 // Configure multer for file uploads
 const upload = multer({ 
@@ -332,6 +343,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
 
+       // 4. Add sales-ai assessment from local JSON
+       const salesAIAssessment = loadSalesAIAssessment();
+       if (salesAIAssessment) {
+         // Transform DynamoDB format to simple format
+         const salesAIData = {
+           assessment_id: salesAIAssessment.assessment_id.S,
+           assessment_name: salesAIAssessment.assessment_name.S,
+           description: salesAIAssessment.description.S,
+           order: parseInt(salesAIAssessment.order.N),
+           time_limit: parseInt(salesAIAssessment.time_limit.N),
+           type: salesAIAssessment.type.S
+         };
+         
+         // Check if sales-ai already exists in external data
+         const existingSalesAI = allAssessments.find(a => a.assessment_id === salesAIData.assessment_id);
+         if (!existingSalesAI) {
+           console.log('✅ Adding sales-ai assessment:', salesAIData);
+           allAssessments.push(salesAIData);
+         } else {
+           console.log('ℹ️ Sales-AI assessment already exists in external data');
+         }
+       }
+
        // Sort by order
        allAssessments.sort((a, b) => a.order - b.order);
 
@@ -346,8 +380,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
      } catch (error) {
        console.error('❌ Error fetching assessments:', error);
        
-       // Fallback to local assessments only
-       const fallbackAssessments = [];
+             // Fallback to local assessments only
+      const fallbackAssessments: any[] = [];
        
        // Add conductor if available
        const conductorAssessment = loadConductorAssessment();
@@ -361,8 +395,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
            type: conductorAssessment.type.S
          });
        }
-       
-       console.log('⚠️ Using fallback assessments:', fallbackAssessments.length);
+             
+      // Add sales-ai if available
+      const salesAIAssessment = loadSalesAIAssessment();
+      if (salesAIAssessment) {
+        fallbackAssessments.push({
+          assessment_id: salesAIAssessment.assessment_id.S,
+          assessment_name: salesAIAssessment.assessment_name.S,
+          description: salesAIAssessment.description.S,
+          order: parseInt(salesAIAssessment.order.N),
+          time_limit: parseInt(salesAIAssessment.time_limit.N),
+          type: salesAIAssessment.type.S
+        });
+      }
+      
+      console.log('⚠️ Using fallback assessments:', fallbackAssessments.length);
        res.json({ assessments: fallbackAssessments.sort((a, b) => a.order - b.order) });
      }
    });
@@ -711,8 +758,8 @@ function parseContentResponse(contentText: string): any {
   }
   
   // Fallback parsing
-  const topics = [];
-  const words = [];
+  const topics: string[] = [];
+  const words: string[] = [];
   
   const lines = contentText.split('\n');
   let inTopics = false;

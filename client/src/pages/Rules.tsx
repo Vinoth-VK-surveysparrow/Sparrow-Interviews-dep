@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useAssessment } from '@/contexts/AssessmentContext';
+import { S3Service, Assessment } from '@/lib/s3Service';
 import { Home } from 'lucide-react';
 
 export default function Rules() {
@@ -12,6 +13,8 @@ export default function Rules() {
   const [, setLocation] = useLocation();
   const [cameraPermission, setCameraPermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [microphonePermission, setMicrophonePermission] = useState<'pending' | 'granted' | 'denied'>('pending');
+  const [assessment, setAssessment] = useState<Assessment | null>(null);
+  const [loading, setLoading] = useState(true);
   
   const { startCamera, hasPermission: hasCameraPermission } = useCameraCapture();
   const { startRecording } = useAudioRecording();
@@ -42,14 +45,39 @@ export default function Rules() {
 
     if (params?.assessmentId) {
       startSession(params.assessmentId);
+      
+      // Route based on assessment type
+      if (assessment?.type === 'Games-arena') {
+        // For Games-arena, go to the AI conversation page
+        setLocation(`/sales-ai/${params.assessmentId}`);
+      } else {
+        // For all other types, use standard assessment flow
+        setLocation(`/assessment/${params.assessmentId}`);
+      }
     }
-    // Navigate to the new single-page assessment
-    setLocation(`/assessment/${params?.assessmentId}`);
   };
 
   useEffect(() => {
     requestPermissions();
-  }, []);
+    
+    // Fetch assessment data
+    const fetchAssessmentData = async () => {
+      if (!params?.assessmentId) return;
+      
+      try {
+        setLoading(true);
+        const assessments = await S3Service.getAssessments();
+        const currentAssessment = assessments.find(a => a.assessment_id === params.assessmentId);
+        setAssessment(currentAssessment || null);
+      } catch (error) {
+        console.error('Error fetching assessment data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAssessmentData();
+  }, [params?.assessmentId]);
 
   const getPermissionStatus = (permission: string) => {
     switch (permission) {
@@ -64,6 +92,29 @@ export default function Rules() {
 
   const cameraStatus = getPermissionStatus(cameraPermission);
   const microphoneStatus = getPermissionStatus(microphonePermission);
+
+  // Get rules based on assessment type
+  const getRulesContent = () => {
+    if (assessment?.type === 'Games-arena') {
+      return [
+        'This is a live conversation with an AI prospect for 5 minutes maximum',
+        'Your camera and microphone will be recorded throughout the conversation',
+        'The AI will act as a prospect evaluating competitive solutions',
+        'Focus on highlighting unique selling points and handling objections',
+        'Do not close the browser window during the assessment',
+        'Your conversation will be analyzed for competitive handling skills'
+      ];
+    } else {
+      return [
+        'Answer questions clearly and concisely',
+        'Your camera and microphone will be recorded throughout the assessment',
+        'You have a time limit for each question',
+        'Speak clearly and maintain good eye contact with the camera',
+        'Do not close the browser window during the assessment',
+        'Your responses will be analyzed for assessment scoring'
+      ];
+    }
+  };
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -83,10 +134,10 @@ export default function Rules() {
 
         <div className="text-center">
           <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-2">
-            Assessment Permissions & Rules
+            {loading ? 'Loading...' : assessment?.assessment_name || 'Assessment'}
           </h2>
           <p className="text-gray-600 dark:text-gray-300">
-            Please review the following requirements before starting
+            {loading ? '' : assessment?.description || 'Assessment description'}
           </p>
         </div>
 
@@ -132,34 +183,12 @@ export default function Rules() {
                 Assessment Rules
               </h3>
               <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
-                <div className="flex items-start">
-                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Each question has a 60-second time limit</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Your camera and microphone will be recorded throughout the assessment</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Do not close the browser window or navigate away from the page during the assessment</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Once you start the assessment, you should not stop or refresh the page until the assessment is complete</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>You can proceed to the next question manually or wait for auto-advance</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Live transcript of your responses will be displayed</span>
-                </div>
-                <div className="flex items-start">
-                  <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                  <span>Each assessment contains questions ranging from 3 to 15</span>
-                </div>
+                {getRulesContent().map((rule, index) => (
+                  <div key={index} className="flex items-start">
+                    <span className="w-2 h-2 bg-teal-primary rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                    <span>{rule}</span>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>

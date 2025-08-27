@@ -17,10 +17,12 @@ import Assessment from "@/pages/Assessment";
 import Results from "@/pages/Results";
 import ConductorAssessment from "@/pages/ConductorAssessment";
 import TripleStepAssessment from "@/pages/TripleStepAssessment";
+import SalesAIAssessment from "@/pages/SalesAIAssessment";
+import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings as SettingsIcon } from "lucide-react";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
 import { AssessmentSecurity } from "@/components/AssessmentSecurity";
 
@@ -29,7 +31,7 @@ import SecurityRestrictions from "@/components/SecurityRestrictions";
 
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const handleSignOut = async () => {
     await signOut();
@@ -41,7 +43,8 @@ function Header() {
                         location.startsWith('/question/') || 
                         location.startsWith('/results/') ||
                         location.startsWith('/conductor/') ||
-                        location.startsWith('/triple-step/');
+                        location.startsWith('/triple-step/') ||
+                        location.startsWith('/sales-ai/');
 
   if (!isAuthenticated) {
     return null;
@@ -72,17 +75,28 @@ function Header() {
             themes={["light", "dark", "system"]}
           />
             
-            {/* Only show sign out button when NOT in assessment */}
+            {/* Only show buttons when NOT in assessment */}
             {!isInAssessment && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSignOut}
-                className="flex items-center gap-2"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation('/settings')}
+                  className="flex items-center gap-2"
+                >
+                  <SettingsIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Settings</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="flex items-center gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Sign Out</span>
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -99,7 +113,8 @@ function SecurityWrapper() {
   const isActiveAssessment = location.startsWith('/assessment/') || 
                             location.startsWith('/question/') ||
                             location.startsWith('/conductor/') ||
-                            location.startsWith('/triple-step/');
+                            location.startsWith('/triple-step/') ||
+                            location.startsWith('/sales-ai/');
 
   if (isRulesPage) {
     // On rules page: Basic restrictions but allow window switching for permission dialogs
@@ -155,6 +170,16 @@ function Router() {
         <Route path="/triple-step/:assessmentId">
           <ProtectedRoute>
             <TripleStepAssessment />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/sales-ai/:assessmentId">
+          <ProtectedRoute>
+            <SalesAIAssessment />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/settings">
+          <ProtectedRoute>
+            <Settings />
           </ProtectedRoute>
         </Route>
         <Route path="/question/:assessmentId/:questionNumber">

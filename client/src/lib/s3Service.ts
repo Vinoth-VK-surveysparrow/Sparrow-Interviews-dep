@@ -80,14 +80,38 @@ export interface Question {
 export interface FetchQuestionsRequest {
   user_email: string;
   assessment_id: string;
+  type?: string;
+}
+
+export interface PromptPart {
+  text: {
+    S: string;
+  };
+}
+
+export interface DynamoPrompt {
+  prompt_name?: {
+    S: string;
+  };
+  Meaning?: {
+    S: string;
+  };
+  parts?: {
+    L: Array<{
+      M: PromptPart;
+    }>;
+  };
 }
 
 export interface FetchQuestionsResponse {
   questions?: Question[];
+  content?: DynamoPrompt; // For Games-arena responses
   status?: string;
   message?: string;
   completed_at?: string;
   audio_key?: string;
+  prompt?: DynamoPrompt;
+  type?: string;
 }
 
 // Cache for assessments
@@ -136,6 +160,22 @@ export interface AudioVerificationResponse {
     presence: boolean;
     audio_key?: string;
   };
+}
+
+// Triple Step specific interfaces
+export interface TripleStepContent {
+  [topic: string]: string[];
+}
+
+export interface FetchTripleStepRequest {
+  user_email: string;
+  assessment_id: string;
+}
+
+export interface FetchTripleStepResponse {
+  content?: TripleStepContent;
+  status?: string;
+  message?: string;
 }
 
 export class S3Service {
@@ -505,16 +545,36 @@ export class S3Service {
         throw new Error(`ASSESSMENT_COMPLETED:${JSON.stringify(data)}`);
       }
       
-      if (!data.questions || data.questions.length === 0) {
-        throw new Error('No questions returned from the API');
+      // Handle different assessment types based on their response structure
+      if (request.type === 'Games-arena') {
+        // Games-arena returns prompt data in 'content' field, not 'questions'
+        const promptData = data.questions || data.content;
+        if (!promptData) {
+          throw new Error('No prompt data returned for Games-arena assessment');
+        }
+        
+        console.log('🎯 Games-arena prompt data received:', promptData);
+        
+        // For Games-arena, return the prompt as a single "question" for compatibility
+        const dynamoPromptData = promptData as DynamoPrompt; // Cast to DynamoPrompt for Games-arena
+        const promptQuestion: Question = {
+          question_id: `games-arena-${request.assessment_id}`,
+          question_text: dynamoPromptData.prompt_name?.S || 'Games Arena Assessment',
+          order: 1,
+          type: 'Games-arena'
+        };
+        return [promptQuestion];
+      } else {
+        // Handle all other assessment types (QA, triple-step, etc.) - they return questions array
+        if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
+          throw new Error(`No questions returned for ${request.type || 'unknown'} assessment type`);
+        }
+        
+        // Sort by order
+        const sortedQuestions = data.questions.sort((a, b) => a.order - b.order);
+        
+        return sortedQuestions;
       }
-      
-      
-      
-      // Sort by order
-      const sortedQuestions = data.questions.sort((a, b) => a.order - b.order);
-      
-      return sortedQuestions;
     } catch (error) {
       console.error('Error fetching questions:', error);
       throw error;
@@ -645,6 +705,54 @@ export class S3Service {
     } catch (error) {
       console.error('Error getting next assessment:', error);
       return null;
+    }
+  }
+
+  // Fetch Triple Step content from S3
+  static async fetchTripleStepContent(request: FetchTripleStepRequest): Promise<TripleStepContent> {
+    try {
+      console.log('[S3Service] Fetching Triple Step content for:', request);
+
+      const response = await fetch(`${API_BASE_URL}/fetch-questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch Triple Step content:', response.status, response.statusText, errorText);
+        throw new Error(`Failed to fetch Triple Step content: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('Raw data received from backend:', data);
+      
+      if (data.status === 'completed') {
+        throw new Error(`ASSESSMENT_COMPLETED:${JSON.stringify(data)}`);
+      }
+      
+      // Handle both old format (content) and new format (questions)
+      let content: TripleStepContent;
+      if (data.content) {
+        // Old format
+        content = data.content;
+      } else if (data.questions) {
+        // New format - transform questions object to content format
+        console.log('Transforming S3 object format to questions array');
+        content = data.questions;
+        console.log('Transformed', Object.keys(content).length, 'questions from S3 format');
+      } else {
+        throw new Error('No Triple Step content or questions returned from the API');
+      }
+      
+      console.log('[S3Service] Triple Step content fetched successfully:', content);
+      return content;
+    } catch (error) {
+      console.error('Error fetching Triple Step content:', error);
+      throw error;
     }
   }
 }
