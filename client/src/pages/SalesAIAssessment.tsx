@@ -271,6 +271,54 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       try {
         setLoadingPrompt(true);
         
+        // CRITICAL: Validate that this is a Games-arena assessment in the current test
+        const selectedTestId = localStorage.getItem('selectedTestId');
+        if (!selectedTestId) {
+          console.error('❌ No test selected for Sales AI assessment');
+          toast({
+            title: "No Test Selected",
+            description: "Please select a test first.",
+            variant: "destructive",
+          });
+          setLocation('/test-selection');
+          return;
+        }
+
+        // Validate assessment exists in current test and is Games-arena type
+        const testResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/assessments/test/${selectedTestId}`);
+        
+        if (!testResponse.ok) {
+          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
+        }
+        
+        const testData = await testResponse.json();
+        const testAssessments = testData.assessments || [];
+        const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === assessmentId);
+        
+        if (!assessmentInTest) {
+          console.error(`❌ Assessment ${assessmentId} not found in test ${selectedTestId}`);
+          toast({
+            title: "Assessment Not Found",
+            description: "This assessment is not available in the current test.",
+            variant: "destructive",
+          });
+          setLocation('/');
+          return;
+        }
+
+        if (assessmentInTest.type !== 'Games-arena') {
+          console.error(`❌ Assessment ${assessmentId} is type ${assessmentInTest.type}, not Games-arena`);
+          toast({
+            title: "Invalid Assessment Type",
+            description: "This page is only for Games-arena assessments.",
+            variant: "destructive",
+          });
+          setLocation('/');
+          return;
+        }
+
+        console.log(`✅ Games-arena assessment ${assessmentId} validated in test ${selectedTestId}`);
+        
         // For Games-arena type, we need to handle the response differently
         // since it returns prompt data instead of questions
         const fetchResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/fetch-questions`, {
