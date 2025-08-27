@@ -10,6 +10,7 @@ import { AssessmentProvider } from "@/contexts/AssessmentContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/Dashboard";
+import TestSelection from "@/pages/TestSelection";
 import Rules from "@/pages/Rules";
 import Question from "@/pages/Question";
 import Assessment from "@/pages/Assessment";
@@ -138,7 +139,12 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/">
           <ProtectedRoute>
-            <Dashboard />
+            <TestSelection />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/test-selection">
+          <ProtectedRoute>
+            <TestSelection />
           </ProtectedRoute>
         </Route>
         <Route path="/dashboard">
