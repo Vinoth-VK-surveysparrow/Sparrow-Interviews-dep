@@ -98,7 +98,7 @@ export const useS3Upload = () => {
     setError(null);
   }, []);
 
-  const fetchQuestions = useCallback(async (assessmentId: string): Promise<Question[]> => {
+  const fetchQuestions = useCallback(async (assessmentId: string, assessmentType?: string): Promise<Question[]> => {
     if (authLoading) {
       throw new Error('Authentication still loading, please wait...');
     }
@@ -110,7 +110,8 @@ export const useS3Upload = () => {
     try {
       const questions = await S3Service.fetchQuestions({
         user_email: user.email,
-        assessment_id: assessmentId
+        assessment_id: assessmentId,
+        type: assessmentType
       });
 
       return questions;

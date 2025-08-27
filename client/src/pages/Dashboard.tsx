@@ -1,8 +1,9 @@
+import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ChevronRight, CheckCircle, Loader2, AlertCircle, Lock } from 'lucide-react';
+import { ChevronRight, CheckCircle, Loader2, AlertCircle, Lock, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useS3Upload } from '@/hooks/useS3Upload';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,7 +22,12 @@ const SparrowLogo = () => (
   </svg>
 );
 
-interface DashboardAssessment extends Assessment {
+interface DashboardAssessment {
+  assessment_id: string;
+  assessment_name: string;
+  description: string;
+  order: number;
+  type?: string;
   completed: boolean;
   unlocked: boolean;
 }
@@ -31,6 +37,7 @@ export default function Dashboard() {
   const [loadingAssessments, setLoadingAssessments] = useState(true);
   const [loadingAssessment, setLoadingAssessment] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasGeminiApiKey, setHasGeminiApiKey] = useState(false);
   const { initiateAssessment, fetchQuestions } = useS3Upload();
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -38,7 +45,7 @@ export default function Dashboard() {
   
   // Debug function for development
   const handleClearCache = () => {
-    if (import.meta.env.DEV) {
+    if (process.env.NODE_ENV === 'development') {
       S3Service.clearCompletionCache();
       refreshAssessmentStates();
       toast({
@@ -47,6 +54,27 @@ export default function Dashboard() {
       });
     }
   };
+
+  // Check for Gemini API key
+  useEffect(() => {
+    const checkApiKey = () => {
+      const savedKey = localStorage.getItem('gemini_api_key');
+      setHasGeminiApiKey(!!savedKey);
+    };
+    
+    checkApiKey();
+    
+    // Listen for storage changes to update the state when API key is saved
+    const handleStorageChange = () => {
+      checkApiKey();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
 
   // Fetch assessments on component mount (wait for auth to complete)
   useEffect(() => {
@@ -73,6 +101,9 @@ export default function Dashboard() {
         
         // Process each assessment to determine completed and unlocked status
         for (const assessment of fetchedAssessments) {
+          // Skip Sales AI assessment from API since we hardcode it
+          if (assessment.type === 'SalesAI') continue;
+          
           const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
           const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
           
@@ -85,11 +116,18 @@ export default function Dashboard() {
           });
         }
         
-        setAssessments(dashboardAssessments);
+        // Sort assessments by order
+        const finalAssessments = dashboardAssessments.sort((a, b) => a.order - b.order);
+        
+        setAssessments(finalAssessments);
         
       } catch (error) {
         console.error('❌ Failed to fetch assessments:', error);
         setError('Failed to load assessments. Please try again later.');
+        
+        // On error, show empty array
+        setAssessments([]);
+        
         toast({
           title: "Error",
           description: "Failed to load assessments. Please refresh the page.",
@@ -114,6 +152,9 @@ export default function Dashboard() {
       
       // Process each assessment to determine completed and unlocked status
       for (const assessment of fetchedAssessments) {
+        // Skip Sales AI assessment from API since we hardcode it
+        if (assessment.type === 'SalesAI') continue;
+        
         const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
         const unlocked = await S3Service.isAssessmentUnlocked(user.email, assessment.assessment_id);
         
@@ -124,7 +165,10 @@ export default function Dashboard() {
         });
       }
       
-      setAssessments(dashboardAssessments);
+      // Sort assessments by order
+      const finalAssessments = dashboardAssessments.sort((a, b) => a.order - b.order);
+      
+      setAssessments(finalAssessments);
       
     } catch (error) {
       console.error('❌ Error refreshing assessment states:', error);
@@ -143,20 +187,21 @@ export default function Dashboard() {
       return;
     }
 
-    // Check if assessment is unlocked before proceeding
-    const isUnlocked = await S3Service.isAssessmentUnlocked(user.email, assessmentId);
-    if (!isUnlocked) {
-      toast({
-        title: "Assessment Locked",
-        description: "Please complete the previous assessments in order to unlock this one.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // Check assessment type to determine routing
     const assessment = assessments.find(a => a.assessment_id === assessmentId);
     
+    // Check if assessment is unlocked before proceeding (except for special types)
+    if (assessment?.type !== 'Games-arena' && assessment?.type !== 'Conductor') {
+      const isUnlocked = await S3Service.isAssessmentUnlocked(user.email, assessmentId);
+      if (!isUnlocked) {
+        toast({
+          title: "Assessment Locked",
+          description: "Please complete the previous assessments in order to unlock this one.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     if (assessment?.type === "Conductor") {
       // Route directly to conductor assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting conductor assessment (skipping questions fetch):', assessmentId);
@@ -169,6 +214,21 @@ export default function Dashboard() {
       setLocation(`/triple-step/${assessmentId}`);
       return;
     }
+    if (assessment?.type === "Games-arena") {
+      // Check if Gemini API key is configured for Games-arena assessment
+      if (!hasGeminiApiKey) {
+        toast({
+          title: "Configuration Required",
+          description: "Please configure your Gemini API key in Settings before starting this assessment.",
+          variant: "destructive",
+        });
+        setLocation('/settings');
+        return;
+      }
+      // Games-arena follows standard workflow: fetch questions → initiate → rules page
+      console.log('🎯 Starting Games-arena assessment (standard workflow):', assessmentId);
+      // Continue to standard workflow below (no return here)
+    }
 
     setLoadingAssessment(assessmentId);
     
@@ -177,8 +237,9 @@ export default function Dashboard() {
       
       
       // Step 1: Fetch questions first (this will check completion status)
-      
-      const questions = await fetchQuestions(assessmentId);
+      // Pass the actual assessment type (QA, triple-step, etc.) - NOT "Games-arena"
+      console.log('📋 Fetching questions for assessment type:', assessment?.type);
+      const questions = await fetchQuestions(assessmentId, assessment?.type);
       
       
       // Step 2: Then initiate assessment for S3 configuration (don't check completion here)
@@ -338,13 +399,34 @@ export default function Dashboard() {
                      }`}>
                        {assessment.assessment_name}
                     </h3>
-                     <p className={`text-sm leading-relaxed mb-6 ${
+                     <p className={`text-sm leading-relaxed mb-4 ${
                        assessment.unlocked 
                          ? 'text-gray-600 dark:text-gray-300' 
                          : 'text-gray-400 dark:text-gray-500'
                      }`}>
                       {assessment.description}
                     </p>
+                    
+                    {/* Configuration status for Sales AI */}
+                    {assessment.type === 'SalesAI' && (
+                      <div className={`flex items-center gap-2 mb-4 p-2 rounded-md ${
+                        hasGeminiApiKey 
+                          ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' 
+                          : 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300'
+                      }`}>
+                        {hasGeminiApiKey ? (
+                          <>
+                            <CheckCircle className="h-3 w-3" />
+                            <span className="text-xs">API key configured</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="h-3 w-3" />
+                            <span className="text-xs">Requires API key setup</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                   
                   {/* Button Section */}

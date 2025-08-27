@@ -183,13 +183,26 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             
             const s3Config = await initiateAssessment(assessmentId, 3600);
             
-            if (s3Config?.audio && s3Config?.images_upload) {
+            // Check if assessment is already completed
+            if (s3Config?.status === 'completed') {
+              console.log('✅ Assessment already completed:', s3Config.message);
+              throw new Error('ASSESSMENT_ALREADY_COMPLETED');
+            }
+            
+            // Validate S3 configuration - audio is required, images_upload is optional
+            if (s3Config?.audio) {
               
               return s3Config;
             } else {
-              throw new Error('Invalid S3 configuration received');
+              console.error('❌ S3 config validation failed:', { hasAudio: !!s3Config?.audio, hasImages: !!s3Config?.images_upload, s3Config });
+              throw new Error('Invalid S3 configuration received - missing audio configuration');
             }
-          } catch (error) {
+          } catch (error: any) {
+            // If assessment is already completed, don't retry - bubble up immediately
+            if (error.message === 'ASSESSMENT_ALREADY_COMPLETED') {
+              throw error;
+            }
+            
             console.error(`❌ S3 configuration failed on attempt ${attempt}:`, error);
             
             if (attempt < maxRetries) {
@@ -288,7 +301,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const uploadImageToS3 = useCallback(async (imageBlob: Blob) => {
     if (!session.s3Config?.images_upload) {
-      throw new Error('S3 not configured for this session');
+      throw new Error('S3 image upload not configured for this assessment');
     }
 
     const timestamp = Date.now();
@@ -346,7 +359,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         addTranscript,
         uploadImageToS3,
         uploadAudioToS3,
-        isS3Ready: !!(session.s3Config?.audio && session.s3Config?.images_upload),
+        isS3Ready: !!(session.s3Config?.audio), // Only audio is required, images_upload is optional
         // Logging methods
         startQuestionLog,
         endQuestionLog,
