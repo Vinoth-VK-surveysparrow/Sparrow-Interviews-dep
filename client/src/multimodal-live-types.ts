@@ -1,4 +1,11 @@
-import { Content, GenerativeContentBlob, Part } from "@google/generative-ai";
+import type {
+  Content,
+  FunctionCall,
+  GenerationConfig,
+  GenerativeContentBlob,
+  Part,
+  Tool,
+} from "@google/generative-ai";
 
 export interface StreamingLog {
   date: Date;
@@ -6,22 +13,23 @@ export interface StreamingLog {
   message: any;
 }
 
-export interface LiveConfig {
+export type LiveConfig = {
   model: string;
-  generationConfig?: {
-    responseModalities?: "text" | "audio" | "image";
-    speechConfig?: {
-      voiceConfig?: {
-        prebuiltVoiceConfig?: {
-          voiceName?: string;
-        };
+  systemInstruction?: { parts: Part[] };
+  generationConfig?: Partial<LiveGenerationConfig>;
+  tools?: Array<Tool | { googleSearch: {} } | { codeExecution: {} }>;
+};
+
+export type LiveGenerationConfig = GenerationConfig & {
+  responseModalities: "text" | "audio" | "image";
+  speechConfig?: {
+    voiceConfig?: {
+      prebuiltVoiceConfig?: {
+        voiceName: "Puck" | "Charon" | "Kore" | "Fenrir" | "Aoede" | string;
       };
     };
   };
-  systemInstruction?: {
-    parts: Part[];
-  };
-}
+};
 
 export interface RealtimeInputMessage {
   realtimeInput: {

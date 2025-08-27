@@ -175,9 +175,12 @@ export default function TestSelection() {
   if (loadingTests) {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-300">Loading available tests...</p>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-6 text-blue-600" />
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">Loading Tests</h2>
+            <p className="text-gray-600 dark:text-gray-300">Fetching available assessments for you...</p>
+          </div>
         </div>
       </main>
     );
@@ -186,12 +189,14 @@ export default function TestSelection() {
   if (error) {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Alert className="mb-8 border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="text-red-800">
-            {error}
-          </AlertDescription>
-        </Alert>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Alert className="border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 max-w-md">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-red-800 dark:text-red-200">
+              {error}
+            </AlertDescription>
+          </Alert>
+        </div>
       </main>
     );
   }
@@ -200,109 +205,81 @@ export default function TestSelection() {
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            Select Your Test
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+            Select Your Assessment
           </h1>
-          
-          {/* =================================================================
-              TEMPORARY FALLBACK UI INDICATOR - EASY TO REMOVE LATER
-              ================================================================= */}
-          {isShowingFallbackTests && (
-            <div className="max-w-2xl mx-auto mb-4">
-              <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-900/20">
-                <AlertCircle className="h-4 w-4 text-orange-600" />
-                <AlertDescription className="text-orange-800 dark:text-orange-200">
-                  <strong>Note:</strong> You have no assigned tests. Showing all available tests. 
-                  Please contact admin for proper test assignment.
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
-          {/* =================================================================
-              END OF TEMPORARY FALLBACK UI INDICATOR
-              ================================================================= */}
+          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            Choose from the available tests below to begin your assessment journey.
+          </p>
         </div>
 
-        {/* Test Cards */}
-        <div className="relative">
-          <div className="overflow-x-auto pb-4" id="tests-container">
-            <div className="flex gap-6 min-w-max px-1">
-              {tests.map((test) => (
-                <Card 
-                  key={test.test_id}
-                  className="flex-shrink-0 w-72 h-[480px] shadow-sm transition-all duration-200 overflow-hidden border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md cursor-pointer"
-                  onClick={() => handleSelectTest(test.test_id)}
-                >
-                  <CardContent className="p-8 h-full flex flex-col justify-between relative">
-                    {/* Icon Section */}
-                    <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 mb-6 flex items-center justify-center">
-                      <SparrowLogo />
-                    </div>
-                    
-                    {/* Content Section */}
-                    <div className="flex-1">
-                      <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-                        {test.test_name}
-                      </h3>
-                      <p className="text-sm leading-relaxed mb-6 text-gray-600 dark:text-gray-300">
-                        {test.description}
-                      </p>
-                    </div>
-                    
-                    {/* Button Section */}
-                    <div>
-                      <Button
-                        onClick={() => handleSelectTest(test.test_id)}
-                        disabled={loadingTest === test.test_id}
-                        className="group relative overflow-hidden w-full" 
-                        size="lg"
-                      >
-                        {loadingTest === test.test_id ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Selecting...
-                          </>
-                        ) : (
-                          <>
-                            <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
-                              Select Test
-                            </span>
-                            <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
-                              <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
-                            </i>
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            
-            {/* Right arrow indicator */}
-            {tests.length > 2 && (
-              <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-lg border-gray-200 dark:border-gray-600 hover:bg-white/95 dark:hover:bg-gray-700/95 text-gray-700 dark:text-gray-200"
-                  onClick={() => {
-                    const container = document.getElementById('tests-container');
-                    if (container) {
-                      container.scrollBy({ left: 300, behavior: 'smooth' });
-                    }
-                  }}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
+        {/* Test Cards - Centered Layout */}
+        <div className="flex justify-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl">
+            {tests.map((test) => (
+              <Card 
+                key={test.test_id}
+                className="w-80 h-[480px] shadow-sm transition-all duration-200 overflow-hidden border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-lg cursor-pointer transform hover:scale-105"
+                onClick={() => handleSelectTest(test.test_id)}
+              >
+                <CardContent className="p-8 h-full flex flex-col justify-between relative">
+                  {/* Icon Section */}
+                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 mb-6 flex items-center justify-center">
+                    <SparrowLogo />
+                  </div>
+                  
+                  {/* Content Section */}
+                  <div className="flex-1">
+                    <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+                      {test.test_name}
+                    </h3>
+                    <p className="text-sm leading-relaxed mb-6 text-gray-600 dark:text-gray-300">
+                      {test.description}
+                    </p>
+                  </div>
+                  
+                  {/* Button Section */}
+                  <div>
+                    <Button
+                      onClick={() => handleSelectTest(test.test_id)}
+                      disabled={loadingTest === test.test_id}
+                      className="group relative overflow-hidden w-full" 
+                      size="lg"
+                    >
+                      {loadingTest === test.test_id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Selecting...
+                        </>
+                      ) : (
+                        <>
+                          <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
+                            Select Test
+                          </span>
+                          <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
+                            <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+                          </i>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
 
         {tests.length === 0 && !loadingTests && (
-          <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-300">No tests available for your account.</p>
+          <div className="flex items-center justify-center min-h-[40vh]">
+            <div className="text-center">
+              <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-6 mb-6 mx-auto w-24 h-24 flex items-center justify-center">
+                <SparrowLogo />
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">No Tests Available</h2>
+              <p className="text-gray-600 dark:text-gray-300 max-w-md mx-auto">
+                No assessments have been assigned to your account. Please contact your administrator for access.
+              </p>
+            </div>
           </div>
         )}
       </div>

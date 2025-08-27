@@ -7,14 +7,14 @@ export class AudioStreamer {
   public audioQueue: Float32Array[] = [];
   private isPlaying: boolean = false;
   private sampleRate: number = 24000;
-  private bufferSize: number = 9600; // Increased buffer size for better audio quality
+  private bufferSize: number = 7680;
   private processingBuffer: Float32Array = new Float32Array(0);
   private scheduledTime: number = 0;
   public gainNode: GainNode;
   public source: AudioBufferSourceNode;
   private isStreamComplete: boolean = false;
   private checkInterval: number | null = null;
-  private initialBufferTime: number = 0.08; // Slightly increased buffer for stability
+  private initialBufferTime: number = 0.1;
   private endOfQueueAudioSource: AudioBufferSourceNode | null = null;
 
   public onComplete = () => {};

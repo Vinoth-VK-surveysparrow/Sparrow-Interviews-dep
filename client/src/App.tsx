@@ -5,7 +5,6 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { Theme } from "@/components/ui/theme";
 import { AssessmentProvider } from "@/contexts/AssessmentContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,34 +20,33 @@ import SalesAIAssessment from "@/pages/SalesAIAssessment";
 import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
-import { Button } from "@/components/ui/button";
-import { LogOut, Settings as SettingsIcon } from "lucide-react";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
 import { AssessmentSecurity } from "@/components/AssessmentSecurity";
 
 import PermissionsTest from "@/components/PermissionsTest";
 import SecurityRestrictions from "@/components/SecurityRestrictions";
+import SettingsModal from "@/components/SettingsModal";
 
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
-  const [location, setLocation] = useLocation();
+  const [location, setLocation] = useLocation(); 
+
   const handleSignOut = async () => {
     await signOut();
   };
 
   // Check if user is in assessment-related routes
-  const isInAssessment = location.startsWith('/rules/') || 
-                        location.startsWith('/assessment/') || 
-                        location.startsWith('/question/') || 
-                        location.startsWith('/results/') ||
-                        location.startsWith('/conductor/') ||
-                        location.startsWith('/triple-step/') ||
-                        location.startsWith('/sales-ai/');
+  const isInAssessment = location.startsWith('/rules/') ||
+                         location.startsWith('/assessment/') ||
+                         location.startsWith('/question/') ||
+                         location.startsWith('/results/') ||
+                         location.startsWith('/conductor/') ||
+                         location.startsWith('/triple-step/') ||
+                         location.startsWith('/sales-ai/');
 
   if (!isAuthenticated) {
     return null;
   }
-
   return (
     <header className="bg-background border-b border-border shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -67,36 +65,8 @@ function Header() {
           </div>
           
           <div className="flex items-center gap-4">
-          <Theme
-            size="sm"
-            variant="dropdown"
-            showLabel
-            themes={["light", "dark", "system"]}
-          />
-            
-            {/* Only show buttons when NOT in assessment */}
-            {!isInAssessment && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setLocation('/settings')}
-                  className="flex items-center gap-2"
-                >
-                  <SettingsIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Settings</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSignOut}
-                  className="flex items-center gap-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">Sign Out</span>
-                </Button>
-              </div>
-            )}
+            {/* Only show settings when NOT in assessment */}
+            {!isInAssessment && <SettingsModal />}
           </div>
         </div>
       </div>

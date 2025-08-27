@@ -1,10 +1,11 @@
 import VolMeterWorkletSource from './worklets/vol-meter';
 import AudioRecorderWorkletSource from './worklets/audio-processing';
 
-export type WorkletName = 'vu-meter' | 'audio-recorder-worklet';
+export type WorkletName = 'vu-meter' | 'vumeter-out' | 'audio-recorder-worklet';
 
 const workletSources: Record<WorkletName, string> = {
   'vu-meter': VolMeterWorkletSource,
+  'vumeter-out': VolMeterWorkletSource, // AudioStreamer uses this name
   'audio-recorder-worklet': AudioRecorderWorkletSource,
 };
 

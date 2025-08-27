@@ -9,7 +9,6 @@ import { useS3Upload } from '@/hooks/useS3Upload';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
-import PermissionsTest from '@/components/PermissionsTest';
 
 // Sparrow logo component using the Symbol.svg
 const SparrowLogo = () => (
@@ -473,8 +472,8 @@ export default function Dashboard() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
-        {/* Header with Back Button and Permissions Test */}
-        <div className="flex justify-between items-center">
+        {/* Header with Back Button */}
+        <div className="flex justify-start">
           <Button
             onClick={() => setLocation('/test-selection')}
             variant="outline"
@@ -484,7 +483,6 @@ export default function Dashboard() {
             <ArrowLeft className="h-4 w-4" />
             Back to Tests
           </Button>
-          <PermissionsTest />
         </div>
         
         <div className="text-center">

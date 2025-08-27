@@ -576,11 +576,11 @@ export class S3Service {
         if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
           throw new Error(`No questions returned for ${request.type || 'unknown'} assessment type`);
         }
-        
-        // Sort by order
-        const sortedQuestions = data.questions.sort((a, b) => a.order - b.order);
-        
-        return sortedQuestions;
+      
+      // Sort by order
+      const sortedQuestions = data.questions.sort((a, b) => a.order - b.order);
+      
+      return sortedQuestions;
       }
     } catch (error) {
       console.error('Error fetching questions:', error);
