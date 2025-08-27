@@ -31,8 +31,8 @@ const HARDCODED_BASE_CONFIG = {
     },
     // Add audio quality and completion settings
     candidateCount: 1,
-    maxOutputTokens: 8192, // Increased for longer responses
-    temperature: 0.8, // Slightly more natural variation
+    maxOutputTokens: 4096, // Increased for longer responses
+    temperature: 0.5, // Slightly more natural variation
     topP: 0.95,
     topK: 40
   },

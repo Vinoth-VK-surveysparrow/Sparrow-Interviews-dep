@@ -208,12 +208,14 @@ export default function Dashboard() {
       setLocation(`/conductor/${assessmentId}`);
       return;
     }
-    if (assessment?.type === "triple-step" || assessment?.type === "Games-arena" || assessmentId === "sales-002") {
+    
+    if (assessment?.type === "triple-step" || assessmentId === "sales-002") {
       // Route directly to triple-step assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting triple-step assessment (skipping questions fetch):', assessmentId);
       setLocation(`/triple-step/${assessmentId}`);
       return;
     }
+    
     if (assessment?.type === "Games-arena") {
       // Check if Gemini API key is configured for Games-arena assessment
       if (!hasGeminiApiKey) {
