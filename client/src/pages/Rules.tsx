@@ -50,6 +50,9 @@ export default function Rules() {
       if (assessment?.type === 'Games-arena') {
         // For Games-arena, go to the AI conversation page
         setLocation(`/sales-ai/${params.assessmentId}`);
+      } else if (assessment?.type === 'Triple-Step') {
+        // For Triple-Step, go to the triple-step assessment page
+        setLocation(`/triple-step/${params.assessmentId}`);
       } else {
         // For all other types, use standard assessment flow
         setLocation(`/assessment/${params.assessmentId}`);
@@ -157,7 +160,7 @@ export default function Rules() {
         {/* Home Button */}
         <div className="flex justify-start">
           <Button
-            onClick={() => setLocation('/')}
+            onClick={() => setLocation('/test-selection')}
             variant="outline"
             size="sm"
             className="flex items-center gap-2"

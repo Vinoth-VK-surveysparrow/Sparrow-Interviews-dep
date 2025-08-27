@@ -311,7 +311,38 @@ export default function Dashboard() {
       return;
     }
 
-    console.log(`🎯 Starting assessment ${assessmentId} (type: ${assessment.type}) in test ${selectedTestId}`);
+    // Check if assessment is already completed
+    try {
+      await S3Service.fetchQuestions({
+        user_email: user.email,
+        assessment_id: assessmentId,
+        type: assessment?.type || 'unknown'
+      });
+    } catch (error: any) {
+      if (error?.message?.includes('ASSESSMENT_COMPLETED')) {
+        // Parse the completion data
+        const completionDataMatch = error.message.match(/ASSESSMENT_COMPLETED:(.+)/);
+        if (completionDataMatch) {
+          const completionData = JSON.parse(completionDataMatch[1]);
+          toast({
+            title: "Assessment Completed",
+            description: `This assessment was already completed on ${new Date(completionData.completed_at).toLocaleDateString()}.`,
+            variant: "default",
+          });
+          
+          // Update the assessment state to reflect completion
+          setAssessments(prevAssessments => 
+            prevAssessments.map(a => 
+              a.assessment_id === assessmentId 
+                ? { ...a, completed: true }
+                : a
+            )
+          );
+          return;
+        }
+      }
+      // If it's not a completion error, still proceed (might be other errors that should be handled in the component)
+    }
 
     if (assessment?.type === "Conductor") {
       // Route directly to conductor assessment (no need to fetch questions or S3 config)
@@ -320,7 +351,7 @@ export default function Dashboard() {
       return;
     }
     
-    if (assessment?.type === "triple-step" || assessmentId === "sales-002") {
+    if (assessment?.type === "Triple-Step") {
       // Route directly to triple-step assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting triple-step assessment (skipping questions fetch):', assessmentId);
       setLocation(`/triple-step/${assessmentId}`);
@@ -596,7 +627,12 @@ export default function Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-lg border-gray-200 dark:border-gray-600 hover:bg-white/95 dark:hover:bg-gray-700/95 text-gray-700 dark:text-gray-200"
+                disabled={assessments.filter(a => a.completed).length >= 4}
+                className={`bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-lg border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 ${
+                  assessments.filter(a => a.completed).length >= 4 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : 'hover:bg-white/95 dark:hover:bg-gray-700/95'
+                }`}
                 onClick={() => {
                   const container = document.getElementById('assessments-container');
                   if (container) {

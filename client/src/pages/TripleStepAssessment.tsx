@@ -1,38 +1,34 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useRoute, useLocation } from 'wouter';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Home, Target, Clock, CheckCircle, XCircle, RotateCcw, Play, Zap, Mic, MicOff, RefreshCw, Volume2, Download } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { AudioUploadService } from '@/lib/audioUploadService';
-import { S3Service, TripleStepContent } from '@/lib/s3Service';
+import { useContinuousAudioRecording } from '@/hooks/useContinuousAudioRecording';
+import { useCameraCapture } from '@/hooks/useCameraCapture';
+import { useS3Upload } from '@/hooks/useS3Upload';
+import { useAssessment } from '@/contexts/AssessmentContext';
+import { S3Service, Question } from '@/lib/s3Service';
+import { assessmentLogger } from '@/lib/assessmentLogger';
 import TripleStepRules from '@/components/TripleStepRules';
-
-// Enhanced Circular Timer component for assessments
+// CircularTimer component for TripleStep
 const CircularTimer = memo(({ 
   timeLeft, 
   isActive, 
   onClick, 
   isFinishing, 
-  label = "Time",
-  totalTime = 180,
-  canSkip = false,
-  onSkipToNext
+  isLastQuestion,
+  isUploading
 }: { 
   timeLeft: number; 
   isActive: boolean; 
-  onClick?: () => void; 
-  isFinishing?: boolean;
-  label?: string;
-  totalTime?: number;
-  canSkip?: boolean;
-  onSkipToNext?: () => void;
+  onClick: () => void; 
+  isFinishing: boolean;
+  isLastQuestion: boolean;
+  isUploading: boolean;
 }) => {
+  const totalTime = 240; // 4 minutes for TripleStep
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
@@ -40,19 +36,14 @@ const CircularTimer = memo(({
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   
-  const handleClick = () => {
-    if (canSkip && onSkipToNext) {
-      onSkipToNext();
-    } else if (onClick) {
-      onClick();
-    }
-  };
-  
   return (
     <div 
-      className={`relative w-32 h-32 flex items-center justify-center ${(onClick || canSkip) ? 'cursor-pointer group transition-all duration-300 hover:scale-105' : ''}`}
-      onClick={handleClick}
-      title={canSkip ? "Click to skip to next question and finish current one" : undefined}
+      className={`relative w-32 h-32 flex items-center justify-center ${
+        isFinishing 
+          ? 'cursor-not-allowed opacity-75' 
+          : 'cursor-pointer group'
+      }`}
+      onClick={isFinishing ? undefined : onClick}
     >
       <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
         {/* Background circle - light gray */}
@@ -62,8 +53,8 @@ const CircularTimer = memo(({
           r={radius}
           stroke="#e5e7eb"
           strokeWidth="8"
-          fill="#f8fafc"
-          className={(onClick || canSkip) ? "group-hover:fill-[#4A9CA6] transition-all duration-300" : ""}
+          fill={isFinishing ? "#4A9CA6" : "#f8fafc"}
+          className={isFinishing ? '' : 'group-hover:fill-[#4A9CA6] transition-colors duration-200'}
         />
         {/* Progress circle - teal color #4A9CA6 */}
         <circle
@@ -81,43 +72,28 @@ const CircularTimer = memo(({
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="text-center">
-          <div className={`text-lg font-bold text-foreground ${(onClick || canSkip) ? 'group-hover:text-white transition-colors duration-300 group-hover:hidden' : ''}`}>
-            {minutes}:{seconds.toString().padStart(2, '0')}
+          {isFinishing || isUploading ? (
+            <div className="flex flex-col items-center text-white">
+              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mb-2"></div>
+              <div className="text-xs font-medium">
+                {isUploading ? 'Uploading...' : 'Finishing...'}
           </div>
-          {(onClick || canSkip) && (
-            <div className="hidden group-hover:block text-sm font-bold text-white">
-              {isFinishing ? (
-                <div className="flex flex-col items-center">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mb-1"></div>
-                  <span className="text-xs">Finishing...</span>
-                </div>
-              ) : canSkip ? (
-                <div className="flex flex-col items-center">
-                  <span className="text-xs">Finish</span>
-                  <span className="text-xs">Current</span>
-                  <span className="text-xs">Question</span>
                 </div>
               ) : (
-                <div className="flex flex-col items-center">
-                  <span className="text-sm">{label}</span>
+            <>
+              <div className="text-lg font-bold text-foreground group-hover:text-white transition-colors duration-200">
+                {minutes}:{seconds.toString().padStart(2, '0')}
                 </div>
-              )}
+              <div className="text-xs text-muted-foreground group-hover:text-white/80 mt-1 transition-colors duration-200">
+                {isLastQuestion ? 'Finish' : 'Next'}
             </div>
+            </>
           )}
         </div>
       </div>
     </div>
   );
 });
-
-interface GameSettings {
-  mainTopic: string;
-  wordTypes: string[];
-  totalWords: number;
-  dropFrequency: number;
-  integrationTime: number;
-  difficulty: "beginner" | "intermediate" | "advanced" | "expert";
-}
 
 interface WordDrop {
   word: string;
@@ -127,315 +103,238 @@ interface WordDrop {
   timeRemaining: number;
 }
 
-interface GameResult {
-  totalWords: number;
-  integratedWords: number;
-  averageIntegrationTime: number;
-  topicCoherence: number;
-  missedWords: string[];
-  smoothIntegrations: number;
-  aiScore?: {
-    confidence_score: number;
-    specific_feedback: string;
-    next_steps?: string[];
-    integration_rate?: number;
-    average_integration_time?: number;
-    missed_words?: string[];
-    topic_coherence?: number;
-    speaking_clarity?: number;
-    adaptability?: number;
-  };
-}
-
 type GameState = "rules" | "playing";
 
-const DIFFICULTY_PRESETS: Record<string, Omit<GameSettings, "mainTopic" | "wordTypes">> = {
-  beginner: { totalWords: 4, dropFrequency: 30, integrationTime: 8, difficulty: "beginner" },
-  intermediate: { totalWords: 6, dropFrequency: 30, integrationTime: 6, difficulty: "intermediate" },
-  advanced: { totalWords: 8, dropFrequency: 30, integrationTime: 5, difficulty: "advanced" },
-  expert: { totalWords: 10, dropFrequency: 30, integrationTime: 4, difficulty: "expert" },
+const DIFFICULTY_SETTINGS = {
+  totalWords: 6,
+  dropFrequency: 30, // seconds
+  integrationTime: 8, // seconds per word
+  difficulty: "intermediate"
 };
 
 export default function TripleStepAssessment() {
   const [, params] = useRoute('/triple-step/:assessmentId');
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
-  // Audio recording hook
-  const { isRecording, startRecording, stopRecording, forceCleanup } = useAudioRecording();
-  
-  // Speech recognition hook
+  // Standard assessment hooks
   const { 
-    transcript, 
-    isListening, 
-    startListening, 
-    stopListening, 
-    resetTranscript,
-    hasSupport: hasSpeechSupport,
-  } = useSpeechRecognition();
+    session, 
+    finishAssessment, 
+    startSession, 
+    isS3Ready, 
+    uploadAudioToS3,
+    startQuestionLog,
+    endQuestionLog,
+    handleQuestionTransition
+  } = useAssessment();
+  const { videoRef, startCamera } = useCameraCapture(); // Only video display, no image capture
+  const { startContinuousRecording, stopContinuousRecording, isRecording, forceCleanup } = useContinuousAudioRecording();
+  const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true);
+  const { fetchQuestions } = useS3Upload();
 
+  // Assessment state
   const [gameState, setGameState] = useState<GameState>("rules");
-  const [settings, setSettings] = useState<GameSettings>({
-    ...DIFFICULTY_PRESETS.intermediate,
-    mainTopic: "",
-    wordTypes: [],
-  });
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(true);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(240); // 4 minutes per question
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [assessmentStarted, setAssessmentStarted] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Triple Step game state
   const [activeWords, setActiveWords] = useState<WordDrop[]>([]);
   const [completedWords, setCompletedWords] = useState<WordDrop[]>([]);
-  const [timeRemaining, setTimeRemaining] = useState(0);
-
   const [wordsDropped, setWordsDropped] = useState(0);
   const [gameStartTime, setGameStartTime] = useState(0);
-
-  // Multi-question state
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
-  const [questionResults, setQuestionResults] = useState<any[]>([]);
-  const [totalQuestions] = useState(3);
-  const [currentDuration, setCurrentDuration] = useState(0);
-  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
-
-  // Auto-scroll transcript when new content appears
-  useEffect(() => {
-    if (transcriptRef.current && transcript) {
-      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-    }
-  }, [transcript]);
-  
-  // Content fetched from S3
-  const [tripleStepContent, setTripleStepContent] = useState<TripleStepContent | null>(null);
   const [availableWords, setAvailableWords] = useState<string[]>([]);
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
-  
-  // Live transcript with detected words
   const [detectedWords, setDetectedWords] = useState<Set<string>>(new Set());
   
-  // Assessment data from DynamoDB
-  const [assessmentData, setAssessmentData] = useState<{
-    assessmentId: string;
-    assessmentName: string;
-    description: string;
-    order: number;
-    timeLimit: number;
-    type: string;
-  } | null>(null);
-  const [loadingAssessmentData, setLoadingAssessmentData] = useState(false);
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Refs for timers
   const wordDropIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wordIntegrationTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const transcriptRef = useRef<HTMLDivElement | null>(null);
-
-  const gameDataRef = useRef<{
-    activeWords: WordDrop[];
-    completedWords: WordDrop[];
-    mainTopic: string;
-  }>({
-    activeWords: [],
-    completedWords: [],
-    mainTopic: "",
-  });
-
-  // Ref to store endGame function to avoid circular dependencies
-  const endGameRef = useRef<(() => void) | null>(null);
   const dropNextWordRef = useRef<(() => void) | null>(null);
   
-  // Ref to track if content has been fetched for this assessment
-  const contentFetchedRef = useRef<string | null>(null);
+  const currentQuestion = questions[currentQuestionIndex];
+  const isLastQuestion = currentQuestionIndex === questions.length - 1;
 
-  // Fetch content from S3 for the assessment
-  const fetchTripleStepContent = useCallback(async () => {
-    if (!user?.email || !params?.assessmentId) return;
-    
-    // Prevent concurrent requests or if already fetched for this assessment
-    if (isLoadingContent || contentFetchedRef.current === params.assessmentId) return;
-    
-    setIsLoadingContent(true);
-    try {
-      console.log('[TRIPLE-STEP] Fetching content from S3 for assessment:', params.assessmentId);
-      
-      const content = await S3Service.fetchTripleStepContent({
+  // Audio verification with retry mechanism (copied from Assessment.tsx)
+  const verifyAudioWithRetry = async (maxRetries: number = 5, delayMs: number = 2000): Promise<boolean> => {
+    if (!user?.email || !params?.assessmentId) {
+      console.error('❌ Missing user email or assessment ID for audio verification');
+      return false;
+    }
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const verification = await S3Service.verifyAudio({
         user_email: user.email,
         assessment_id: params.assessmentId
       });
       
-      console.log('[TRIPLE-STEP] Content fetched successfully:', content);
-      setTripleStepContent(content);
-      
-      // Get 3 random topics for multi-question assessment
-      const topics = Object.keys(content);
-      if (topics.length > 0) {
-        // Select 3 random topics (or all if less than 3 available)
-        const shuffledTopics = [...topics].sort(() => Math.random() - 0.5);
-        const selected3Topics = shuffledTopics.slice(0, Math.min(3, topics.length));
-        
-        console.log('[TRIPLE-STEP] Selected topics for 3 questions:', selected3Topics);
-        setSelectedTopics(selected3Topics);
-        
-        // Set the first topic as the current one
-        const firstTopic = selected3Topics[0];
-        const wordsForTopic = content[firstTopic];
-        
-        // Shuffle words for variety
-      const shuffleArray = (array: string[]) => {
-        const newArray = [...array];
-        for (let i = newArray.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+        if (verification.data.presence) {
+          return true;
+        } else {
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
         }
-        return newArray;
-      };
-      
-        const shuffledWords = shuffleArray([...wordsForTopic]);
+      } catch (error) {
+        console.error(`❌ Audio verification failed on attempt ${attempt}:`, error);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    console.error(`❌ Audio verification failed after ${maxRetries} attempts`);
+    return false;
+  };
+
+  // Fetch questions when component mounts
+  useEffect(() => {
+    const fetchTripleStepQuestions = async () => {
+      if (!params?.assessmentId) {
+        console.error('No assessment ID provided');
+        return;
+      }
+
+      if (authLoading) {
+        return;
+      }
+
+      if (!user?.email) {
+        console.error('❌ User not authenticated');
+        setLocation('/login');
+        return;
+      }
+
+      try {
+        setLoadingQuestions(true);
         
-        setSettings(prev => ({
-          ...prev,
-          mainTopic: firstTopic,
-          wordTypes: wordsForTopic
-        }));
-      setAvailableWords(shuffledWords);
-      
-        console.log('[TRIPLE-STEP] Content setup complete for question 1:', {
-          topic: firstTopic,
-          words: shuffledWords.length,
-          totalQuestions: selected3Topics.length
+        // Use the standard fetchQuestions but with Triple-Step type
+        const fetchedQuestions = await S3Service.fetchQuestions({
+          user_email: user.email,
+          assessment_id: params.assessmentId,
+          type: 'Triple-Step'
         });
+        
+        console.log('[TRIPLE-STEP] Questions fetched:', fetchedQuestions);
+        setQuestions(fetchedQuestions);
+      
+    } catch (error) {
+        console.error('❌ Failed to fetch Triple Step questions:', error);
+        setLocation('/test-selection');
+    } finally {
+        setLoadingQuestions(false);
+      }
+    };
+
+    fetchTripleStepQuestions();
+  }, [params?.assessmentId, authLoading, user?.email, setLocation]);
+
+  // Initialize assessment once questions are loaded
+  useEffect(() => {
+    const initializeAssessment = async () => {
+      if (loadingQuestions || questions.length === 0 || gameState !== "playing") return;
+      
+      // Start assessment session if not already started
+      if (params?.assessmentId && !session.assessmentId) {
+        await startSession(params.assessmentId);
       }
       
-      // Mark content as fetched for this assessment
-      contentFetchedRef.current = params.assessmentId;
+      // Start camera for video display and audio recording
+      startCamera();
+      await startContinuousRecording();
       
-    } catch (error) {
-      console.error('[TRIPLE-STEP] Failed to fetch content from S3:', error);
-      toast({
-        title: "Content Loading Failed",
-        description: "Unable to load assessment content. Please try again.",
-        variant: "destructive",
+      // Start speech recognition
+      if (hasSupport) {
+        setTimeout(() => {
+          startListening();
+        }, 1000);
+      }
+
+      // Setup for first question
+      if (questions.length > 0) {
+        const firstQuestion = questions[0];
+        setAvailableWords([...(firstQuestion.words || [])]);
+        
+        // Start logging for the first question
+        startQuestionLog(firstQuestion.question_text, firstQuestion.question_id, 0);
+        
+        // Start the game timer and flow
+        setIsTimerActive(true);
+        setAssessmentStarted(true);
+        setGameStartTime(Date.now());
+        
+        // Start word dropping after 60 seconds prep time
+        setTimeout(() => {
+          startWordDropSystem();
+        }, 60000);
+      }
+    };
+
+    initializeAssessment();
+
+    return () => {
+      if (hasSupport) {
+        stopListening();
+      }
+    };
+  }, [loadingQuestions, questions.length, gameState, params?.assessmentId]);
+
+  // Removed auto-capture - images not needed for TripleStep
+
+  // Timer logic
+  useEffect(() => {
+    if (!isTimerActive || timeLeft <= 0 || isFinishing || isUploading) return;
+
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          setIsTimerActive(false);
+          setTimeout(() => {
+            if (!isFinishing && !isUploading) {
+              handleNextQuestion();
+            }
+          }, 100);
+          return 0;
+        }
+        return prev - 1;
       });
-      
-      // Clear any existing content on error
-      setTripleStepContent(null);
-      setAvailableWords([]);
-      setSettings(prev => ({ ...prev, mainTopic: "", wordTypes: [] }));
-    } finally {
-      setIsLoadingContent(false);
-    }
-  }, [user?.email, toast, params?.assessmentId]);
+    }, 1000);
 
-  // Fetch assessment data from DynamoDB (not needed for Triple Step - use fallback data)
-  const fetchAssessmentData = useCallback(async () => {
-    if (!params?.assessmentId || loadingAssessmentData) return;
-    
-    setLoadingAssessmentData(true);
-    try {
-      console.log('[TRIPLE-STEP] Setting fallback assessment data for:', params.assessmentId);
-      
-      // For Triple Step, we don't need to fetch additional assessment data
-      // All required data comes from the Triple Step content API
-      setAssessmentData({
-        assessmentId: params.assessmentId || '',
-        assessmentName: 'Triple Step Assessment',
-        description: 'Master integration under pressure',
-        order: 2,
-        timeLimit: 180, // 3 minutes
-        type: 'Games-arena'
-      });
-      
-    } catch (error) {
-      console.error('[TRIPLE-STEP] Error setting assessment data:', error);
-      // Set fallback data if anything fails
-      setAssessmentData({
-        assessmentId: params.assessmentId || '',
-        assessmentName: 'Triple Step Assessment',
-        description: 'Master integration under pressure',
-        order: 2,
-        timeLimit: 180,
-        type: 'Games-arena'
-      });
-    } finally {
-      setLoadingAssessmentData(false);
-    }
-  }, [params?.assessmentId, loadingAssessmentData]);
+    return () => clearInterval(interval);
+  }, [isTimerActive, timeLeft, isFinishing, isUploading]);
 
-
-
-  // Generate random word from available words
-  const getRandomWord = useCallback(() => {
-    console.log('[TRIPLE-STEP] Available words:', availableWords.length, availableWords.slice(0, 5));
-    if (availableWords.length === 0) {
-      console.log('[TRIPLE-STEP] No available words! Content generation may have failed.');
-      return "";
-    }
-    const randomWord = availableWords[Math.floor(Math.random() * availableWords.length)];
-    console.log('[TRIPLE-STEP] Selected word:', randomWord);
-    
-    // Remove used word to avoid repetition
-    setAvailableWords(prev => {
-      const newWords = prev.filter(word => word !== randomWord);
-      console.log('[TRIPLE-STEP] Remaining words after removal:', newWords.length);
-      return newWords;
-    });
-    
-    return randomWord;
-  }, [availableWords]);
-
-  // Improved word detection with better text matching
+  // Word detection logic
   const detectWordsInTranscript = useCallback((currentTranscript: string) => {
     if (!currentTranscript) return;
     
-    console.log('[TRIPLE-STEP] Analyzing transcript for word detection:', currentTranscript);
-    
-    // Clean and normalize the transcript
     const normalizedTranscript = currentTranscript.toLowerCase()
-      .replace(/[^\w\s]/g, '') // Remove punctuation
-      .replace(/\s+/g, ' ') // Normalize spaces
+      .replace(/[^\w\s]/g, '')
+      .replace(/\s+/g, ' ')
       .trim();
     
-    console.log('[TRIPLE-STEP] Normalized transcript:', normalizedTranscript);
+    setDetectedWords(prevDetectedWords => {
+      const newDetectedWords = new Set(prevDetectedWords);
     
-    const newDetectedWords = new Set(detectedWords);
+      setActiveWords(prevActiveWords => {
+        let wordsChanged = false;
     
-    activeWords.forEach(wordDrop => {
+        prevActiveWords.forEach(wordDrop => {
       const targetWord = wordDrop.word.toLowerCase().trim();
       
-      // Multiple detection strategies
-      const detectionMethods = [
-        // 1. Exact word boundary match
-        new RegExp(`\\b${targetWord}\\b`).test(normalizedTranscript),
-        // 2. Partial match with surrounding spaces
-        normalizedTranscript.includes(` ${targetWord} `),
-        // 3. Word at start or end
-        normalizedTranscript.startsWith(`${targetWord} `) || normalizedTranscript.endsWith(` ${targetWord}`),
-        // 4. Single word case
-        normalizedTranscript === targetWord,
-        // 5. Fuzzy match for similar sounding words (simple Levenshtein distance)
-        checkFuzzyMatch(normalizedTranscript, targetWord)
-      ];
-      
-      const isDetected = detectionMethods.some(method => method);
-      
-      console.log(`[TRIPLE-STEP] Checking word "${targetWord}":`, {
-        transcript: normalizedTranscript,
-        detectionResults: detectionMethods,
-        alreadyDetected: newDetectedWords.has(targetWord),
-        finalResult: isDetected && !newDetectedWords.has(targetWord)
-      });
+          // Simple word detection
+          const isDetected = normalizedTranscript.includes(targetWord) ||
+                            normalizedTranscript.split(' ').some(word => word === targetWord);
       
       if (isDetected && !newDetectedWords.has(targetWord)) {
         newDetectedWords.add(targetWord);
-        
-        // Mark word as integrated
-        setActiveWords(prev => 
-          prev.map(w => 
-            w.word === wordDrop.word && w.timestamp === wordDrop.timestamp 
-              ? { ...w, integrated: true, integrationTime: (Date.now() - w.timestamp) / 1000 }
-              : w
-          )
-        );
+            wordsChanged = true;
         
         // Clear integration timer for this word
         const timerKey = `${wordDrop.word}-${wordDrop.timestamp}`;
@@ -444,17 +343,19 @@ export default function TripleStepAssessment() {
           clearInterval(timer);
           wordIntegrationTimersRef.current.delete(timerKey);
         }
+            
+            // Log word integration event
+            assessmentLogger.markWordIntegrated(wordDrop.word, new Date());
         
         // Move to completed words
         setTimeout(() => {
           setActiveWords(current => 
             current.filter(w => !(w.word === wordDrop.word && w.timestamp === wordDrop.timestamp))
           );
-          const timeTaken = Math.floor((Date.now() - wordDrop.timestamp) / 1000);
           setCompletedWords(current => [...current, { 
             ...wordDrop, 
             integrated: true, 
-            integrationTime: timeTaken 
+                integrationTime: Math.floor((Date.now() - wordDrop.timestamp) / 1000)
           }]);
         }, 500);
         
@@ -462,304 +363,71 @@ export default function TripleStepAssessment() {
       }
     });
     
-    setDetectedWords(newDetectedWords);
-  }, [activeWords, detectedWords]);
-
-  // Fuzzy matching helper for similar sounding words
-  const checkFuzzyMatch = useCallback((transcript: string, targetWord: string) => {
-    const words = transcript.split(/\s+/);
-    return words.some(word => {
-      if (word.length === 0 || targetWord.length === 0) return false;
+        if (wordsChanged) {
+          return prevActiveWords.map(w => 
+            newDetectedWords.has(w.word.toLowerCase().trim())
+              ? { ...w, integrated: true, integrationTime: (Date.now() - w.timestamp) / 1000 }
+              : w
+          );
+        }
+        return prevActiveWords;
+      });
       
-      // Simple Levenshtein distance check for words of similar length
-      if (Math.abs(word.length - targetWord.length) <= 1) {
-        const distance = levenshteinDistance(word, targetWord);
-        const threshold = Math.min(2, Math.ceil(targetWord.length * 0.2)); // 20% error tolerance
-        return distance <= threshold;
-      }
-      
-      // Check for phonetic similarities (basic)
-      return checkPhoneticSimilarity(word, targetWord);
+      return newDetectedWords;
     });
-  }, []);
+  }, []); // Empty dependency array since we're using functional updates
 
-  // Simple Levenshtein distance calculation
-  const levenshteinDistance = useCallback((str1: string, str2: string): number => {
-    const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
-    
-    for (let i = 0; i <= str1.length; i++) {
-      matrix[0][i] = i;
+  // Monitor transcript for word detection
+  useEffect(() => {
+    if (gameState === "playing" && transcript) {
+      detectWordsInTranscript(transcript);
     }
-    
-    for (let j = 0; j <= str2.length; j++) {
-      matrix[j][0] = j;
-    }
-    
-    for (let j = 1; j <= str2.length; j++) {
-      for (let i = 1; i <= str1.length; i++) {
-        const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
-        matrix[j][i] = Math.min(
-          matrix[j][i - 1] + 1, // deletion
-          matrix[j - 1][i] + 1, // insertion
-          matrix[j - 1][i - 1] + indicator // substitution
-        );
-      }
-    }
-    
-    return matrix[str2.length][str1.length];
-  }, []);
+  }, [transcript, gameState]); // Removed detectWordsInTranscript dependency to prevent infinite loop
 
-  // Basic phonetic similarity check
-  const checkPhoneticSimilarity = useCallback((word1: string, word2: string): boolean => {
-    // Common speech recognition substitutions
-    const phoneticMap: {[key: string]: string[]} = {
-      'c': ['k', 's'],
-      'k': ['c'],
-      'f': ['ph', 'v'],
-      'v': ['f'],
-      'z': ['s'],
-      's': ['z'],
-      'i': ['e'],
-      'e': ['i'],
-      'a': ['e'],
-      'o': ['u'],
-      'u': ['o']
-    };
-    
-    if (word1.length !== word2.length) return false;
-    
-    for (let i = 0; i < word1.length; i++) {
-      const char1 = word1[i];
-      const char2 = word2[i];
-      
-      if (char1 !== char2) {
-        const alternatives = phoneticMap[char1] || [];
-        if (!alternatives.includes(char2)) {
-          return false;
-        }
-      }
-    }
-    
-    return true;
-  }, []);
-
-  // Start the game
-  const startGame = useCallback(async () => {
-    if (!settings.mainTopic) {
-      toast({
-        title: "No Topic Available",
-        description: "Please wait for content to load before starting.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setGameState("playing");
-
-    // Setup video recording
-    try {
-      console.log('🎥 Requesting video permissions...');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        },
-        audio: false // Audio is handled by useAudioRecording hook
-      });
-      
-      console.log('✅ Video stream obtained:', {
-        active: stream.active,
-        tracks: stream.getVideoTracks().length
-      });
-      
-      setVideoStream(stream);
-    } catch (error) {
-      console.error('❌ Failed to setup video:', error);
-      // Continue without video
-    }
-    
-    // Start with 60 seconds preparation time, then 30 seconds per word
-    const initialTime = 60 + (settings.totalWords * 30);
-    console.log('[TRIPLE-STEP] ⏰ Setting initial time:', initialTime, 'seconds', {
-      totalWords: settings.totalWords,
-      preparationTime: 60,
-      timePerWord: 30,
-      calculation: `60 + (${settings.totalWords} * 30) = ${initialTime}`
-    });
-    setTimeRemaining(initialTime);
-    
-    setActiveWords([]);
-    setCompletedWords([]);
-    setWordsDropped(0);
-    setDetectedWords(new Set());
-    setGameStartTime(Date.now());
-    setCurrentDuration(0);
-
-    // Start audio recording and speech recognition
-    try {
-      console.log('[TRIPLE-STEP] Starting audio recording...');
-      
-      // Ensure we wait for recording to actually start
-      await startRecording();
-      
-      // Add a small delay to ensure recording is properly initialized
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      console.log('[TRIPLE-STEP] Audio recording started successfully');
-      
-      if (hasSpeechSupport) {
-        console.log('[TRIPLE-STEP] Starting speech recognition...');
-        startListening();
-        console.log('[TRIPLE-STEP] Speech recognition started');
-      } else {
-        console.log('[TRIPLE-STEP] Speech recognition not supported');
-        toast({
-          title: "Speech Recognition Unavailable",
-          description: "Live transcript will not be available, but audio recording will continue.",
-          variant: "default",
-        });
-      }
-      
-      // Verify recording started after a brief delay
-      setTimeout(() => {
-        if (isRecording) {
-          console.log('[TRIPLE-STEP] ✅ Audio recording confirmed active');
-          toast({
-            title: "Recording Active",
-            description: "Audio recording is working properly.",
-            variant: "default",
-          });
-        }
-      }, 1500); // Longer delay to ensure recording is stable
-      
-    } catch (error) {
-      console.error('[TRIPLE-STEP] Failed to start recording:', error);
-      toast({
-        title: "Recording Failed",
-        description: `Could not start audio recording: ${error instanceof Error ? error.message : 'Unknown error'}. Please check microphone permissions and try again.`,
-        variant: "destructive",
-      });
-      
-      // Don't return - continue with assessment even if recording fails
-      console.log('[TRIPLE-STEP] Continuing assessment without recording...');
-    }
-
-    // Start the game flow after all state is properly set (with delay to ensure state updates complete)
-    console.log('[TRIPLE-STEP] All setup complete, starting game flow...');
-    setTimeout(() => {
-      startGameFlow();
-    }, 100); // Small delay to ensure all state updates are processed
-  }, [settings, startRecording, startListening, hasSpeechSupport, toast]);
-
-  const startWordDropSystem = useCallback(() => {
-    console.log('[TRIPLE-STEP] Starting word drop system with 60-second preparation time...');
-    
-    // Wait 60 seconds before dropping the first word (preparation time)
-    setTimeout(() => {
-      console.log('[TRIPLE-STEP] 60-second preparation time complete, dropping first word...');
-      const currentDropNextWord = dropNextWordRef.current;
-      if (currentDropNextWord) {
-        currentDropNextWord();
-      }
-      
-      // Clear any existing countdown timer
-      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
-
-      // Start word dropping interval every 30 seconds
-      if (wordDropIntervalRef.current) clearInterval(wordDropIntervalRef.current);
-      wordDropIntervalRef.current = setInterval(() => {
-        const currentDropNextWord = dropNextWordRef.current;
-        if (currentDropNextWord) {
-          currentDropNextWord();
-        }
-      }, 30000); // 30 seconds between words
-    }, 60000); // 60 seconds preparation time
-  }, []);
-
-  const startGameFlow = useCallback(() => {
-    console.log('[TRIPLE-STEP] Starting game flow with timers...');
-    
-    // Main game timer
-    if (timerRef.current) {
-      console.log('[TRIPLE-STEP] Clearing existing timer');
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    
-    console.log('[TRIPLE-STEP] Setting up main timer interval...');
-    timerRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        const newTime = prev - 1;
-        console.log('[TRIPLE-STEP] ⏰ Timer tick, time remaining:', newTime);
-        if (newTime <= 0) {
-          console.log('[TRIPLE-STEP] ⏰ Timer expired, ending game');
-          // Clear the timer immediately to prevent multiple calls
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-          // Use setTimeout to avoid state update conflicts
-          setTimeout(() => {
-            const currentEndGame = endGameRef.current;
-            if (currentEndGame) {
-              console.log('[TRIPLE-STEP] ⏰ Calling endGame function');
-              currentEndGame();
-            } else {
-              console.error('[TRIPLE-STEP] ⏰ endGame function not available in ref');
-            }
-          }, 0);
-          return 0;
-        }
-        return newTime;
-      });
-    }, 1000);
-    
-    console.log('[TRIPLE-STEP] ✅ Main timer started with ID:', timerRef.current);
-
-    // Start duration timer to track elapsed time
-    durationTimerRef.current = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
-      setCurrentDuration(elapsed);
-    }, 1000);
-
-    startWordDropSystem();
-  }, [startWordDropSystem]);
+  // Word dropping system
+  const getRandomWord = useCallback(() => {
+    if (availableWords.length === 0) return "";
+    const randomWord = availableWords[Math.floor(Math.random() * availableWords.length)];
+    setAvailableWords(prev => prev.filter(word => word !== randomWord));
+    return randomWord;
+  }, [availableWords]);
 
   const dropNextWord = useCallback(() => {
     setWordsDropped((currentCount) => {
-      if (currentCount >= settings.totalWords) {
-        // Stop dropping words
+      if (currentCount >= DIFFICULTY_SETTINGS.totalWords) {
         if (wordDropIntervalRef.current) {
           clearInterval(wordDropIntervalRef.current);
           wordDropIntervalRef.current = null;
         }
-        if (countdownTimerRef.current) {
-          clearInterval(countdownTimerRef.current);
-          countdownTimerRef.current = null;
-        }
-
-        console.log(`[TRIPLE-STEP] All ${settings.totalWords} words have been dropped`);
         return currentCount;
       }
 
       const newWord = getRandomWord();
+      if (!newWord) return currentCount;
+
       const wordDrop: WordDrop = {
         word: newWord,
         timestamp: Date.now(),
         integrated: false,
-        timeRemaining: settings.integrationTime,
+        timeRemaining: DIFFICULTY_SETTINGS.integrationTime,
       };
 
       setActiveWords((prev) => [...prev, wordDrop]);
-      const newCount = currentCount + 1;
-      console.log(`[TRIPLE-STEP] Dropped word "${newWord}" - ${newCount}/${settings.totalWords}`);
-
       startWordIntegrationTimer(wordDrop);
 
-      return newCount;
+      // Log word appearance event with question context
+      if (currentQuestion) {
+        assessmentLogger.addWordEvent(
+          newWord, 
+          new Date(wordDrop.timestamp), 
+          currentQuestion.question_text,
+          currentQuestion.question_id
+        );
+      }
+
+      return currentCount + 1;
     });
-  }, [settings.totalWords, settings.integrationTime, getRandomWord]);
+  }, [getRandomWord, currentQuestion]);
 
   const startWordIntegrationTimer = useCallback((wordDrop: WordDrop) => {
     const timer = setInterval(() => {
@@ -768,21 +436,22 @@ export default function TripleStepAssessment() {
           if (word.word === wordDrop.word && word.timestamp === wordDrop.timestamp) {
             const newTimeRemaining = word.timeRemaining - 1;
             if (newTimeRemaining <= 0) {
-              // Clear the timer for this word
               const timerKey = `${wordDrop.word}-${wordDrop.timestamp}`;
               const timer = wordIntegrationTimersRef.current.get(timerKey);
               if (timer) {
                 clearInterval(timer);
                 wordIntegrationTimersRef.current.delete(timerKey);
-                console.log(`[TRIPLE-STEP] ⏰ Cleared timer for expired word: ${word.word}`);
               }
+              
+              // Mark word as expired in logger with precise expiration time
+              const expirationTime = new Date(wordDrop.timestamp + (DIFFICULTY_SETTINGS.integrationTime * 1000));
+              assessmentLogger.markWordExpired(word.word, expirationTime);
               
               setTimeout(() => {
                 setActiveWords((current) =>
                   current.filter((w) => !(w.word === word.word && w.timestamp === wordDrop.timestamp)),
                 );
                 setCompletedWords((current) => [...current, { ...word, integrated: false, timeRemaining: 0 }]);
-                console.log(`[TRIPLE-STEP] ❌ Word "${word.word}" expired (not integrated) - moved to recent words`);
               }, 0);
               return { ...word, timeRemaining: 0 };
             }
@@ -795,517 +464,217 @@ export default function TripleStepAssessment() {
 
     wordIntegrationTimersRef.current.set(`${wordDrop.word}-${wordDrop.timestamp}`, timer);
 
-    // Clear timer after integration time
     setTimeout(
       () => {
         clearInterval(timer);
         wordIntegrationTimersRef.current.delete(`${wordDrop.word}-${wordDrop.timestamp}`);
       },
-      settings.integrationTime * 1000 + 100,
+      DIFFICULTY_SETTINGS.integrationTime * 1000 + 100,
     );
-  }, [settings.integrationTime]);
-
-
-
-  const clearAllTimers = useCallback(() => {
-    console.log('[TRIPLE-STEP] Clearing all timers');
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (wordDropIntervalRef.current) {
-      clearTimeout(wordDropIntervalRef.current);
-      wordDropIntervalRef.current = null;
-    }
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-    wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
-    wordIntegrationTimersRef.current.clear();
-    
-    if (durationTimerRef.current) {
-      clearInterval(durationTimerRef.current);
-      durationTimerRef.current = null;
-    }
   }, []);
 
-
-
-  // Function to start next question with proper timing
-  const startNextQuestion = useCallback(() => {
-    console.log('[TRIPLE-STEP] 🚀 Starting next question with 60-second prep time...');
+  const startWordDropSystem = useCallback(() => {
+    console.log('[TRIPLE-STEP] Starting word drop system...');
     
-    // Clear all existing timers first to prevent interference
-    clearAllTimers();
-    
-    // Reset all question-specific state
-    setActiveWords([]);
-    setCompletedWords([]); // Clear recent words from previous question
-    setWordsDropped(0);
-    setDetectedWords(new Set());
-    setGameStartTime(Date.now());
-    
-    // Calculate total time: 60 seconds prep + (total words * 30 seconds per word)
-    const questionDuration = 60 + (settings.totalWords * 30);
-    setTimeRemaining(questionDuration);
-    
-    console.log('[TRIPLE-STEP] ⏰ Next question timing setup:', {
-      questionNumber: currentQuestionIndex + 1,
-      preparationTime: 60,
-      totalWords: settings.totalWords,
-      timePerWord: 30,
-      totalDuration: questionDuration,
-      topic: settings.mainTopic
-    });
-    
-    // Small delay to ensure state updates are processed, then start the flow
-    setTimeout(() => {
-      startGameFlow();
-    }, 100);
-  }, [settings.totalWords, settings.mainTopic, currentQuestionIndex, startGameFlow, clearAllTimers]);
-
-  // End the game and save data
-  // Function to move to next question
-  const moveToNextQuestion = useCallback(async () => {
-    console.log('[TRIPLE-STEP] 📝 Moving to next question...');
-    
-    // Stop and upload audio for current question first
-    let currentQuestionAudio: Blob | null = null;
-    try {
-      console.log('[TRIPLE-STEP] 🎙️ Stopping recording for current question...');
-      currentQuestionAudio = await stopRecording();
-      console.log('[TRIPLE-STEP] Audio stopped, blob size:', currentQuestionAudio?.size || 'null');
-    } catch (error) {
-      console.error('[TRIPLE-STEP] Error stopping recording for current question:', error);
+    // Drop first word immediately
+    if (dropNextWordRef.current) {
+      dropNextWordRef.current();
     }
     
-    // Upload current question's audio with question suffix
-    if (currentQuestionAudio && currentQuestionAudio.size > 0 && user?.email) {
-      const questionSuffix = `-${currentQuestionIndex + 1}`; // -1, -2, -3
-      console.log(`[TRIPLE-STEP] 🎙️ Uploading audio for question ${currentQuestionIndex + 1}...`);
-      
-      // Show uploading toast
-      toast({
-        title: `Saving Question ${currentQuestionIndex + 1}`,
-        description: "Uploading your recording...",
-        variant: "default",
-      });
-
-      try {
-        // Upload with question suffix in the assessment ID
-        const result = await AudioUploadService.uploadRecording(
-          currentQuestionAudio,
-          user.email,
-          'triple-step',
-          `${params?.assessmentId || 'unknown'}${questionSuffix}`
-        );
-        
-        console.log(`[TRIPLE-STEP] ✅ Question ${currentQuestionIndex + 1} audio uploaded:`, result.audio_id);
-        
-        toast({
-          title: `Question ${currentQuestionIndex + 1} Saved`,
-          description: "Recording uploaded successfully.",
-          variant: "default",
-        });
-      } catch (error) {
-        console.error(`[TRIPLE-STEP] ❌ Question ${currentQuestionIndex + 1} upload failed:`, error);
-        toast({
-          title: "Upload Failed",
-          description: `Failed to save Question ${currentQuestionIndex + 1} recording.`,
-          variant: "destructive",
-        });
+    // Start interval for subsequent words
+    wordDropIntervalRef.current = setInterval(() => {
+      if (dropNextWordRef.current) {
+        dropNextWordRef.current();
       }
-    }
-    
-    // Save current question's result
-    const currentResult = {
-      questionIndex: currentQuestionIndex,
-      topic: settings.mainTopic,
-      wordsDropped,
-      activeWords: [...activeWords],
-      completedWords: [...completedWords],
-      transcript: transcript || '',
-      duration: gameStartTime > 0 ? Date.now() - gameStartTime : 0,
-      audioUploaded: !!currentQuestionAudio
-    };
-    
-    setQuestionResults(prev => [...prev, currentResult]);
-    
-    // Check if we have more questions
-    if (currentQuestionIndex + 1 < totalQuestions && selectedTopics.length > currentQuestionIndex + 1) {
-      const nextQuestionIndex = currentQuestionIndex + 1;
-      const nextTopic = selectedTopics[nextQuestionIndex];
+    }, DIFFICULTY_SETTINGS.dropFrequency * 1000);
+  }, []);
+
+  // Update function refs
+  useEffect(() => {
+    dropNextWordRef.current = dropNextWord;
+  }, [dropNextWord]);
+
+  // Handle next question or finish assessment
+  const handleNextQuestion = useCallback(async () => {
+    if (!currentQuestion) return;
+
+    try {
+      // Finish any uncompleted word logs before ending question
+      assessmentLogger.finishAllUncompletedWords(new Date());
       
-      console.log(`[TRIPLE-STEP] 🎯 Loading question ${nextQuestionIndex + 1}/${totalQuestions}: ${nextTopic}`);
-      
-      if (tripleStepContent && tripleStepContent[nextTopic]) {
-        // Update question index
-        setCurrentQuestionIndex(nextQuestionIndex);
+      // End current question logging
+      endQuestionLog();
+
+      if (isLastQuestion) {
+        setIsFinishing(true);
+        setIsTimerActive(false);
         
-        // Set new topic and words
-        const wordsForTopic = tripleStepContent[nextTopic];
-        const shuffleArray = (array: string[]) => {
-          const newArray = [...array];
-          for (let i = newArray.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-          }
-          return newArray;
-        };
-        const shuffledWords = shuffleArray([...wordsForTopic]);
+        // Stop all activities
+        stopListening();
         
-        setSettings(prev => ({
-          ...prev,
-          mainTopic: nextTopic,
-          wordTypes: wordsForTopic
-        }));
-        setAvailableWords(shuffledWords);
-        
-        // Reset transcript for new question
-        resetTranscript();
-        
-        // Show transition message
-        toast({
-          title: `Question ${nextQuestionIndex + 1} of ${totalQuestions}`,
-          description: `Get ready for your next topic: ${nextTopic}`,
-          variant: "default",
-        });
-        
-        // Restart recording for next question
-        try {
-          console.log('[TRIPLE-STEP] 🎙️ Restarting recording for next question...');
-          await startRecording();
-          startListening();
-          console.log('[TRIPLE-STEP] ✅ Recording restarted for next question');
-        } catch (error) {
-          console.error('[TRIPLE-STEP] ❌ Failed to restart recording:', error);
-          toast({
-            title: "Recording Error",
-            description: "Unable to restart recording for next question.",
-            variant: "destructive",
-          });
+        // Clear word drop timers
+        if (wordDropIntervalRef.current) {
+          clearInterval(wordDropIntervalRef.current);
+          wordDropIntervalRef.current = null;
         }
+        wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
+        wordIntegrationTimersRef.current.clear();
         
-        // Start the next question with proper 60-second prep time
-        // (startNextQuestion will handle clearing timers and resetting word-related state)
-        startNextQuestion();
+        // Stop continuous recording
+        const finalAudio = await stopContinuousRecording();
+        
+        if (finalAudio && isS3Ready) {
+          setIsUploading(true);
+          try {
+            await uploadAudioToS3(finalAudio);
+            const audioVerified = await verifyAudioWithRetry();
+            
+            if (audioVerified) {
+              await finishAssessment();
       } else {
-        console.error('[TRIPLE-STEP] ❌ Next topic data not found:', nextTopic);
-        // Fallback to ending assessment
-        endGameFinal();
+              console.error('❌ Audio verification failed');
+              await finishAssessment();
+            }
+          } catch (uploadError) {
+            console.error('❌ Audio upload failed:', uploadError);
+            await finishAssessment();
+          } finally {
+            setIsUploading(false);
       }
     } else {
-      console.log('[TRIPLE-STEP] 🏁 All questions completed, ending assessment');
-      endGameFinal();
-    }
-  }, [currentQuestionIndex, totalQuestions, selectedTopics, settings.mainTopic, wordsDropped, activeWords, completedWords, transcript, gameStartTime, tripleStepContent, resetTranscript, toast, startNextQuestion, stopRecording, user?.email, params?.assessmentId, startRecording, startListening]);
-
-  // Main endGame function - now routes to next question or final end
-  const endGame = useCallback(async () => {
-    console.log("[TRIPLE-STEP] endGame function called");
-    
-    // Instead of ending immediately, move to next question
-    moveToNextQuestion();
-  }, [moveToNextQuestion]);
-
-  const endGameFinal = useCallback(async () => {
-    console.log("[TRIPLE-STEP] endGameFinal function called - final assessment end");
-
-    // Clear all timers first to prevent further execution
-    clearAllTimers();
-
-    // Stop recording and speech recognition for the final question
-    let finalQuestionAudio: Blob | null = null;
-    try {
-      console.log('[TRIPLE-STEP] Stopping audio recording for final question...');
-      finalQuestionAudio = await stopRecording();
-      console.log('[TRIPLE-STEP] Final question audio stopped, blob:', finalQuestionAudio?.size || 'null');
-      
-      console.log('[TRIPLE-STEP] Stopping speech recognition...');
-      stopListening();
-      console.log('[TRIPLE-STEP] Speech recognition stopped');
-      
-    } catch (error) {
-      console.error('[TRIPLE-STEP] Error stopping recording for final question:', error);
-      finalQuestionAudio = null;
-    }
-
-    // Stop video stream when assessment ends
-    if (videoStream) {
-      console.log('[TRIPLE-STEP] 🎥 Assessment ended, stopping video stream...');
-      videoStream.getTracks().forEach(track => {
-        track.stop();
-        console.log('[TRIPLE-STEP] ✅ Video track stopped on assessment end:', track.kind);
-      });
-      setVideoStream(null);
-    }
-
-    // Upload final question's audio with question suffix
-    if (finalQuestionAudio && finalQuestionAudio.size > 0 && user?.email) {
-      const finalQuestionSuffix = `-${currentQuestionIndex + 1}`; // Should be -3 for the last question
-      console.log(`[TRIPLE-STEP] 🎙️ Uploading final question ${currentQuestionIndex + 1} audio...`);
-
-      // Show uploading toast
-      toast({
-        title: `Saving Final Question ${currentQuestionIndex + 1}`,
-        description: "Uploading your final recording...",
-        variant: "default",
-      });
-
-      try {
-        // Upload final question with suffix
-        const result = await AudioUploadService.uploadRecording(
-          finalQuestionAudio,
-          user.email,
-          'triple-step',
-          `${params?.assessmentId || 'unknown'}${finalQuestionSuffix}`
-        );
+          await finishAssessment();
+        }
         
-        console.log(`[TRIPLE-STEP] ✅ Final question ${currentQuestionIndex + 1} audio uploaded:`, result.audio_id);
-        
-        toast({
-          title: `Question ${currentQuestionIndex + 1} Saved`,
-          description: "Final recording uploaded successfully.",
-          variant: "default",
-        });
-      } catch (error) {
-        console.error(`[TRIPLE-STEP] ❌ Final question ${currentQuestionIndex + 1} upload failed:`, error);
-        toast({
-          title: "Upload Failed",
-          description: `Failed to save final Question ${currentQuestionIndex + 1} recording.`,
-          variant: "destructive",
-        });
+        forceCleanup();
+        setLocation(`/results/${params?.assessmentId}`);
+        return;
       }
-    } else if (!user?.email) {
-      toast({
-        title: "Upload Error",
-        description: "User authentication required for recording storage.",
-        variant: "destructive",
-      });
-    } else if (!finalQuestionAudio || finalQuestionAudio.size === 0) {
-      toast({
-        title: "No Recording",
-        description: "No audio was recorded for the final question.",
-        variant: "destructive",
-      });
-    }
 
-    // Show success message before redirecting
-    toast({
-      title: "All Questions Complete!",
-      description: `Your ${totalQuestions}-question Triple Step assessment has been completed and saved successfully.`,
-      variant: "default",
-    });
-
-    // Navigate to dashboard instead of results page (Triple Step has different flow)
-    setTimeout(() => setLocation('/'), 2000); // Small delay to show the success message
-  }, [stopRecording, stopListening, clearAllTimers, videoStream, user?.email, params?.assessmentId, toast, setLocation, totalQuestions, currentQuestionIndex]);
-
-  const resetGame = useCallback(() => {
-    setGameState("rules");
+      // Move to next question
+      const nextIndex = currentQuestionIndex + 1;
+      const nextQuestion = questions[nextIndex];
+      
+      if (nextQuestion) {
+        // Clear current question state
     setActiveWords([]);
     setCompletedWords([]);
-    setTimeRemaining(0);
-    
-    // Reset multi-question state
-    setCurrentQuestionIndex(0);
-    setQuestionResults([]);
-    
     setWordsDropped(0);
     setDetectedWords(new Set());
-
-    // Clear all timers
-    clearAllTimers();
-
-    // Stop recording and speech recognition if active
-    if (isRecording) {
-      stopRecording();
-    }
-    if (isListening) {
-      stopListening();
-    }
-
-    // Clean up video stream
-    if (videoStream) {
-      console.log('[TRIPLE-STEP] 🎥 Stopping video stream...');
-      videoStream.getTracks().forEach(track => {
-        track.stop();
-        console.log('[TRIPLE-STEP] ✅ Video track stopped:', track.kind);
-      });
-      setVideoStream(null);
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    
+        setAvailableWords([...(nextQuestion.words || [])]);
+        
+        // Clear timers
+        if (wordDropIntervalRef.current) {
+          clearInterval(wordDropIntervalRef.current);
+          wordDropIntervalRef.current = null;
+        }
+        wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
+        wordIntegrationTimersRef.current.clear();
+        
+        // Update question
+        setCurrentQuestionIndex(nextIndex);
+        handleQuestionTransition(nextQuestion.question_text, nextQuestion.question_id, nextIndex);
+        
+        // Reset timer
+        setTimeLeft(240);
+        setIsTimerActive(true);
+        setGameStartTime(Date.now());
+        
+        // Reset transcript
     resetTranscript();
-  }, [clearAllTimers, isRecording, isListening, stopRecording, stopListening, resetTranscript, videoStream]);
+        
+        // Start word dropping after 60 seconds
+        setTimeout(() => {
+          startWordDropSystem();
+        }, 60000);
+      }
+    } catch (error) {
+      console.error('❌ Error in handleNextQuestion:', error);
+    }
+  }, [currentQuestion, isLastQuestion, currentQuestionIndex, questions, endQuestionLog, stopListening, stopContinuousRecording, isS3Ready, uploadAudioToS3, verifyAudioWithRetry, finishAssessment, forceCleanup, setLocation, params?.assessmentId, handleQuestionTransition, resetTranscript, startWordDropSystem]);
 
-  // Handler to move from rules to setup
+  // Handle start from rules
   const handleStartFromRules = useCallback(() => {
-    if (!tripleStepContent || !settings.mainTopic) {
+    if (questions.length === 0) {
       toast({
-        title: "Content Not Ready",
-        description: "Please wait for assessment content to load.",
+        title: "Questions Not Ready",
+        description: "Please wait for questions to load.",
         variant: "destructive",
       });
       return;
     }
-    // Call startGame to handle permissions and setup
-    startGame();
-  }, [tripleStepContent, settings.mainTopic, toast, startGame]);
-
-  // Cleanup video stream when navigating away or component unmounts
-  useEffect(() => {
-    return () => {
-      if (videoStream) {
-        console.log('[TRIPLE-STEP] 🎥 Component unmounting, stopping video stream...');
-        videoStream.getTracks().forEach(track => {
-          track.stop();
-          console.log('[TRIPLE-STEP] ✅ Video track stopped on unmount:', track.kind);
-        });
-      }
-    };
-  }, [videoStream]);
-
-  // Handle video stream connection
-  useEffect(() => {
-    if (videoStream && videoRef.current) {
-      console.log('🎥 Connecting video stream to element');
-      videoRef.current.srcObject = videoStream;
-    }
-  }, [videoStream]);
-
-  // Monitor transcript for word detection
-  useEffect(() => {
-    if (gameState === "playing" && transcript) {
-      detectWordsInTranscript(transcript);
-    }
-  }, [transcript, gameState]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Removed auto-start useEffect - startGameFlow is now called directly from startGame
-
-  // Fetch content from S3 on mount
-  useEffect(() => {
-    if (user?.email && params?.assessmentId) {
-      fetchTripleStepContent();
-    }
-  }, [user?.email, params?.assessmentId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch assessment data on mount
-  useEffect(() => {
-    fetchAssessmentData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Update game data ref
-  useEffect(() => {
-    gameDataRef.current = {
-      activeWords,
-      completedWords,
-      mainTopic: settings.mainTopic,
-    };
-  }, [activeWords, completedWords, settings.mainTopic]);
-
-  // Update function refs to avoid circular dependencies
-  useEffect(() => {
-    endGameRef.current = endGame;
-    dropNextWordRef.current = dropNextWord;
-  }, [endGame, dropNextWord]);
-
-  // Handle visibility change to ensure timers continue when tab is hidden
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        console.log('[TRIPLE-STEP] 👁️ Tab hidden - timers will continue running');
-      } else {
-        console.log('[TRIPLE-STEP] 👁️ Tab visible - checking timer states');
-        // When tab becomes visible again, we don't need to do anything special
-        // as our timers use setInterval which continues running in background
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
+    setGameState("playing");
+  }, [questions.length, toast]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      // Use current values from refs to avoid dependency issues
-      clearAllTimers();
-      forceCleanup(); // This will handle audio cleanup
+      if (wordDropIntervalRef.current) {
+        clearInterval(wordDropIntervalRef.current);
+      }
+      wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
+      wordIntegrationTimersRef.current.clear();
+      forceCleanup();
     };
-  }, []); // Empty dependency array to only run on unmount
+  }, []);
 
+  // Show rules page
   if (gameState === "rules") {
     return (
       <TripleStepRules 
         onStartAssessment={handleStartFromRules}
-        isLoading={isLoadingContent || !tripleStepContent || !settings.mainTopic}
+        isLoading={loadingQuestions || questions.length === 0}
       />
     );
   }
 
-  // Removed setup state - now going directly to playing
-
-  if (gameState === "playing") {
-    const progress = (wordsDropped / settings.totalWords) * 100;
+  // Show loading if questions not ready
+  if (loadingQuestions || questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading assessment...</p>
+        </div>
+      </div>
+    );
+  }
 
     return (
       <div className="min-h-screen bg-background">
         <div className="max-w-6xl mx-auto px-6 py-8">
           
-          {/* Topic Header with improved layout */}
+        {/* Topic Header */}
           <div className="mb-12">
             <div className="flex items-start justify-between gap-8">
-              {/* Topic - Takes most of the space */}
               <div className="flex-1 min-w-0">
                 <div className="text-center">
                   <div className="text-sm text-muted-foreground mb-2">
-                    Question {currentQuestionIndex + 1} of {totalQuestions}
+                  Question {currentQuestionIndex + 1} of {questions.length}
                   </div>
                   <h2 className="text-3xl font-bold text-foreground leading-relaxed">
-                    {settings.mainTopic}
+                  {currentQuestion?.question_text}
                   </h2>
                 </div>
               </div>
 
-              {/* Timer - Fixed width on the right */}
               <div className="flex-shrink-0">
                 <CircularTimer 
-                  timeLeft={timeRemaining} 
-                  isActive={true}
-                  label="Assessment"
-                  canSkip={true}
-                  onSkipToNext={() => {
-                    console.log('[TRIPLE-STEP] ⏭️ Skip to next question requested');
-                    const isLastQuestion = currentQuestionIndex + 1 >= totalQuestions;
-                    toast({
-                      title: isLastQuestion ? "Finishing Assessment" : `Moving to Question ${currentQuestionIndex + 2}`,
-                      description: isLastQuestion ? "Completing final question..." : "Moving to next topic...",
-                      variant: "default",
-                    });
-                    // End the current question
-                    const currentEndGame = endGameRef.current;
-                    if (currentEndGame) {
-                      currentEndGame();
-                    }
-                  }}
+                timeLeft={timeLeft} 
+                isActive={isTimerActive}
+                onClick={handleNextQuestion}
+                isFinishing={isFinishing}
+                isLastQuestion={isLastQuestion}
+                isUploading={isUploading}
                 />
               </div>
             </div>
           </div>
 
-          {/* Main Assessment Layout - Video Left, Words Right (like Assessment page) */}
+        {/* Main Assessment Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             {/* Video Section - Left Side */}
             <div className="lg:col-span-1">
               <div className="relative bg-gray-900 rounded-xl overflow-hidden shadow-lg" style={{ aspectRatio: '4/3' }}>
-                {videoStream ? (
                   <video
                     ref={videoRef}
                     className="w-full h-full object-cover"
@@ -1314,17 +683,6 @@ export default function TripleStepAssessment() {
                     playsInline
                     style={{ backgroundColor: '#111827' }}
                   />
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mb-4 mx-auto">
-                        <MicOff className="w-8 h-8 text-gray-300" />
-                      </div>
-                      <div className="text-gray-300 text-lg font-medium">Camera Off</div>
-                      <div className="text-gray-400 text-sm">Start assessment to begin video recording</div>
-                    </div>
-                  </div>
-                )}
                 
                 {/* Recording Indicator */}
                 {isRecording && (
@@ -1341,7 +699,7 @@ export default function TripleStepAssessment() {
                 )}
                 
                 {/* Live Transcript Overlay */}
-                {isRecording && hasSpeechSupport && (
+              {isRecording && hasSupport && (
                   <div className="absolute bottom-4 left-4 right-4 bg-black/80 backdrop-blur-sm text-white p-3 rounded text-sm max-h-32 overflow-y-auto">
                     <div className="text-center text-xs text-gray-300 mb-2">Live Transcript</div>
                     {transcript ? (
@@ -1351,13 +709,10 @@ export default function TripleStepAssessment() {
                           const isTargetWord = activeWords.some(activeWord => 
                             activeWord.word.toLowerCase() === cleanWord
                           );
-                          const isIntegratedWord = completedWords.some(completedWord =>
-                            completedWord.integrated && completedWord.word.toLowerCase() === cleanWord
-                          );
                           const isDetectedWord = detectedWords.has(cleanWord);
                           
                           let className = 'text-white';
-                          if (isIntegratedWord || isDetectedWord) {
+                        if (isDetectedWord) {
                             className = 'text-green-400 font-semibold bg-green-500/30 px-1 rounded';
                           } else if (isTargetWord) {
                             className = 'text-orange-400 font-medium bg-orange-500/30 px-1 rounded';
@@ -1384,7 +739,7 @@ export default function TripleStepAssessment() {
               <div className="flex-grow">
                 {activeWords.length > 0 ? (
                   <div className="space-y-4 overflow-y-auto max-h-[300px]">
-                    {activeWords.map((wordDrop, index) => (
+                  {activeWords.map((wordDrop) => (
                       <div
                         key={`${wordDrop.word}-${wordDrop.timestamp}`}
                         className="bg-primary border border-accent shadow-lg rounded-lg p-4"
@@ -1405,7 +760,7 @@ export default function TripleStepAssessment() {
                 )}
               </div>
 
-              {/* Recent Words Section - Bigger Size */}
+            {/* Recent Words Section */}
               {completedWords.length > 0 && (
                 <div className="mt-8 pt-6 border-t border-border">
                   <h4 className="font-semibold mb-4 text-base text-foreground">Recent Words</h4>
@@ -1414,9 +769,9 @@ export default function TripleStepAssessment() {
                       <Badge
                         key={index}
                         variant="default"
-                        className="flex items-center gap-2 text-sm px-3 py-2 bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/20"
+                      className={`flex items-center gap-2 text-sm px-3 py-2 bg-green-500/10 dark:bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/20`}
                       >
-                        <CheckCircle className="h-4 w-4" /> 
+                      {wordDrop.integrated && <CheckCircle className="h-4 w-4" />}
                         {wordDrop.word}
                       </Badge>
                     ))}
@@ -1429,8 +784,3 @@ export default function TripleStepAssessment() {
       </div>
     );
   }
-
-
-
-  return null;
-}

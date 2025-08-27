@@ -75,6 +75,7 @@ export interface Question {
   question_text: string;
   order: number;
   type: string;
+  words?: string[]; // For TripleStep assessments - words associated with this topic
 }
 
 export interface FetchQuestionsRequest {
@@ -564,8 +565,14 @@ export class S3Service {
           type: 'Games-arena'
         };
         return [promptQuestion];
+      } else if (request.type === 'Triple-Step') {
+        // Handle TripleStep specifically - use the new function
+        return await this.fetchTripleStepQuestions({
+          user_email: request.user_email,
+          assessment_id: request.assessment_id
+        });
       } else {
-        // Handle all other assessment types (QA, triple-step, etc.) - they return questions array
+        // Handle all other assessment types (QA, etc.) - they return questions array
         if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
           throw new Error(`No questions returned for ${request.type || 'unknown'} assessment type`);
         }
@@ -780,17 +787,24 @@ export class S3Service {
     }
   }
 
-  // Fetch Triple Step content from S3
-  static async fetchTripleStepContent(request: FetchTripleStepRequest): Promise<TripleStepContent> {
+  // Fetch Triple Step questions in standard format
+  static async fetchTripleStepQuestions(request: FetchTripleStepRequest): Promise<Question[]> {
     try {
-      console.log('[S3Service] Fetching Triple Step content for:', request);
+      console.log('[S3Service] Fetching Triple Step questions for:', request);
+
+      // For TripleStep, we need to request the full content and convert to question format
+      const tripleStepRequest = {
+        ...request,
+        type: 'triple-step', // This tells the backend to return full JSON content
+        fetch_full_content: true // Additional flag to ensure we get all content
+      };
 
       const response = await fetch(`${API_BASE_URL}/fetch-questions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify(tripleStepRequest),
       });
 
       if (!response.ok) {
@@ -812,18 +826,50 @@ export class S3Service {
         // Old format
         content = data.content;
       } else if (data.questions) {
-        // New format - transform questions object to content format
-        console.log('Transforming S3 object format to questions array');
+        // New format - for TripleStep, questions should contain the full topic-word mapping
+        console.log('Using TripleStep content from questions field');
         content = data.questions;
-        console.log('Transformed', Object.keys(content).length, 'questions from S3 format');
+        console.log('Loaded', Object.keys(content).length, 'topics from TripleStep content');
       } else {
         throw new Error('No Triple Step content or questions returned from the API');
       }
       
-      console.log('[S3Service] Triple Step content fetched successfully:', content);
-      return content;
+      // Validate that we have the correct TripleStep format
+      if (typeof content !== 'object' || Array.isArray(content)) {
+        throw new Error('Invalid TripleStep content format - expected topic-word mapping object');
+      }
+      
+      // Ensure we have at least some topics and words
+      const topics = Object.keys(content);
+      if (topics.length === 0) {
+        throw new Error('No topics found in TripleStep content');
+      }
+      
+      // Select only 3 random topics from the available topics
+      const shuffledTopics = [...topics].sort(() => Math.random() - 0.5);
+      const selectedTopics = shuffledTopics.slice(0, Math.min(3, topics.length));
+      
+      // Convert to standard Question format (only 3 questions)
+      const questions: Question[] = selectedTopics.map((topic, index) => ({
+        question_id: `q${index + 1}`,
+        question_text: topic,
+        order: index + 1,
+        type: 'triple-step',
+        // Store the words for this topic in a custom field - we'll need this for the game
+        words: content[topic] || []
+      }));
+      
+      console.log('[S3Service] Triple Step questions converted successfully:', {
+        totalTopicsAvailable: topics.length,
+        selectedTopics: selectedTopics.length,
+        questionsGenerated: questions.length,
+        selectedTopicNames: selectedTopics,
+        totalWords: selectedTopics.reduce((sum, topic) => sum + (content[topic]?.length || 0), 0)
+      });
+      
+      return questions;
     } catch (error) {
-      console.error('Error fetching Triple Step content:', error);
+      console.error('Error fetching Triple Step questions:', error);
       throw error;
     }
   }

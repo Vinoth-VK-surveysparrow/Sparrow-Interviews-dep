@@ -700,7 +700,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   };
 
   const goHome = () => {
-    setLocation('/dashboard');
+    setLocation('/test-selection');
   };
 
 
@@ -1184,7 +1184,7 @@ export default function SalesAIAssessment() {
               </Button>
               <Button 
                 variant="outline" 
-                onClick={() => setLocation('/dashboard')}
+                onClick={() => setLocation('/test-selection')}
                 className="flex items-center gap-2"
               >
                 <Home className="w-4 h-4" />

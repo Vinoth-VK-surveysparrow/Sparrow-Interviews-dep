@@ -177,13 +177,15 @@ export class AssessmentLogger {
       recording_duration: number;
     };
   } {
-    const interactions = this.getCurrentLogs().map(log => ({
-      question: log.question,
-      question_id: log.question_id,
-      start_time: log.start_time,
-      end_time: log.end_time || new Date().toISOString(),
-      duration_seconds: log.duration_seconds || 0
-    }));
+    const interactions = this.getCurrentLogs()
+      .filter(log => log.end_time) // Only include logs that have been properly completed
+      .map(log => ({
+        question: log.question, // Already formatted with <question> and <word> tags
+        question_id: log.question_id,
+        start_time: log.start_time,
+        end_time: log.end_time!,
+        duration_seconds: log.duration_seconds || 0
+      }));
 
     // Calculate total recording duration
     const totalRecordingDuration = interactions.reduce((total, interaction) => {
@@ -198,6 +200,110 @@ export class AssessmentLogger {
         recording_duration: totalRecordingDuration
       }
     };
+  }
+
+  // Add word appearance as separate log entry for TripleStep assessments
+  addWordEvent(word: string, appearedAt: Date, questionText: string, questionId?: string): void {
+    if (!this.session) {
+      console.error('❌ No active assessment session');
+      return;
+    }
+
+    // Create a separate log entry for this word appearance
+    const wordLog: AssessmentLog = {
+      question: `<question>${questionText}</question><word>${word}</word>`,
+      question_id: questionId,
+      start_time: appearedAt.toISOString()
+      // end_time will be set when word is integrated or expires
+    };
+
+    this.session.logs.push(wordLog);
+    
+    console.log(`[LOGGER] Word "${word}" appeared at ${appearedAt.toISOString()}`);
+  }
+
+  // Mark word as integrated by completing its log entry
+  markWordIntegrated(word: string, integratedAt: Date): void {
+    if (!this.session) {
+      console.error('❌ No active question to mark word integration');
+      return;
+    }
+
+    // Find the most recent word log entry that matches this word and doesn't have an end_time
+    const wordLogIndex = [...this.session.logs]
+      .reverse()
+      .findIndex(log => 
+        log.question.includes(`<word>${word}</word>`) && !log.end_time
+      );
+
+    if (wordLogIndex !== -1) {
+      // Convert reverse index to actual index
+      const actualIndex = this.session.logs.length - 1 - wordLogIndex;
+      const wordLog = this.session.logs[actualIndex];
+      
+      wordLog.end_time = integratedAt.toISOString();
+      wordLog.duration_seconds = Math.round(
+        (integratedAt.getTime() - new Date(wordLog.start_time).getTime()) / 1000
+      );
+      
+      console.log(`[LOGGER] Word "${word}" integrated after ${wordLog.duration_seconds} seconds`);
+    } else {
+      console.warn(`⚠️ Word "${word}" not found in logs or already integrated`);
+    }
+  }
+
+  // Mark word as expired (not integrated) by completing its log entry
+  markWordExpired(word: string, expiredAt: Date): void {
+    if (!this.session) {
+      console.error('❌ No active question to mark word expiration');
+      return;
+    }
+
+    // Find the most recent word log entry that matches this word and doesn't have an end_time
+    const wordLogIndex = [...this.session.logs]
+      .reverse()
+      .findIndex(log => 
+        log.question.includes(`<word>${word}</word>`) && !log.end_time
+      );
+
+    if (wordLogIndex !== -1) {
+      // Convert reverse index to actual index
+      const actualIndex = this.session.logs.length - 1 - wordLogIndex;
+      const wordLog = this.session.logs[actualIndex];
+      
+      wordLog.end_time = expiredAt.toISOString();
+      wordLog.duration_seconds = Math.round(
+        (expiredAt.getTime() - new Date(wordLog.start_time).getTime()) / 1000
+      );
+      
+      console.log(`[LOGGER] Word "${word}" expired after ${wordLog.duration_seconds} seconds`);
+    } else {
+      console.warn(`⚠️ Word "${word}" not found in logs to mark as expired`);
+    }
+  }
+
+  // Mark all unfinished word logs as expired (for when question ends)
+  finishAllUncompletedWords(questionEndTime: Date): void {
+    if (!this.session) {
+      console.error('❌ No active session to finish uncompleted words');
+      return;
+    }
+
+    const unfinishedWords = this.session.logs.filter(log => 
+      log.question.includes('<word>') && !log.end_time
+    );
+
+    unfinishedWords.forEach(wordLog => {
+      wordLog.end_time = questionEndTime.toISOString();
+      wordLog.duration_seconds = Math.round(
+        (questionEndTime.getTime() - new Date(wordLog.start_time).getTime()) / 1000
+      );
+      
+      // Extract word name for logging
+      const wordMatch = wordLog.question.match(/<word>(.+?)<\/word>/);
+      const wordName = wordMatch ? wordMatch[1] : 'unknown';
+      console.log(`[LOGGER] Auto-finished unprocessed word "${wordName}" after ${wordLog.duration_seconds} seconds`);
+    });
   }
 
   // Debug method to log current state (memory only)

@@ -956,7 +956,7 @@ export default function ConductorAssessment() {
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="mb-6">
             <Button
-              onClick={() => setLocation('/')}
+              onClick={() => setLocation('/test-selection')}
               variant="outline"
               size="sm"
               className="flex items-center gap-2"
@@ -1357,7 +1357,7 @@ export default function ConductorAssessment() {
               Try Again
             </Button>
             <Button 
-              onClick={() => setLocation('/')}
+              onClick={() => setLocation('/test-selection')}
               size="lg"
               className="bg-primary hover:bg-primary/90"
             >

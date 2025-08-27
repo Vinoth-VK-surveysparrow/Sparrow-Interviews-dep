@@ -32,7 +32,6 @@ import SecurityRestrictions from "@/components/SecurityRestrictions";
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
   const [location, setLocation] = useLocation();
-
   const handleSignOut = async () => {
     await signOut();
   };

@@ -15,7 +15,7 @@ export default function TripleStepRules({ onStartAssessment, isLoading = false }
       <div className="max-w-4xl mx-auto px-6 py-8">
         <div className="flex justify-start">
           <Button
-            onClick={() => setLocation('/')}
+            onClick={() => setLocation('/test-selection')}
             variant="outline"
             size="sm"
             className="flex items-center gap-2"

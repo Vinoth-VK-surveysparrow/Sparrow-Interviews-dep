@@ -231,7 +231,7 @@ export default function Assessment() {
       } catch (error) {
         console.error('❌ Failed to fetch questions:', error);
         // If questions fetch fails, redirect to dashboard
-        setLocation('/');
+        setLocation('/test-selection');
       } finally {
         setLoadingQuestions(false);
       }
@@ -474,7 +474,7 @@ export default function Assessment() {
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <p className="text-gray-600 dark:text-gray-300">No questions available for this assessment.</p>
-            <Button onClick={() => setLocation('/')} className="mt-4">
+            <Button onClick={() => setLocation('/test-selection')} className="mt-4">
               Return to Dashboard
             </Button>
           </div>
@@ -490,7 +490,7 @@ export default function Assessment() {
         {!assessmentStarted && (
           <div className="mb-6">
             <Button
-              onClick={() => setLocation('/')}
+              onClick={() => setLocation('/test-selection')}
               variant="outline"
               size="sm"
               className="flex items-center gap-2"
