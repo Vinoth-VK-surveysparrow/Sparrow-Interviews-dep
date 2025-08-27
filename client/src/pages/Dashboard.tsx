@@ -275,12 +275,34 @@ export default function Dashboard() {
       return;
     }
 
-    // Check assessment type to determine routing
+    // CRITICAL: Validate that the assessment exists within the current test
+    if (!selectedTestId) {
+      console.error(`❌ No test selected when trying to start assessment ${assessmentId}`);
+      toast({
+        title: "No Test Selected",
+        description: "Please select a test first.",
+        variant: "destructive",
+      });
+      setLocation('/test-selection');
+      return;
+    }
+
+    // Find assessment within current test's assessments
     const assessment = assessments.find(a => a.assessment_id === assessmentId);
     
-    // For role-based assessments, use custom unlock logic
-    const targetAssessment = assessments.find(a => a.assessment_id === assessmentId);
-    if (!targetAssessment || !targetAssessment.unlocked) {
+    if (!assessment) {
+      console.error(`❌ Assessment ${assessmentId} not found in current test ${selectedTestId}. Available assessments:`, assessments.map(a => a.assessment_id));
+      toast({
+        title: "Assessment Not Found",
+        description: "This assessment is not available in the current test.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check unlock status using test-specific logic
+    if (!assessment.unlocked) {
+      console.log(`🔒 Assessment ${assessment.assessment_name} is locked in test ${selectedTestId}`);
       toast({
         title: "Assessment Locked",
         description: "Please complete the previous assessments in order to unlock this one.",
@@ -288,6 +310,8 @@ export default function Dashboard() {
       });
       return;
     }
+
+    console.log(`🎯 Starting assessment ${assessmentId} (type: ${assessment.type}) in test ${selectedTestId}`);
 
     if (assessment?.type === "Conductor") {
       // Route directly to conductor assessment (no need to fetch questions or S3 config)

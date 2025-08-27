@@ -193,10 +193,39 @@ export default function Assessment() {
         return;
       }
 
+      // CRITICAL: Validate that assessment exists in current test before fetching questions
+      const selectedTestId = localStorage.getItem('selectedTestId');
+      if (!selectedTestId) {
+        console.error('❌ No test selected - redirecting to test selection');
+        setLocation('/test-selection');
+        return;
+      }
+
       try {
         setLoadingQuestions(true);
         
-        const fetchedQuestions = await fetchQuestions(params.assessmentId);
+        // Validate assessment exists in current test
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+        const testResponse = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        
+        if (!testResponse.ok) {
+          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
+        }
+        
+        const testData = await testResponse.json();
+        const testAssessments = testData.assessments || [];
+        const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === params.assessmentId);
+        
+        if (!assessmentInTest) {
+          console.error(`❌ Assessment ${params.assessmentId} not found in test ${selectedTestId}`);
+          setLocation('/');
+          return;
+        }
+
+        console.log(`✅ Assessment ${params.assessmentId} validated in test ${selectedTestId}`);
+        
+        // Now fetch questions using the assessment type
+        const fetchedQuestions = await fetchQuestions(params.assessmentId, assessmentInTest.type);
         setQuestions(fetchedQuestions);
         
       } catch (error) {

@@ -60,17 +60,52 @@ export default function Rules() {
   useEffect(() => {
     requestPermissions();
     
-    // Fetch assessment data
+    // Fetch assessment data from test-specific endpoint
     const fetchAssessmentData = async () => {
       if (!params?.assessmentId) return;
       
       try {
         setLoading(true);
-        const assessments = await S3Service.getAssessments();
-        const currentAssessment = assessments.find(a => a.assessment_id === params.assessmentId);
-        setAssessment(currentAssessment || null);
+        
+        // Get the current test_id from localStorage (set by Dashboard)
+        const selectedTestId = localStorage.getItem('selectedTestId');
+        if (!selectedTestId) {
+          console.error('❌ No test selected - cannot fetch assessment data');
+          return;
+        }
+        
+        // Fetch test-specific assessments
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+        const response = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('📋 Rules page fetched test assessments:', data);
+        
+        // Find the current assessment within this test
+        const currentAssessment = data.assessments?.find((a: any) => a.assessment_id === params.assessmentId);
+        
+        if (currentAssessment) {
+          // Convert TestAssessment to Assessment format
+          const assessmentData = {
+            assessment_id: currentAssessment.assessment_id,
+            assessment_name: currentAssessment.assessment_name,
+            description: currentAssessment.description,
+            type: currentAssessment.type,
+            order: currentAssessment.order,
+          };
+          setAssessment(assessmentData);
+          console.log('✅ Found assessment in test:', assessmentData);
+        } else {
+          console.error(`❌ Assessment ${params.assessmentId} not found in test ${selectedTestId}`);
+          setAssessment(null);
+        }
       } catch (error) {
-        console.error('Error fetching assessment data:', error);
+        console.error('❌ Error fetching assessment data:', error);
+        setAssessment(null);
       } finally {
         setLoading(false);
       }

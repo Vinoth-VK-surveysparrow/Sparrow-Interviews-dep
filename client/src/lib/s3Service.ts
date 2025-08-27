@@ -652,8 +652,80 @@ export class S3Service {
     }
   }
 
-  // Get the next available (unlocked) assessment for a user
+  // Get the next available (unlocked) assessment for a user within a specific test
+  static async getNextUnlockedAssessmentInTest(userEmail: string, testId: string): Promise<Assessment | null> {
+    try {
+      // Fetch test-specific assessments
+      const response = await fetch(`${API_BASE_URL}/assessments/test/${testId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      const testAssessments = data.assessments || [];
+      
+      // Sort by order to ensure we check in the correct sequence
+      testAssessments.sort((a: any, b: any) => a.order - b.order);
+      
+      // Find the first assessment in this test that is not completed
+      for (const testAssessment of testAssessments) {
+        if (!this.isAssessmentCompleted(userEmail, testAssessment.assessment_id)) {
+          // Convert to Assessment format
+          const assessment: Assessment = {
+            assessment_id: testAssessment.assessment_id,
+            assessment_name: testAssessment.assessment_name,
+            description: testAssessment.description,
+            type: testAssessment.type,
+            order: testAssessment.order,
+          };
+          
+          // For test-specific assessments, use custom unlock logic
+          const isUnlocked = this.isTestAssessmentUnlocked(userEmail, testAssessment, testAssessments);
+          if (isUnlocked) {
+            console.log(`✅ Next unlocked assessment in test ${testId}:`, assessment.assessment_name);
+            return assessment;
+          } else {
+            console.log(`🔒 Next assessment in test ${testId} is locked:`, assessment.assessment_name);
+            return null; // If next incomplete assessment is locked, no unlocked assessments available
+          }
+        }
+      }
+
+      console.log(`✅ All assessments completed in test ${testId}`);
+      return null;
+    } catch (error) {
+      console.error('Error getting next unlocked assessment in test:', error);
+      return null;
+    }
+  }
+
+  // Custom unlock logic for test-based assessments
+  private static isTestAssessmentUnlocked(userEmail: string, targetAssessment: any, allTestAssessments: any[]): boolean {
+    // Find the minimum order (first assessment)
+    const minOrder = Math.min(...allTestAssessments.map((a: any) => a.order));
+    
+    // First assessment is always unlocked
+    if (targetAssessment.order === minOrder) {
+      return true;
+    }
+    
+    // Check if all previous assessments (lower order) are completed
+    const previousAssessments = allTestAssessments.filter((a: any) => a.order < targetAssessment.order);
+    
+    for (const prevAssessment of previousAssessments) {
+      const isCompleted = this.isAssessmentCompleted(userEmail, prevAssessment.assessment_id);
+      if (!isCompleted) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+  // DEPRECATED: Legacy method - use getNextUnlockedAssessmentInTest instead
   static async getNextUnlockedAssessment(userEmail: string): Promise<Assessment | null> {
+    console.warn('⚠️ getNextUnlockedAssessment is deprecated - use getNextUnlockedAssessmentInTest instead');
     try {
       const assessments = await this.getAssessments();
       

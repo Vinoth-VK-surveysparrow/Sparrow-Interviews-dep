@@ -33,24 +33,32 @@ export default function Results() {
         S3Service.markAssessmentCompleted(user.email, params.assessmentId);
       }
       
-      // Check for next unlocked assessment
+      // Check for next unlocked assessment within the current test
       if (params?.assessmentId && user?.email) {
         try {
           setLoadingNext(true);
-          const next = await S3Service.getNextUnlockedAssessment(user.email);
-          setNextAssessment(next);
           
-          if (next) {
+          // Get the current test_id from localStorage
+          const selectedTestId = localStorage.getItem('selectedTestId');
+          if (selectedTestId) {
+            const next = await S3Service.getNextUnlockedAssessmentInTest(user.email, selectedTestId);
+            setNextAssessment(next);
             
+            if (next) {
+              console.log(`✅ Next assessment in test ${selectedTestId}:`, next.assessment_name);
+            } else {
+              console.log(`✅ All assessments completed in test ${selectedTestId}`);
+            }
           } else {
-            
-        }
-      } catch (error) {
+            console.warn('⚠️ No test selected - cannot find next assessment');
+            setNextAssessment(null);
+          }
+        } catch (error) {
           console.error('❌ Error getting next unlocked assessment:', error);
           setNextAssessment(null);
         } finally {
           setLoadingNext(false);
-      }
+        }
       }
 
       // Fetch audio download URL
