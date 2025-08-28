@@ -15,16 +15,23 @@ export function AssessmentSecurity() {
   const fullscreenAttemptedRef = useRef(false);
   const cleanupExecutedRef = useRef(false);
 
-  // Check if user is in assessment or rules (security-critical routes)
-  const isInSecureMode = location.startsWith('/rules/') || 
-                        location.startsWith('/assessment/') || 
-                        location.startsWith('/question/') ||
-                        location.startsWith('/conductor/') ||
-                        location.startsWith('/triple-step/');
+  // Apply restrictions ONLY during the actual assessment content pages
+  // NOT on any preparation, dashboard, or setup pages
+  const isActiveAssessmentContent = location.startsWith('/assessment/') || 
+                                   location.startsWith('/question/') ||
+                                   location.startsWith('/conductor/') ||
+                                   location.startsWith('/triple-step/') ||
+                                   location.startsWith('/sales-ai/');
+  
+  // Simple and clear: only restrict during actual assessment taking
+  const shouldApplyRestrictions = isActiveAssessmentContent;
+  
+  // Debug logging for clarity
+  console.log(`🔒 AssessmentSecurity - Location: ${location}, Apply Restrictions: ${shouldApplyRestrictions}`);
 
   useEffect(() => {
-    if (!isInSecureMode) {
-      // Reset refs when leaving secure mode
+    if (!shouldApplyRestrictions) {
+      // Reset refs when not applying restrictions
       fullscreenAttemptedRef.current = false;
       cleanupExecutedRef.current = false;
       return;
@@ -274,7 +281,7 @@ export function AssessmentSecurity() {
         
         // Only try to re-enter fullscreen if we're still in secure mode and haven't attempted recently
         setTimeout(() => {
-          if (isInSecureMode && !fullscreenAttemptedRef.current) {
+          if (shouldApplyRestrictions && !fullscreenAttemptedRef.current) {
             fullscreenAttemptedRef.current = false; // Reset to allow re-attempt
             if (!fullscreenAttemptedRef.current) {
               enterFullscreen();
@@ -368,10 +375,10 @@ export function AssessmentSecurity() {
         document.exitFullscreen().catch(console.warn);
       }
     };
-  }, [isInSecureMode, permissionDialogOpen]); // Depend on route and permission dialog state
+  }, [shouldApplyRestrictions, permissionDialogOpen]); // Depend on restriction logic and permission dialog state
 
-  // Don't render anything if not in secure mode
-  if (!isInSecureMode) return null;
+  // Don't render anything if not applying restrictions
+  if (!shouldApplyRestrictions) return null;
 
   return (
     <>

@@ -78,24 +78,26 @@ function Header() {
 function SecurityWrapper() {
   const [location] = useLocation();
   
-  // Apply different levels of restrictions based on the page
-  const isRulesPage = location.startsWith('/rules/');
-  const isActiveAssessment = location.startsWith('/assessment/') || 
-                            location.startsWith('/question/') ||
-                            location.startsWith('/conductor/') ||
-                            location.startsWith('/triple-step/') ||
-                            location.startsWith('/sales-ai/');
+  // Apply restrictions ONLY during the actual assessment content pages
+  // NOT on rules/preparation pages - only when user is actively taking the test
+  const isActiveAssessmentContent = location.startsWith('/assessment/') || 
+                                   location.startsWith('/question/') ||
+                                   location.startsWith('/conductor/') ||
+                                   location.startsWith('/triple-step/') ||
+                                   location.startsWith('/sales-ai/');
 
-  if (isRulesPage) {
-    // On rules page: Basic restrictions but allow window switching for permission dialogs
-    return <SecurityRestrictions enableWindowBlurRestriction={false} />;
-  }
+  // Debug logging for clarity
+  console.log(`🔒 SecurityWrapper - Location: ${location}, Active Assessment Content: ${isActiveAssessmentContent}`);
   
-  if (isActiveAssessment) {
-    // During assessment: Full restrictions including window switching
+  // Only apply restrictions during the actual assessment taking, never on any other pages
+  if (isActiveAssessmentContent) {
+    console.log(`🔒 Applying SecurityRestrictions for ${location}`);
+    // During actual assessment: Full restrictions including window switching
     return <SecurityRestrictions enableWindowBlurRestriction={true} />;
   }
   
+  // No restrictions on ANY other pages - Dashboard, Home, Settings, Rules, Test Selection
+  console.log(`✅ No restrictions applied for ${location} - Full browser functionality available`);
   return null;
 }
 

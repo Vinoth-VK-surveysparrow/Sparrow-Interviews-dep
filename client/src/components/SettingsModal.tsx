@@ -50,17 +50,34 @@ export default function SettingsModal() {
     testing: false,
   });
 
-  // Load API key on component mount
+  // Load API key from backend on component mount
   useEffect(() => {
-    const savedKey = localStorage.getItem('gemini_api_key');
-    if (savedKey) {
-      setApiKey(savedKey);
-      setIsApiKeySaved(true);
-    }
-  }, []);
+    const loadApiKey = async () => {
+      if (!user?.email) {
+        return;
+      }
+
+      try {
+        const encodedEmail = encodeURIComponent(user.email);
+        const response = await fetch(`https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key/${encodedEmail}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'success' && data.data?.api_key) {
+            setApiKey(data.data.api_key);
+            setIsApiKeySaved(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading API key:', error);
+      }
+    };
+
+    loadApiKey();
+  }, [user?.email]);
 
   // API Key functions
-  const handleSaveApiKey = () => {
+  const handleSaveApiKey = async () => {
     if (!apiKey.trim()) {
       toast({
         title: "Error",
@@ -70,28 +87,92 @@ export default function SettingsModal() {
       return;
     }
 
-    localStorage.setItem('gemini_api_key', apiKey.trim());
-    setIsApiKeySaved(true);
-    toast({
-      title: "Success",
-      description: "Gemini API key saved successfully!",
-    });
+    if (!user?.email) {
+      toast({
+        title: "Error",
+        description: "Please ensure you are logged in to save the API key.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Trigger storage event for other components
-    window.dispatchEvent(new Event('storage'));
+    try {
+      const response = await fetch('https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          api_key: apiKey.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success') {
+          setIsApiKeySaved(true);
+          toast({
+            title: "Success",
+            description: "Gemini API key saved successfully!",
+          });
+        } else {
+          throw new Error('Failed to save API key');
+        }
+      } else {
+        throw new Error('Failed to save API key');
+      }
+    } catch (error) {
+      console.error('Error saving API key:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save the API key. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleRemoveApiKey = () => {
-    localStorage.removeItem('gemini_api_key');
-    setApiKey('');
-    setIsApiKeySaved(false);
-    toast({
-      title: "Removed",
-      description: "Gemini API key has been removed",
-    });
+  const handleRemoveApiKey = async () => {
+    if (!user?.email) {
+      toast({
+        title: "Error",
+        description: "Please ensure you are logged in to remove the API key.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Trigger storage event for other components
-    window.dispatchEvent(new Event('storage'));
+    try {
+      // Clear from backend by saving empty string
+      const response = await fetch('https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          api_key: '',
+        }),
+      });
+
+      if (response.ok) {
+        setApiKey('');
+        setIsApiKeySaved(false);
+        toast({
+          title: "Removed",
+          description: "Gemini API key has been removed",
+        });
+      } else {
+        throw new Error('Failed to remove API key');
+      }
+    } catch (error) {
+      console.error('Error removing API key:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove the API key. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   // Permission test functions

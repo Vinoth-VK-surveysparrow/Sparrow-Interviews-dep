@@ -1175,13 +1175,30 @@ export default function SalesAIAssessment() {
   const { user } = useAuth();
   const [apiKey, setApiKey] = useState<string>('');
 
-  // Load API key from localStorage on component mount
+  // Load API key from backend on component mount
   useEffect(() => {
-    const savedKey = localStorage.getItem('gemini_api_key');
-    if (savedKey) {
-      setApiKey(savedKey);
-    }
-  }, []);
+    const loadApiKey = async () => {
+      if (!user?.email) {
+        return;
+      }
+
+      try {
+        const encodedEmail = encodeURIComponent(user.email);
+        const response = await fetch(`https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key/${encodedEmail}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'success' && data.data?.api_key) {
+            setApiKey(data.data.api_key);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading API key:', error);
+      }
+    };
+
+    loadApiKey();
+  }, [user?.email]);
 
   if (!params?.assessmentId) {
     return <div>Invalid assessment ID</div>;
