@@ -97,8 +97,9 @@ export default function SettingsModal() {
           description: "Gemini API key saved successfully!",
         });
         
-        // Refresh the API key in auth context
+        // Refresh the API key in auth context and dispatch event
         await refreshGeminiApiKey();
+        window.dispatchEvent(new Event('gemini-api-key-updated'));
       } else {
         toast({
           title: "Error",
@@ -139,8 +140,9 @@ export default function SettingsModal() {
           description: "Gemini API key has been removed",
         });
         
-        // Refresh the API key in auth context
+        // Refresh the API key in auth context and dispatch event
         await refreshGeminiApiKey();
+        window.dispatchEvent(new Event('gemini-api-key-updated'));
       } else {
         toast({
           title: "Error",

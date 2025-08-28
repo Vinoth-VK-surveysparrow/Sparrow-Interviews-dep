@@ -99,17 +99,19 @@ export const useAuth = () => {
   };
 
   // Listen for storage events to refresh API key when updated in other components
+  // Only listen for our custom events, not all storage events
   useEffect(() => {
-    const handleStorageChange = () => {
+    const handleApiKeyUpdate = () => {
       if (user?.email) {
         refreshGeminiApiKey();
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
+    // Listen for custom events instead of storage events to avoid unnecessary API calls
+    window.addEventListener('gemini-api-key-updated', handleApiKeyUpdate);
     
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('gemini-api-key-updated', handleApiKeyUpdate);
     };
   }, [user?.email]);
 

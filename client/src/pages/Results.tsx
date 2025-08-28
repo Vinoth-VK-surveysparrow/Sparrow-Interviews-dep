@@ -21,6 +21,7 @@ export default function Results() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(true);
   const [audioError, setAudioError] = useState(false);
+  const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [activeTabId, setActiveTabId] = useState<number | null>(1);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -31,14 +32,20 @@ export default function Results() {
 
   useEffect(() => {
     const initializeResults = async () => {
+      // Only proceed if we have a user - this ensures auth is complete
+      if (!user?.email) {
+        console.log('⏳ Waiting for user authentication...');
+        return;
+      }
+
       // Mark assessment as completed in cache (this will automatically trigger the event)
-      if (params?.assessmentId && user?.email) {
+      if (params?.assessmentId) {
         
         S3Service.markAssessmentCompleted(user.email, params.assessmentId);
       }
       
       // Check for next unlocked assessment within the current test
-      if (params?.assessmentId && user?.email) {
+      if (params?.assessmentId) {
         try {
           setLoadingNext(true);
           
@@ -66,22 +73,33 @@ export default function Results() {
       }
 
       // Fetch audio download URL
-      if (params?.assessmentId && user?.email) {
+      if (params?.assessmentId) {
         try {
           setLoadingAudio(true);
           setAudioError(false);
           
-          
+          console.log('📥 Fetching audio download URL for assessment:', params.assessmentId);
           const audioDownloadUrl = await getAudioDownloadUrl(params.assessmentId);
+          
           if (audioDownloadUrl) {
+            console.log('✅ Audio download URL received:', audioDownloadUrl);
             setAudioUrl(audioDownloadUrl);
-            
           } else {
-            console.warn('⚠️ No audio download URL received');
+            console.warn('⚠️ No audio download URL received - audio may still be processing');
             setAudioError(true);
           }
-      } catch (error) {
+        } catch (error) {
           console.error('❌ Error fetching audio download URL:', error);
+          
+          // Check if this is a 404 or other specific error that means audio doesn't exist yet
+          if (error instanceof Error) {
+            if (error.message.includes('404') || error.message.includes('Not Found')) {
+              console.log('📝 Audio not found - may still be processing');
+            } else if (error.message.includes('403') || error.message.includes('Forbidden')) {
+              console.log('🔒 Audio access forbidden - may be expired');
+            }
+          }
+          
           setAudioError(true);
         } finally {
           setLoadingAudio(false);
@@ -96,6 +114,39 @@ export default function Results() {
 
     initializeResults();
   }, [toast, params?.assessmentId, user?.email, getAudioDownloadUrl]);
+
+  // Retry audio download if it failed and we haven't exceeded retry limit
+  useEffect(() => {
+    if (audioError && audioRetryCount < 3 && params?.assessmentId && user?.email) {
+      const retryTimer = setTimeout(async () => {
+        console.log(`🔄 Retrying audio download (attempt ${audioRetryCount + 1}/3)`);
+        
+        try {
+          setLoadingAudio(true);
+          setAudioError(false);
+          
+          const audioDownloadUrl = await getAudioDownloadUrl(params.assessmentId);
+          
+          if (audioDownloadUrl) {
+            console.log('✅ Audio download URL received on retry:', audioDownloadUrl);
+            setAudioUrl(audioDownloadUrl);
+            setAudioRetryCount(0); // Reset retry count on success
+          } else {
+            setAudioRetryCount(prev => prev + 1);
+            setAudioError(true);
+          }
+        } catch (error) {
+          console.error(`❌ Audio retry ${audioRetryCount + 1} failed:`, error);
+          setAudioRetryCount(prev => prev + 1);
+          setAudioError(true);
+        } finally {
+          setLoadingAudio(false);
+        }
+      }, 5000 * (audioRetryCount + 1)); // Exponential backoff: 5s, 10s, 15s
+
+      return () => clearTimeout(retryTimer);
+    }
+  }, [audioError, audioRetryCount, params?.assessmentId, user?.email, getAudioDownloadUrl]);
 
   return (
     <section className="py-32">
@@ -200,9 +251,17 @@ export default function Results() {
                         </div>
                       ) : audioError ? (
                         <div className="py-4">
-                          <p className="text-red-600 dark:text-red-400 text-sm">
-                            Audio recording is being processed and will be available shortly.
+                          <p className="text-orange-600 dark:text-orange-400 text-sm">
+                            {audioRetryCount < 3 
+                              ? "Audio recording is being processed and will be available shortly..."
+                              : "Audio recording is still being processed. Please refresh the page in a few minutes."
+                            }
                           </p>
+                          {audioRetryCount > 0 && audioRetryCount < 3 && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Retry {audioRetryCount}/3
+                            </p>
+                          )}
                         </div>
                                       ) : audioUrl ? (
                   <div className="w-full">
@@ -244,9 +303,17 @@ export default function Results() {
                   </div>
                 ) : audioError ? (
                   <div className="py-8 text-center">
-                    <p className="text-red-600 dark:text-red-400 text-sm">
-                      Audio recording is being processed and will be available shortly.
+                    <p className="text-orange-600 dark:text-orange-400 text-sm">
+                      {audioRetryCount < 3 
+                        ? "Audio recording is being processed and will be available shortly..."
+                        : "Audio recording is still being processed. Please refresh the page in a few minutes."
+                      }
                     </p>
+                    {audioRetryCount > 0 && audioRetryCount < 3 && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Retry {audioRetryCount}/3
+                      </p>
+                    )}
                   </div>
                                        ) : audioUrl ? (
                          <div className="w-full">

@@ -5,10 +5,17 @@ import { Card } from '@/components/ui/card';
 import { useS3Upload } from '@/hooks/useS3Upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
-import { Home, Mic } from 'lucide-react';
+import { Home, Mic, Info } from 'lucide-react';
 import { Question, S3Service } from '@/lib/s3Service';
 import { replacePlaceholders } from '@/lib/questionUtils';
 import { useClarity } from '@/hooks/useClarity';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/enhanced-tooltip';
+import { useAssessment } from '@/contexts/AssessmentContext';
+import { useCameraCapture } from '@/hooks/useCameraCapture';
+import { useContinuousAudioRecording } from '@/hooks/useContinuousAudioRecording';
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
+import { WarningBadge } from '@/components/WarningBadge';
 
 // Enhanced Circular Timer component that serves as Next button
 const CircularTimer = memo(({ 
@@ -93,12 +100,6 @@ const CircularTimer = memo(({
     </div>
   );
 });
-import { useAssessment } from '@/contexts/AssessmentContext';
-import { useCameraCapture } from '@/hooks/useCameraCapture';
-import { useContinuousAudioRecording } from '@/hooks/useContinuousAudioRecording';
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
-import { WarningBadge } from '@/components/WarningBadge';
 
 // Questions will be fetched from API
 
@@ -537,7 +538,7 @@ export default function Assessment() {
 
         {/* Question Header */}
         <div className="text-center mb-8">
-          <h2 className="text-5xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed max-w-6xl mx-auto">
             {currentQuestion ? replacePlaceholders(currentQuestion.question_text, user) : 'Loading question...'}
           </h2>
           
@@ -580,8 +581,22 @@ export default function Assessment() {
           {/* Transcript Section - Right Side (Open Space) */}
           <div className="lg:col-span-1 flex flex-col justify-between min-h-[400px]">
             {/* Live Transcript in open space - aligned with camera height */}
-            <div className="flex-grow mt-6">
-              <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed">
+            <div className="flex-grow mt-6 relative">
+              {/* Info icon with tooltip in top right corner */}
+              <div className="absolute top-0 right-0">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="cursor-help">
+                      <Info className="h-4 w-4 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="max-w-sm">
+                    <p>This transcription is just for a visual cue and it works by browser's native transcription, and its data is not considered for evaluation and only the recorded video is processed by AI models for evaluation</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              
+              <p className="text-gray-700 dark:text-gray-300 text-lg leading-relaxed pr-8">
                 {hasSupport ? (transcript || "....") : "Speech recognition not available in this browser"}
               </p>
             </div>  
@@ -624,14 +639,23 @@ export default function Assessment() {
             <div className="flex flex-col items-end w-full mt-4">
               {/* Interactive Circular Progress Timer that serves as Next/Finish button */}
               <div className="flex flex-col items-center">
-                <CircularTimer 
-                  timeLeft={timeLeft} 
-                  isActive={isTimerActive}
-                  onClick={handleNextQuestion}
-                  isFinishing={isFinishing}
-                  isLastQuestion={currentQuestionIndex >= questions.length - 1}
-                  isUploading={isUploading}
-                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <CircularTimer 
+                        timeLeft={timeLeft} 
+                        isActive={isTimerActive}
+                        onClick={handleNextQuestion}
+                        isFinishing={isFinishing}
+                        isLastQuestion={currentQuestionIndex >= questions.length - 1}
+                        isUploading={isUploading}
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <p>Once moved to next question, you cannot move back</p>
+                  </TooltipContent>
+                </Tooltip>
                 
                 {/* Question count centered below the circular progress */}
                 <div className="mt-2">

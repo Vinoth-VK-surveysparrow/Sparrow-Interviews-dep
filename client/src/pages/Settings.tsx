@@ -83,8 +83,8 @@ export default function Settings() {
           description: 'Your Gemini API key has been saved successfully.',
         });
         
-        // Trigger storage event for other components to update
-        window.dispatchEvent(new Event('storage'));
+        // Trigger custom event for other components to update
+        window.dispatchEvent(new Event('gemini-api-key-updated'));
       } else {
         toast({
           variant: 'destructive',
@@ -163,8 +163,8 @@ export default function Settings() {
           description: 'Your Gemini API key has been removed.',
         });
         
-        // Trigger storage event for other components to update
-        window.dispatchEvent(new Event('storage'));
+        // Trigger custom event for other components to update
+        window.dispatchEvent(new Event('gemini-api-key-updated'));
       } else {
         toast({
           variant: 'destructive',

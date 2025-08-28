@@ -9,11 +9,6 @@ export const useS3Upload = () => {
   const { user, loading: authLoading } = useAuth();
 
   const initiateAssessment = useCallback(async (assessmentId: string, duration: number = 3600) => {
-    if (authLoading) {
-      setError('Authentication still loading, please wait...');
-      return null;
-    }
-    
     if (!user?.email) {
       setError(`User email not available. User object: ${JSON.stringify(user)}`);
       return null;
@@ -38,7 +33,7 @@ export const useS3Upload = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.email, authLoading]);
+  }, [user?.email]);
 
   const uploadAudio = useCallback(async (audioBlob: Blob) => {
     
@@ -74,10 +69,6 @@ export const useS3Upload = () => {
   }, [uploadConfig]);
 
   const getAudioDownloadUrl = useCallback(async (assessmentId: string) => {
-    if (authLoading) {
-      throw new Error('Authentication still loading, please wait...');
-    }
-    
     if (!user?.email) {
       throw new Error(`User email not available. User object: ${JSON.stringify(user)}`);
     }
@@ -99,10 +90,6 @@ export const useS3Upload = () => {
   }, []);
 
   const fetchQuestions = useCallback(async (assessmentId: string, assessmentType?: string): Promise<Question[]> => {
-    if (authLoading) {
-      throw new Error('Authentication still loading, please wait...');
-    }
-    
     if (!user?.email) {
       throw new Error(`User email not available. User object: ${JSON.stringify(user)}`);
     }
@@ -118,7 +105,7 @@ export const useS3Upload = () => {
     } catch (err: any) {
       throw new Error(err.message || 'Failed to fetch questions');
     }
-  }, [user?.email, authLoading]);
+  }, [user?.email]);
 
   const reset = useCallback(() => {
     setUploadConfig(null);
