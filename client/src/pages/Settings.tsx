@@ -30,6 +30,9 @@ export default function Settings() {
   const [isLoading, setIsLoading] = useState(true);
 
 
+  const GEMINI_API_KEY_FETCH_URL = import.meta.env.VITE_GEMINI_API_KEY_FETCH;
+
+
 
   // Load API key from backend on component mount
   useEffect(() => {
