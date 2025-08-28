@@ -9,8 +9,8 @@ interface BehaviorMonitoringResponse {
 
 interface UseBehaviorMonitoringOptions {
   enabled?: boolean;
-  delayBeforeStart?: number; // milliseconds to wait before starting monitoring
-  pollingInterval?: number; // milliseconds between each check
+  delayBeforeStart?: number; // milliseconds to wait before starting monitoring (default: 15 seconds)
+  pollingInterval?: number; // milliseconds between each check (default: 10 seconds)
 }
 
 interface UseBehaviorMonitoringReturn {
@@ -71,7 +71,7 @@ export function useBehaviorMonitoring(options: UseBehaviorMonitoringOptions = {}
         setFlagCount(prev => prev + 1);
         
         // Show warning badge
-        setWarningMessage("Do not look away from the screen and look at the camera");
+        setWarningMessage("Do not look away from the screen and look at the camera. Keep your hands visible in front of the camera.");
         setShowWarning(true);
 
         console.log('🚨 Behavior flag detected! Warning displayed to user.');

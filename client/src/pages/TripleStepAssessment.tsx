@@ -143,6 +143,13 @@ export default function TripleStepAssessment() {
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true);
   const { fetchQuestions } = useS3Upload();
   
+  // Behavior monitoring
+  const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
+    enabled: true,
+    delayBeforeStart: 25000, // Start monitoring after 15 seconds (when first image is captured)
+    pollingInterval: 20000, // Check every 10 seconds
+  });
+  
   // Assessment state
   const [gameState, setGameState] = useState<GameState>("rules");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -599,6 +606,10 @@ export default function TripleStepAssessment() {
         }
         
         forceCleanup();
+        
+        // Stop behavior monitoring
+        stopMonitoring();
+        
         setLocation(`/results/${params?.assessmentId}`);
         return;
       }
@@ -731,6 +742,14 @@ export default function TripleStepAssessment() {
                   <h2 className="text-3xl font-bold text-foreground leading-relaxed">
                   {currentQuestion?.question_text}
                   </h2>
+                  
+                  {/* Behavior Warning Badge */}
+                  <WarningBadge
+                    isVisible={showWarning}
+                    message={warningMessage}
+                    duration={5000}
+                    className="mt-4"
+                  />
                   
                 </div>
               </div>
