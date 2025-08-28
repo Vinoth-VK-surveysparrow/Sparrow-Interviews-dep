@@ -68,7 +68,7 @@ Required environment variables:
 VITE_API_BASE_URL=your-api-base-url
 
 # Proctoring results API endpoint (for behavior monitoring)
-VITE_PROCTORING_RESULTS_API=https://your-proctoring-api-endpoint.lambda-url.region.on.aws
+VITE_PROCTORING_RESULTS_API=https://fizwdomhnwwc7avz3nufla3m5a0jhqvu.lambda-url.us-west-2.on.aws/results
 
 # Audio service
 export S3_BUCKET=your-audio-bucket-name

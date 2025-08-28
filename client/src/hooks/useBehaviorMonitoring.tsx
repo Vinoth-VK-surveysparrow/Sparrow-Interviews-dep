@@ -47,7 +47,7 @@ export function useBehaviorMonitoring(options: UseBehaviorMonitoringOptions = {}
 
     try {
       const encodedEmail = encodeURIComponent(user.email);
-      const baseUrl = import.meta.env.VITE_PROCTORING_RESULTS_API;
+      const baseUrl = import.meta.env.VITE_PROCTORING_RESULTS_API || 'https://fizwdomhnwwc7avz3nufla3m5a0jhqvu.lambda-url.us-west-2.on.aws/results';
       const url = `${baseUrl}?email=${encodedEmail}&round=${session.assessmentId}`;
       
       console.log('🔍 Checking behavior monitoring:', { email: user.email, round: session.assessmentId });
