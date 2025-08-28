@@ -15,6 +15,7 @@ import TripleStepRules from '@/components/TripleStepRules';
 
 import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
 import { WarningBadge } from '@/components/WarningBadge';
+import { useClarity } from '@/hooks/useClarity';
 
 // Enhanced Circular Timer component for assessments
 
@@ -123,17 +124,19 @@ export default function TripleStepAssessment() {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   
+  // Microsoft Clarity tracking
+  const { trackPageView, trackAssessmentEvent, trackUserAction, setUserId, setTag } = useClarity(
+    true, // Auto-track page view
+    'Triple-Step Assessment'
+  );
+  
   // Standard assessment hooks
   const { 
-
     session, 
     finishAssessment, 
     startSession, 
     isS3Ready, 
-    uploadAudioToS3,
-    startQuestionLog,
-    endQuestionLog,
-    handleQuestionTransition
+    uploadAudioToS3
   } = useAssessment();
   const { videoRef, startCamera } = useCameraCapture(); // Only video display, no image capture
   const { startContinuousRecording, stopContinuousRecording, isRecording, forceCleanup } = useContinuousAudioRecording();
@@ -252,6 +255,18 @@ export default function TripleStepAssessment() {
         await startSession(params.assessmentId);
       }
       
+      // Track assessment start
+      if (user?.email) {
+        setUserId(user.email, user.displayName || undefined);
+        setTag('assessment_type', 'triple-step');
+        trackAssessmentEvent('started', {
+          assessment_id: params?.assessmentId,
+          user_email: user.email,
+          user_name: user.displayName || 'Unknown',
+          questions_count: questions.length
+        });
+      }
+      
       // Start camera for video display and audio recording
       startCamera();
       await startContinuousRecording();
@@ -268,8 +283,14 @@ export default function TripleStepAssessment() {
         const firstQuestion = questions[0];
         setAvailableWords([...(firstQuestion.words || [])]);
         
-        // Start logging for the first question
-        startQuestionLog(firstQuestion.question_text, firstQuestion.question_id, 0);
+        // Log the first question as a complete entry (question text only)
+        assessmentLogger.logCompleteQuestion(
+          firstQuestion.question_text, 
+          firstQuestion.question_id, 
+          0,
+          new Date(), // Start time
+          new Date()  // End time (immediate completion for TripleStep)
+        );
         
         // Start the game timer and flow
         setIsTimerActive(true);
@@ -352,6 +373,13 @@ export default function TripleStepAssessment() {
             
             // Log word integration event
             assessmentLogger.markWordIntegrated(wordDrop.word, new Date());
+            
+            // Track word integration in Clarity
+            trackAssessmentEvent('word_integrated', {
+              word: wordDrop.word,
+              integration_time_seconds: Math.floor((Date.now() - wordDrop.timestamp) / 1000),
+              question_index: currentQuestionIndex
+            });
         
         // Move to completed words
         setTimeout(() => {
@@ -421,14 +449,20 @@ export default function TripleStepAssessment() {
       setActiveWords((prev) => [...prev, wordDrop]);
       startWordIntegrationTimer(wordDrop);
 
-      // Log word appearance event with question context
+      // Log word appearance event
       if (currentQuestion) {
         assessmentLogger.addWordEvent(
           newWord, 
           new Date(wordDrop.timestamp), 
-          currentQuestion.question_text,
           currentQuestion.question_id
         );
+        
+        // Track word appearance in Clarity
+        trackAssessmentEvent('word_dropped', {
+          word: newWord,
+          question_index: currentQuestionIndex,
+          total_words_dropped: currentCount + 1
+        });
       }
 
       return currentCount + 1;
@@ -452,6 +486,13 @@ export default function TripleStepAssessment() {
               // Mark word as expired in logger with precise expiration time
               const expirationTime = new Date(wordDrop.timestamp + (DIFFICULTY_SETTINGS.integrationTime * 1000));
               assessmentLogger.markWordExpired(word.word, expirationTime);
+              
+              // Track word expiration in Clarity
+              trackAssessmentEvent('word_expired', {
+                word: word.word,
+                question_index: currentQuestionIndex,
+                time_available_seconds: DIFFICULTY_SETTINGS.integrationTime
+              });
               
               setTimeout(() => {
                 setActiveWords((current) =>
@@ -505,15 +546,21 @@ export default function TripleStepAssessment() {
     if (!currentQuestion) return;
 
     try {
-      // Finish any uncompleted word logs before ending question
+      // Finish any uncompleted word logs before moving to next question
       assessmentLogger.finishAllUncompletedWords(new Date());
-      
-      // End current question logging
-      endQuestionLog();
 
       if (isLastQuestion) {
         setIsFinishing(true);
         setIsTimerActive(false);
+        
+        // Track assessment completion
+        trackAssessmentEvent('completed', {
+          assessment_id: params?.assessmentId,
+          user_email: user?.email,
+          total_questions: questions.length,
+          completed_words: completedWords.length,
+          active_words_remaining: activeWords.length
+        });
         
         // Stop all activities
         stopListening();
@@ -577,9 +624,25 @@ export default function TripleStepAssessment() {
         wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
         wordIntegrationTimersRef.current.clear();
         
-        // Update question
+        // Update question index
         setCurrentQuestionIndex(nextIndex);
-        handleQuestionTransition(nextQuestion.question_text, nextQuestion.question_id, nextIndex);
+        
+        // Log the new question as a complete entry (question text only)
+        assessmentLogger.logCompleteQuestion(
+          nextQuestion.question_text, 
+          nextQuestion.question_id, 
+          nextIndex,
+          new Date(), // Start time
+          new Date()  // End time (immediate completion for TripleStep)
+        );
+        
+        // Track question transition
+        trackAssessmentEvent('question_transition', {
+          from_question_index: currentQuestionIndex,
+          to_question_index: nextIndex,
+          completed_words_in_question: completedWords.length,
+          remaining_words_in_question: activeWords.length
+        });
         
         // Reset timer
         setTimeLeft(240);
@@ -597,7 +660,7 @@ export default function TripleStepAssessment() {
     } catch (error) {
       console.error('❌ Error in handleNextQuestion:', error);
     }
-  }, [currentQuestion, isLastQuestion, currentQuestionIndex, questions, endQuestionLog, stopListening, stopContinuousRecording, isS3Ready, uploadAudioToS3, verifyAudioWithRetry, finishAssessment, forceCleanup, setLocation, params?.assessmentId, handleQuestionTransition, resetTranscript, startWordDropSystem]);
+  }, [currentQuestion, isLastQuestion, currentQuestionIndex, questions, stopListening, stopContinuousRecording, isS3Ready, uploadAudioToS3, verifyAudioWithRetry, finishAssessment, forceCleanup, setLocation, params?.assessmentId, resetTranscript, startWordDropSystem]);
 
   // Handle start from rules
   const handleStartFromRules = useCallback(() => {
@@ -609,8 +672,15 @@ export default function TripleStepAssessment() {
       });
       return;
     }
+    
+    // Track rules completion and assessment start
+    trackUserAction('start_assessment_from_rules', {
+      assessment_id: params?.assessmentId,
+      questions_ready: questions.length > 0
+    });
+    
     setGameState("playing");
-  }, [questions.length, toast]);
+  }, [questions.length, toast, trackUserAction, params?.assessmentId]);
 
   // Cleanup on unmount
   useEffect(() => {

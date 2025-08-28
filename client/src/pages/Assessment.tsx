@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Home, Mic } from 'lucide-react';
 import { Question, S3Service } from '@/lib/s3Service';
 import { replacePlaceholders } from '@/lib/questionUtils';
+import { useClarity } from '@/hooks/useClarity';
 
 // Enhanced Circular Timer component that serves as Next button
 const CircularTimer = memo(({ 
@@ -113,6 +114,9 @@ export default function Assessment() {
   const [assessmentStarted, setAssessmentStarted] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   // Removed responses state - not storing transcripts anymore
+  
+  // Microsoft Clarity tracking
+  const { trackAssessmentEvent, trackUserAction, setUserId, setTag } = useClarity(true, 'Standard Assessment');
   
   const currentQuestion = questions[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === questions.length - 1;

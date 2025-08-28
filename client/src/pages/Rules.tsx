@@ -7,6 +7,7 @@ import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useAssessment } from '@/contexts/AssessmentContext';
 import { S3Service, Assessment } from '@/lib/s3Service';
 import { Home } from 'lucide-react';
+import { useClarity } from '@/hooks/useClarity';
 
 export default function Rules() {
   const [, params] = useRoute('/rules/:assessmentId');
@@ -15,6 +16,9 @@ export default function Rules() {
   const [microphonePermission, setMicrophonePermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Microsoft Clarity tracking
+  const { trackUserAction, setUserId, setTag } = useClarity(true, 'Rules');
   
   const { startCamera, hasPermission: hasCameraPermission } = useCameraCapture();
   const { startRecording } = useAudioRecording();

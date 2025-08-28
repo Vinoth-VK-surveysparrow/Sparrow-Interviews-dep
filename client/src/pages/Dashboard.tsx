@@ -9,6 +9,7 @@ import { useS3Upload } from '@/hooks/useS3Upload';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
+import { useClarity } from '@/hooks/useClarity';
 
 // Sparrow logo component using the Symbol.svg
 const SparrowLogo = () => (
@@ -80,6 +81,20 @@ export default function Dashboard() {
   const { user, loading: authLoading } = useAuth();
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  
+  // Microsoft Clarity tracking
+  const { trackUserAction, setUserId, setTag } = useClarity(true, 'Dashboard');
+  
+  // Set user identification for Clarity
+  useEffect(() => {
+    if (user?.email) {
+      setUserId(user.email, user.displayName || undefined);
+      setTag('user_type', 'authenticated');
+      if (selectedTestId) {
+        setTag('current_test', selectedTestId);
+      }
+    }
+  }, [user?.email, user?.displayName, selectedTestId, setUserId, setTag]);
   
   // Debug function for development
   const handleClearCache = () => {
@@ -329,6 +344,14 @@ export default function Dashboard() {
 
     // Find assessment within current test's assessments
     const assessment = assessments.find(a => a.assessment_id === assessmentId);
+    
+    // Track assessment start attempt
+    trackUserAction('assessment_start_attempt', {
+      assessment_id: assessmentId,
+      assessment_name: assessment?.assessment_name || 'unknown',
+      user_email: user.email,
+      test_id: selectedTestId
+    });
     
     if (!assessment) {
       console.error(`❌ Assessment ${assessmentId} not found in current test ${selectedTestId}. Available assessments:`, assessments.map(a => a.assessment_id));

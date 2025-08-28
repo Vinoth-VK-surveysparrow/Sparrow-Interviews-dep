@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Home, Save, Eye, EyeOff, Key, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useClarity } from '@/hooks/useClarity';
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -17,6 +18,9 @@ export default function Settings() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  
+  // Microsoft Clarity tracking
+  const { trackUserAction } = useClarity(true, 'Settings');
   const [isLoading, setIsLoading] = useState(true);
 
   const GEMINI_API_KEY_FETCH_URL = import.meta.env.VITE_GEMINI_API_KEY_FETCH ;

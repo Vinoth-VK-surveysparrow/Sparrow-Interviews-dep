@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AudioUploadService } from '@/lib/audioUploadService';
 import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
 import { WarningBadge } from '@/components/WarningBadge';
+import { useClarity } from '@/hooks/useClarity';
 
 interface EnergyChange {
   timestamp: number;
@@ -64,6 +65,9 @@ export default function ConductorAssessment() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  // Microsoft Clarity tracking
+  const { trackAssessmentEvent, trackUserAction, setUserId, setTag } = useClarity(true, 'Conductor Assessment');
   
   // Behavior monitoring hook
   const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({

@@ -22,6 +22,7 @@ import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
 import { AssessmentSecurity } from "@/components/AssessmentSecurity";
+import { clarityService } from "@/lib/clarityService";
 
 import PermissionsTest from "@/components/PermissionsTest";
 import SecurityRestrictions from "@/components/SecurityRestrictions";
@@ -168,6 +169,11 @@ function Router() {
 }
 
 function App() {
+  // Initialize Microsoft Clarity
+  React.useEffect(() => {
+    clarityService.init();
+  }, []);
+
   // Prevent manual refresh and back button navigation
   React.useEffect(() => {
     // Prevent refresh (Ctrl+R, F5, Cmd+R)

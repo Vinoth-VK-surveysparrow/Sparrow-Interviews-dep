@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
 import { useAuth } from '@/hooks/useAuth';
 import { useS3Upload } from '@/hooks/useS3Upload';
+import { useClarity } from '@/hooks/useClarity';
 import {
   Accordion,
   AccordionContent,
@@ -24,6 +25,9 @@ export default function Results() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { getAudioDownloadUrl } = useS3Upload();
+  
+  // Microsoft Clarity tracking
+  const { trackPageView, trackUserAction, setUserId, setTag } = useClarity(true, 'Results');
 
   useEffect(() => {
     const initializeResults = async () => {

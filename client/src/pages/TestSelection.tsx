@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useClarity } from '@/hooks/useClarity';
 
 // Test interface based on your API response
 interface Test {
@@ -42,6 +43,17 @@ export default function TestSelection() {
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  
+  // Microsoft Clarity tracking
+  const { trackPageView, trackUserAction, setUserId, setTag } = useClarity(true, 'Test Selection');
+
+  // Set user identification for Clarity
+  useEffect(() => {
+    if (user?.email) {
+      setUserId(user.email, user.displayName || undefined);
+      setTag('user_type', 'authenticated');
+    }
+  }, [user?.email, user?.displayName, setUserId, setTag]);
 
   // Fetch user tests on component mount
   useEffect(() => {
@@ -109,6 +121,15 @@ export default function TestSelection() {
     }
 
     setLoadingTest(testId);
+    
+    // Track test selection
+    const selectedTest = tests.find(test => test.test_id === testId);
+    trackUserAction('test_selected', {
+      test_id: testId,
+      test_name: selectedTest?.test_name || 'unknown',
+      user_email: user.email,
+      // is_fallback_test: isShowingFallbackTests
+    });
     
     try {
       console.log('🎯 Selecting test:', testId);

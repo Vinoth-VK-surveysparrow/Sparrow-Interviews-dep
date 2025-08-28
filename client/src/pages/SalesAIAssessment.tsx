@@ -19,6 +19,7 @@ import { useAssessment } from '@/contexts/AssessmentContext';
 import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
 import { WarningBadge } from '@/components/WarningBadge';
 import { motion } from 'framer-motion';
+import { useClarity } from '@/hooks/useClarity';
 
 
 // Hardcoded base system configuration
@@ -146,6 +147,9 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  // Microsoft Clarity tracking
+  const { trackAssessmentEvent, trackUserAction, setUserId, setTag } = useClarity(true, 'Sales AI Assessment');
   const { connected, connect, disconnect, volume, client, setConfig, showApiKeyError, audioStreamer } = useLiveAPIContext();
   const [audioRecorder] = useState(() => new AudioRecorder());
   const [inVolume, setInVolume] = useState(0);

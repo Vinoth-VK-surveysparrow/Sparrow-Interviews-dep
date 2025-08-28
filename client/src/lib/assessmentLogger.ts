@@ -203,15 +203,15 @@ export class AssessmentLogger {
   }
 
   // Add word appearance as separate log entry for TripleStep assessments
-  addWordEvent(word: string, appearedAt: Date, questionText: string, questionId?: string): void {
+  addWordEvent(word: string, appearedAt: Date, questionId?: string): void {
     if (!this.session) {
       console.error('❌ No active assessment session');
       return;
     }
 
-    // Create a separate log entry for this word appearance
+    // Create a separate log entry for this word appearance (only word, not question)
     const wordLog: AssessmentLog = {
-      question: `<question>${questionText}</question><word>${word}</word>`,
+      question: `<word>${word}</word>`,
       question_id: questionId,
       start_time: appearedAt.toISOString()
       // end_time will be set when word is integrated or expires
@@ -220,6 +220,35 @@ export class AssessmentLogger {
     this.session.logs.push(wordLog);
     
     console.log(`[LOGGER] Word "${word}" appeared at ${appearedAt.toISOString()}`);
+  }
+
+  // Log a complete question entry for TripleStep (question text only, immediately completed)
+  logCompleteQuestion(questionText: string, questionId?: string, questionIndex?: number, startTime?: Date, endTime?: Date): void {
+    if (!this.session) {
+      console.error('❌ No active assessment session');
+      return;
+    }
+
+    const questionStartTime = startTime || new Date();
+    const questionEndTime = endTime || new Date();
+    
+    // Create a complete question log entry
+    const questionLog: AssessmentLog = {
+      question: questionText,
+      question_id: questionId,
+      start_time: questionStartTime.toISOString(),
+      end_time: questionEndTime.toISOString(),
+      duration_seconds: Math.round((questionEndTime.getTime() - questionStartTime.getTime()) / 1000)
+    };
+
+    this.session.logs.push(questionLog);
+    
+    // Update current question index if provided
+    if (questionIndex !== undefined) {
+      this.session.current_question_index = questionIndex;
+    }
+
+    console.log(`[LOGGER] Complete question logged: ${questionText.substring(0, 50)}...`);
   }
 
   // Mark word as integrated by completing its log entry
@@ -233,7 +262,7 @@ export class AssessmentLogger {
     const wordLogIndex = [...this.session.logs]
       .reverse()
       .findIndex(log => 
-        log.question.includes(`<word>${word}</word>`) && !log.end_time
+        log.question === `<word>${word}</word>` && !log.end_time
       );
 
     if (wordLogIndex !== -1) {
@@ -263,7 +292,7 @@ export class AssessmentLogger {
     const wordLogIndex = [...this.session.logs]
       .reverse()
       .findIndex(log => 
-        log.question.includes(`<word>${word}</word>`) && !log.end_time
+        log.question === `<word>${word}</word>` && !log.end_time
       );
 
     if (wordLogIndex !== -1) {
@@ -290,7 +319,7 @@ export class AssessmentLogger {
     }
 
     const unfinishedWords = this.session.logs.filter(log => 
-      log.question.includes('<word>') && !log.end_time
+      log.question.startsWith('<word>') && !log.end_time
     );
 
     unfinishedWords.forEach(wordLog => {

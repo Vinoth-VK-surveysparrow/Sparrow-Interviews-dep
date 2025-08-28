@@ -7,10 +7,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { useClarity } from "@/hooks/useClarity";
 
 export default function Login() {
   const { signIn, loading, error, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
+  
+  // Microsoft Clarity tracking
+  const { trackPageView, trackUserAction } = useClarity(true, 'Login Page');
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -19,6 +23,7 @@ export default function Login() {
   }, [isAuthenticated, setLocation]);
 
   const handleGoogleSignIn = async () => {
+    trackUserAction('sign_in_attempt', { method: 'google' });
     await signIn();
   };
 
