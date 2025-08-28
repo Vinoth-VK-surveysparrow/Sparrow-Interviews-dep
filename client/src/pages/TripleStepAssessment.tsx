@@ -12,7 +12,12 @@ import { useAssessment } from '@/contexts/AssessmentContext';
 import { S3Service, Question } from '@/lib/s3Service';
 import { assessmentLogger } from '@/lib/assessmentLogger';
 import TripleStepRules from '@/components/TripleStepRules';
-// CircularTimer component for TripleStep
+
+import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
+import { WarningBadge } from '@/components/WarningBadge';
+
+// Enhanced Circular Timer component for assessments
+
 const CircularTimer = memo(({ 
   timeLeft, 
   isActive, 
@@ -120,6 +125,7 @@ export default function TripleStepAssessment() {
   
   // Standard assessment hooks
   const { 
+
     session, 
     finishAssessment, 
     startSession, 
@@ -133,7 +139,7 @@ export default function TripleStepAssessment() {
   const { startContinuousRecording, stopContinuousRecording, isRecording, forceCleanup } = useContinuousAudioRecording();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true);
   const { fetchQuestions } = useS3Upload();
-
+  
   // Assessment state
   const [gameState, setGameState] = useState<GameState>("rules");
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -550,6 +556,7 @@ export default function TripleStepAssessment() {
         return;
       }
 
+
       // Move to next question
       const nextIndex = currentQuestionIndex + 1;
       const nextQuestion = questions[nextIndex];
@@ -654,6 +661,7 @@ export default function TripleStepAssessment() {
                   <h2 className="text-3xl font-bold text-foreground leading-relaxed">
                   {currentQuestion?.question_text}
                   </h2>
+                  
                 </div>
               </div>
 

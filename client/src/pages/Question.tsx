@@ -6,6 +6,8 @@ import { CircularTimer } from '@/components/CircularTimer';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useAuth } from '@/hooks/useAuth';
+import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
+import { WarningBadge } from '@/components/WarningBadge';
 import { replacePlaceholders } from '@/lib/questionUtils';
 
 const questions = [
@@ -42,6 +44,11 @@ export default function Question() {
   const { videoRef, startCamera, startAutoCapture, stopAutoCapture, captureImage, capturedImages } = useCameraCapture();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(false); // Disable auto-restart for question page
   const { user } = useAuth();
+  const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
+    enabled: true,
+    delayBeforeStart: 25000, // Start monitoring after 15 seconds (when first image is captured)
+    pollingInterval: 20000, // Check every 10 seconds
+  });
 
 
 
@@ -76,6 +83,7 @@ export default function Question() {
     resetTranscript();
     
     if (currentQuestionNumber >= 5) {
+      stopMonitoring();
       setLocation(`/results/${params?.assessmentId}`);
     } else {
       setLocation(`/question/${params?.assessmentId}/${currentQuestionNumber + 1}`);
@@ -114,6 +122,14 @@ export default function Question() {
               <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed">
                 {currentQuestion?.text ? replacePlaceholders(currentQuestion.text, user) : ''}
               </p>
+              
+              {/* Behavior Warning Badge */}
+              <WarningBadge
+                isVisible={showWarning}
+                message={warningMessage}
+                duration={5000}
+                className="mt-6"
+              />
             </div>
           </div>
 

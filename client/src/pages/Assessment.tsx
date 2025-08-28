@@ -96,6 +96,8 @@ import { useAssessment } from '@/contexts/AssessmentContext';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useContinuousAudioRecording } from '@/hooks/useContinuousAudioRecording';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
+import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
+import { WarningBadge } from '@/components/WarningBadge';
 
 // Questions will be fetched from API
 
@@ -131,6 +133,11 @@ export default function Assessment() {
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true); // Enable auto-restart for assessment
   const { fetchQuestions } = useS3Upload();
   const { user, loading: authLoading } = useAuth();
+  const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
+    enabled: true,
+    delayBeforeStart: 25000, // Start monitoring after 15 seconds (when first image is captured)
+    pollingInterval: 20000, // Check every 10 seconds
+  });
 
   // Audio verification with retry mechanism
   const verifyAudioWithRetry = async (maxRetries: number = 5, delayMs: number = 2000): Promise<boolean> => {
@@ -421,6 +428,9 @@ export default function Assessment() {
         
         forceCleanup();
         
+        // Stop behavior monitoring
+        stopMonitoring();
+        
         // Only navigate after audio upload and logs are complete
         
         setLocation(`/results/${params?.assessmentId}`);
@@ -526,6 +536,14 @@ export default function Assessment() {
           <h2 className="text-5xl font-bold text-gray-900 dark:text-white mb-6 leading-relaxed max-w-6xl mx-auto">
             {currentQuestion ? replacePlaceholders(currentQuestion.question_text, user) : 'Loading question...'}
           </h2>
+          
+          {/* Behavior Warning Badge */}
+          <WarningBadge
+            isVisible={showWarning}
+            message={warningMessage}
+            duration={5000}
+            className="mt-4"
+          />
         </div>
 
         {/* Main Content Area */}

@@ -16,7 +16,10 @@ import { AudioUploadService } from '@/lib/audioUploadService';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useAssessmentLogger } from '@/hooks/useAssessmentLogger';
 import { useAssessment } from '@/contexts/AssessmentContext';
+import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
+import { WarningBadge } from '@/components/WarningBadge';
 import { motion } from 'framer-motion';
+
 
 // Hardcoded base system configuration
 const HARDCODED_BASE_CONFIG = {
@@ -192,6 +195,12 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     stopAutoCapture, 
     capturedImages 
   } = useCameraCapture();
+  
+  const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
+    enabled: true,
+    delayBeforeStart: 25000, // Start monitoring after 15 seconds (when first image is captured)
+    pollingInterval: 20000, // Check every 10 seconds
+  });
 
   // Assessment timing
   const assessmentStartTimeRef = useRef<Date | null>(null);
@@ -801,6 +810,10 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
+      
+      // Stop behavior monitoring
+      stopMonitoring();
+      
       setHasStarted(false);
       setTimeLeft(300); // Reset timer
       
@@ -1195,6 +1208,24 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         </div>
       </div>
 
+
+      {/* Behavior Warning Badge */}
+      <div style={{ 
+        position: 'absolute', 
+        top: '150px', 
+        left: '50%', 
+        transform: 'translateX(-50%)', 
+        zIndex: 20,
+        width: '100%',
+        maxWidth: '600px'
+      }}>
+        <WarningBadge
+          isVisible={showWarning}
+          message={warningMessage}
+          duration={5000}
+        />
+      </div>
+
       {/* AI Connection Status */}
       <div className="connection-status">
         {connected ? (
@@ -1208,6 +1239,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             <span>AI Disconnected</span>
           </div>
         )}
+
       </div>
 
       {/* Video Section - AI Robot Left, User Camera Right */}

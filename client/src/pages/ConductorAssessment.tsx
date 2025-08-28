@@ -8,6 +8,8 @@ import { Home, Mic, MicOff, Play, Download } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { AudioUploadService } from '@/lib/audioUploadService';
+import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
+import { WarningBadge } from '@/components/WarningBadge';
 
 interface EnergyChange {
   timestamp: number;
@@ -62,6 +64,13 @@ export default function ConductorAssessment() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  // Behavior monitoring hook
+  const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
+    enabled: true,
+    delayBeforeStart: 15000, // Start monitoring after 15 seconds (when first image is captured)
+    pollingInterval: 10000, // Check every 10 seconds
+  });
 
   const [assessmentState, setAssessmentState] = useState<AssessmentState>("loading");
   const [config, setConfig] = useState<ConductorConfig | null>(null);
@@ -1046,6 +1055,16 @@ export default function ConductorAssessment() {
                           max-w-5xl mx-auto text-center">
               {currentTopic}
             </h2>
+            
+            {/* Behavior Warning Badge */}
+            <div className="text-center">
+              <WarningBadge
+                isVisible={showWarning}
+                message={warningMessage}
+                duration={5000}
+                className="mt-4"
+              />
+            </div>
 
             {/* Timer Aligned Right */}
             <div className="absolute right-0 top-1/2 -translate-y-1/2">
@@ -1357,7 +1376,9 @@ export default function ConductorAssessment() {
               Try Again
             </Button>
             <Button 
+
               onClick={() => setLocation('/test-selection')}
+
               size="lg"
               className="bg-primary hover:bg-primary/90"
             >
