@@ -9,6 +9,12 @@ import { Home, Save, Eye, EyeOff, Key, AlertCircle, CheckCircle } from 'lucide-r
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useClarity } from '@/hooks/useClarity';
+import { 
+  fetchGeminiApiKey, 
+  saveGeminiApiKey, 
+  clearGeminiApiKey, 
+  validateGeminiApiKey 
+} from '@/services/geminiApiService';
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -23,50 +29,7 @@ export default function Settings() {
   const { trackUserAction } = useClarity(true, 'Settings');
   const [isLoading, setIsLoading] = useState(true);
 
-  const GEMINI_API_KEY_FETCH_URL = import.meta.env.VITE_GEMINI_API_KEY_FETCH;
 
-  // API Key Service Functions
-  const fetchApiKey = async (userEmail: string) => {
-    try {
-      const encodedEmail = encodeURIComponent(userEmail);
-      const response = await fetch(`${GEMINI_API_KEY_FETCH_URL}/api-key/${encodedEmail}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success' && data.data?.api_key) {
-          return data.data.api_key;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('Error fetching API key:', error);
-      return null;
-    }
-  };
-
-  const saveApiKeyToBackend = async (userEmail: string, apiKey: string) => {
-    try {
-      const response = await fetch(`${GEMINI_API_KEY_FETCH_URL}/api-key`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: userEmail,
-          api_key: apiKey,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data.status === 'success';
-      }
-      return false;
-    } catch (error) {
-      console.error('Error saving API key:', error);
-      return false;
-    }
-  };
 
   // Load API key from backend on component mount
   useEffect(() => {
@@ -77,7 +40,7 @@ export default function Settings() {
       }
 
       try {
-        const apiKey = await fetchApiKey(user.email);
+        const apiKey = await fetchGeminiApiKey(user.email);
         if (apiKey) {
           setGeminiApiKey(apiKey);
         }
@@ -112,13 +75,16 @@ export default function Settings() {
 
     setIsSaving(true);
     try {
-      const success = await saveApiKeyToBackend(user.email, geminiApiKey.trim());
+      const success = await saveGeminiApiKey(user.email, geminiApiKey.trim());
       
       if (success) {
         toast({
           title: 'API Key Saved',
           description: 'Your Gemini API key has been saved successfully.',
         });
+        
+        // Trigger storage event for other components to update
+        window.dispatchEvent(new Event('storage'));
       } else {
         toast({
           variant: 'destructive',
@@ -150,19 +116,12 @@ export default function Settings() {
 
     setIsTestingConnection(true);
     try {
-      // Test the API key by making a simple request to the Gemini API
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey.trim()}`);
+      const isValid = await validateGeminiApiKey(geminiApiKey.trim());
       
-      if (response.ok) {
+      if (isValid) {
         toast({
           title: 'Connection Successful',
           description: 'Your Gemini API key is valid and working.',
-        });
-      } else if (response.status === 403) {
-        toast({
-          variant: 'destructive',
-          title: 'Invalid API Key',
-          description: 'The provided API key is invalid or does not have the required permissions.',
         });
       } else {
         toast({
@@ -194,14 +153,25 @@ export default function Settings() {
     }
 
     try {
-      // Clear from backend by saving empty string
-      await saveApiKeyToBackend(user.email, '');
-      setGeminiApiKey('');
+      const success = await clearGeminiApiKey(user.email);
       
-      toast({
-        title: 'API Key Cleared',
-        description: 'Your Gemini API key has been removed.',
-      });
+      if (success) {
+        setGeminiApiKey('');
+        
+        toast({
+          title: 'API Key Cleared',
+          description: 'Your Gemini API key has been removed.',
+        });
+        
+        // Trigger storage event for other components to update
+        window.dispatchEvent(new Event('storage'));
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Clear Failed',
+          description: 'Failed to clear the API key. Please try again.',
+        });
+      }
     } catch (error) {
       console.error('Error clearing API key:', error);
       toast({

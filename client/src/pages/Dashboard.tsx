@@ -75,10 +75,8 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   // Role-based access state
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
-  // Games-arena API key state
-  const [hasGeminiApiKey, setHasGeminiApiKey] = useState(false);
   const { initiateAssessment, fetchQuestions } = useS3Upload();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, hasGeminiApiKey } = useAuth();
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   
@@ -108,36 +106,7 @@ export default function Dashboard() {
     }
   };
 
-  // Check for Gemini API key from backend
-  useEffect(() => {
-    const checkApiKey = async () => {
-      if (!user?.email) {
-        setHasGeminiApiKey(false);
-        return;
-      }
 
-      try {
-        const encodedEmail = encodeURIComponent(user.email);
-        const response = await fetch(`https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key/${encodedEmail}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.status === 'success' && data.data?.api_key) {
-            setHasGeminiApiKey(true);
-            console.log(`🔑 Dashboard - User ${user.email} has API key: true`);
-            return;
-          }
-        }
-        setHasGeminiApiKey(false);
-        console.log(`🔑 Dashboard - User ${user.email} has API key: false`);
-      } catch (error) {
-        console.error('Error checking API key:', error);
-        setHasGeminiApiKey(false);
-      }
-    };
-    
-    checkApiKey();
-  }, [user?.email]);
 
   // State to trigger refresh when returning from assessments
   const [refreshTrigger, setRefreshTrigger] = useState(0);

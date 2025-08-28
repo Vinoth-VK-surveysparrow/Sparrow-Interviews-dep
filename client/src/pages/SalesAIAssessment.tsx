@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Home, Mic, MicOff, Square, Settings as SettingsIcon } from 'lucide-react';
+import { Home, Mic, MicOff, Square, Settings as SettingsIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { LiveAPIProvider, useLiveAPIContext } from '@/contexts/LiveAPIContext';
@@ -34,53 +34,94 @@ const HARDCODED_BASE_CONFIG = {
         } 
       },
     },
-    // Add audio quality and completion settings
-    candidateCount: 1,
-    maxOutputTokens: 4096, // Increased for longer responses
-    temperature: 0.5, // Slightly more natural variation
-    topP: 0.95,
-    topK: 40
+    temperature: 0.8,
+    maxOutputTokens: 8192,
   },
   systemInstruction: {
-    parts: [] // Will be populated dynamically with cue card + video prompt
+    parts: [] // Will be populated dynamically with persona + backend prompt + video prompt
   }
+};
+
+// Persona definitions
+const PERSONAS = [
+  {
+    name: "Mike",
+    description: "Vice President of Human Resources at a mid-sized tech company, focused on employee engagement, culture, and retention.",
+    ai_prompt: "You are Mike, the Vice President of Human Resources at a mid-sized technology company with around 1,200 employees."
+  },
+  {
+    name: "Eric",
+    description: "Director of Customer Success at a fast-growing SaaS company, responsible for customer adoption, renewals, and long-term client value.",
+    ai_prompt: "You are Eric, the Director of Customer Success at a fast-growing SaaS company with about 400 employees."
+  },
+  {
+    name: "John",
+    description: "Head of Marketing at a national retail brand, leading campaigns, brand strategy, and customer insights initiatives.",
+    ai_prompt: "You are John, the Head of Marketing at a national retail brand with both physical branches and a strong e-commerce presence."
+  }
+];
+
+// Function to select a random persona
+const selectRandomPersona = () => {
+  const randomIndex = Math.floor(Math.random() * PERSONAS.length);
+  return PERSONAS[randomIndex];
 };
 
 // Default conversation starter prompt
 const HARDCODED_CONVERSATION_STARTER = {
-  text: "CONVERSATION INITIATION: When this conversation begins, act as a prospect who has just received a cold call. Start by reacting naturally as any prospect would - perhaps with a brief greeting, asking who's calling, or showing initial skepticism. Wait for the salesperson to introduce themselves and their company before fully engaging. Your initial response should be realistic and set the tone for a natural sales conversation.(only in english)"
+  text: "ROLE DEFINITION: You ARE the prospect character described below. This is your identity and personality. You are receiving a sales call from someone. Respond as this character would respond - with their specific background, concerns, and communication style. Start the conversation by reacting naturally to receiving this call, perhaps asking who's calling or showing initial skepticism. Stay in character throughout the entire conversation. Speak only in English."
 };
 
 // Hardcoded video enhancement prompt - for visual awareness only
 const HARDCODED_VIDEO_PROMPT = {
-  text: "VISUAL AWARENESS: I can see you through the video feed. I'll pay attention to your facial expressions, body language, and visual cues while we talk to make this interaction more natural and engaging. As a prospect evaluating your solution, I'll notice your professionalism, confidence, and how well you present yourself during our conversation."
+  text: "VISUAL AWARENESS: You can see the salesperson through the video feed. As this prospect character, pay attention to their facial expressions, body language, and visual cues to make your responses more natural and realistic. React as this character would to their professionalism, confidence, and presentation style during the conversation."
 };
 
-// Helper function to convert DynamoDB prompt format to LiveConfig format
-const convertDynamoPromptToLiveConfig = (dynamoPrompt: DynamoPrompt): LiveConfig => {
+// Helper function to create LiveConfig with persona and backend prompt
+const createLiveConfigWithPersona = (dynamoPrompt: DynamoPrompt, selectedPersona: any): LiveConfig => {
   const parts: Array<{ text: string }> = [];
+
+  console.log('🔧 Creating LiveConfig with persona:', selectedPersona.name);
+  console.log('🔧 Backend prompt data:', dynamoPrompt);
 
   // Add conversation starter first
   parts.push(HARDCODED_CONVERSATION_STARTER);
+  console.log('✅ Added conversation starter');
 
-  // Add dynamic prospect persona parts from backend (main character and behavior)
+  // Add the selected persona prompt (this is the main character)
+  parts.push({ text: selectedPersona.ai_prompt });
+  console.log('✅ Added persona prompt for:', selectedPersona.name);
+  console.log('📝 Persona prompt preview:', selectedPersona.ai_prompt.substring(0, 100) + '...');
+
+  // Add dynamic backend prompt parts (additional context/scenario)
   if (dynamoPrompt.parts?.L) {
-    dynamoPrompt.parts.L.forEach(part => {
+    dynamoPrompt.parts.L.forEach((part, index) => {
       if (part.M?.text?.S) {
         parts.push({ text: part.M.text.S });
+        console.log(`✅ Added backend prompt part ${index + 1}:`, part.M.text.S.substring(0, 100) + '...');
       }
     });
+    console.log(`📋 Total backend prompt parts added: ${dynamoPrompt.parts.L.length}`);
+  } else {
+    console.warn('⚠️ No backend prompt parts found in dynamoPrompt');
   }
 
   // Add video awareness prompt last
   parts.push(HARDCODED_VIDEO_PROMPT);
+  console.log('✅ Added video awareness prompt');
 
-  return {
+  console.log('🎯 Final prompt structure - Total parts:', parts.length);
+  console.log('🎯 All prompt parts:', parts.map((part, i) => `${i + 1}. ${part.text.substring(0, 80)}...`));
+
+  const config = {
     ...HARDCODED_BASE_CONFIG,
     systemInstruction: {
       parts
     }
   };
+
+  console.log('🚀 Final LiveConfig created:', config);
+  return config;
 };
 
 interface SalesAIAssessmentContentProps {
@@ -121,6 +162,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
   const [promptConfig, setPromptConfig] = useState<LiveConfig | null>(null);
   const [loadingPrompt, setLoadingPrompt] = useState(true);
+  const [selectedPersona, setSelectedPersona] = useState<any>(null);
+  const [scenarioInfo, setScenarioInfo] = useState<{title: string, description: string} | null>(null);
   const [conversationComplete, setConversationComplete] = useState(false);
   const dualRecorderRef = useRef<DualAudioRecorder | null>(null);
   const [recordedAudio, setRecordedAudio] = useState<{
@@ -133,6 +176,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   // Recording system (simplified for now)
   const [isRecordingActive, setIsRecordingActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [stopButtonClicked, setStopButtonClicked] = useState(false);
+  const [startButtonClicked, setStartButtonClicked] = useState(false);
 
   // Standard assessment workflow integration
   const { 
@@ -219,6 +264,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     };
 
     client.on("audio", handleAudio);
+    
     return () => {
       client.off("audio", handleAudio);
     };
@@ -333,63 +379,124 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
 
         console.log(`✅ Games-arena assessment ${assessmentId} validated in test ${selectedTestId}`);
         
-        // For Games-arena type, we need to handle the response differently
-        // since it returns prompt data instead of questions
-        const fetchResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/fetch-questions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_email: user.email,
-            assessment_id: assessmentId,
-            type: 'Games-arena'
-          }),
+        // Use the standard S3Service.fetchQuestions which includes completion checks
+        // This ensures the same workflow as other assessments
+        const questionsData = await S3Service.fetchQuestions({
+          user_email: user.email,
+          assessment_id: assessmentId,
+          type: 'Games-arena'
         });
-
-        if (!fetchResponse.ok) {
-          throw new Error(`Failed to fetch prompt: ${fetchResponse.status} ${fetchResponse.statusText}`);
-        }
-
-        const data = await fetchResponse.json();
-        console.log('Raw fetch response:', data);
+        console.log('Raw fetch response:', questionsData);
         
-        // Extract prompt from the content or questions field (for Games-arena type)
-        const promptData = data?.content || data?.questions;
+        // Select a random persona
+        const randomPersona = selectRandomPersona();
+        setSelectedPersona(randomPersona);
+        console.log(`🎭 Selected persona: ${randomPersona.name} - ${randomPersona.description}`);
+
+        // For Games-arena, the questions data might have a different structure
+        // Try to extract prompt from the questions array or directly from response
+        let promptData = null;
+        if (Array.isArray(questionsData) && questionsData.length > 0) {
+          // If it's an array of questions, check the first question's text for JSON data
+          const firstQuestion = questionsData[0];
+          try {
+            // Try to parse the question text as JSON (for Games-arena prompts)
+            promptData = JSON.parse(firstQuestion.question_text);
+          } catch {
+            // If parsing fails, use the question text directly
+            promptData = { parts: { L: [{ S: firstQuestion.question_text }] } };
+          }
+        } else {
+          // Fallback to hardcoded data
+          promptData = null;
+        }
+        
         if (promptData && promptData.parts?.L) {
-          const dynamicConfig = convertDynamoPromptToLiveConfig(promptData);
+          console.log('🎯 Found backend prompt data with', promptData.parts.L.length, 'parts');
+          
+          // Extract scenario information from backend prompt
+          const scenarioTitle = promptData.prompt_name?.S || 'Assessment Scenario';
+          const scenarioDescription = promptData.Meaning?.S || 'Interactive conversation with AI prospect';
+          setScenarioInfo({ title: scenarioTitle, description: scenarioDescription });
+          console.log('📋 Scenario extracted:', scenarioTitle, '-', scenarioDescription);
+          
+          const dynamicConfig = createLiveConfigWithPersona(promptData, randomPersona);
+          
+          // Set the configuration for both internal state and LiveAPI
           setPromptConfig(dynamicConfig);
           setConfig(dynamicConfig);
-          console.log('Successfully configured dynamic prompt with', promptData.parts.L.length, 'parts');
+          console.log('🚀 SENT TO AI: Dynamic config with persona:', randomPersona.name, 'and', promptData.parts.L.length, 'backend parts');
+          console.log('🔍 Config sent to LiveAPI:', JSON.stringify(dynamicConfig, null, 2));
         } else {
-          // Fallback to base config with conversation starter and video prompt
-          console.warn('No prompt found in response, using base config with conversation starter and video awareness');
+          // Fallback to base config with persona, conversation starter and video prompt
+          console.warn('⚠️ No backend prompt found, using fallback config with selected persona');
+          console.log('📝 Creating fallback config for persona:', randomPersona.name);
+          
           const fallbackConfig = {
             ...HARDCODED_BASE_CONFIG,
             systemInstruction: {
-              parts: [HARDCODED_CONVERSATION_STARTER, HARDCODED_VIDEO_PROMPT]
+              parts: [
+                HARDCODED_CONVERSATION_STARTER, 
+                { text: randomPersona.ai_prompt },
+                HARDCODED_VIDEO_PROMPT
+              ]
             }
           };
+          
           setPromptConfig(fallbackConfig);
           setConfig(fallbackConfig);
+          console.log('🚀 SENT TO AI: Fallback config with persona:', randomPersona.name);
+          console.log('🔍 Fallback config sent to LiveAPI:', JSON.stringify(fallbackConfig, null, 2));
         }
       } catch (error) {
         console.error('Error fetching prompt:', error);
+        
+        // Check if assessment is already completed
+        if (error instanceof Error && error.message.includes('ASSESSMENT_COMPLETED')) {
+          const completionDataMatch = error.message.match(/ASSESSMENT_COMPLETED:(.+)/);
+          if (completionDataMatch) {
+            const completionData = JSON.parse(completionDataMatch[1]);
+            toast({
+              title: "Assessment Already Completed",
+              description: `This assessment was completed on ${new Date(completionData.completed_at).toLocaleDateString()}. Redirecting to results...`,
+              variant: "default",
+            });
+            
+            setTimeout(() => {
+              setLocation(`/results/${assessmentId}`);
+            }, 2000);
+            return;
+          }
+        }
+        
         toast({
           variant: 'destructive',
           title: 'Configuration Error',
           description: 'Failed to load assessment configuration. Using default settings.',
         });
         
-        // Fallback to base config with conversation starter and video prompt
+        // Even in error case, ensure we have a persona selected
+        if (!selectedPersona) {
+          const errorPersona = selectRandomPersona();
+          setSelectedPersona(errorPersona);
+          console.log(`🎭 Error fallback - Selected persona: ${errorPersona.name}`);
+        }
+        
+        // Fallback to base config with persona, conversation starter and video prompt
         const fallbackConfig = {
           ...HARDCODED_BASE_CONFIG,
           systemInstruction: {
-            parts: [HARDCODED_CONVERSATION_STARTER, HARDCODED_VIDEO_PROMPT]
+            parts: [
+              HARDCODED_CONVERSATION_STARTER,
+              { text: selectedPersona?.ai_prompt || 'You are a professional prospect evaluating solutions.' },
+              HARDCODED_VIDEO_PROMPT
+            ]
           }
         };
         setPromptConfig(fallbackConfig);
         setConfig(fallbackConfig);
+        console.log('🚀 SENT TO AI: Error fallback config with persona:', selectedPersona?.name || 'default');
+        console.log('🔍 Error fallback config sent to LiveAPI:', JSON.stringify(fallbackConfig, null, 2));
       } finally {
         setLoadingPrompt(false);
       }
@@ -466,6 +573,14 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
 
   // Stop dual recording function
   const stopDualRecording = async () => {
+    // Prevent multiple clicks
+    if (stopButtonClicked || isUploading) {
+      console.log('🛑 Stop already in progress, ignoring click...');
+      return;
+    }
+    
+    setStopButtonClicked(true);
+    
     try {
       console.log('🛑 Stopping dual recording...');
       
@@ -577,6 +692,9 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       // Still set as complete even if there's an error
       setConversationComplete(true);
       setIsRecordingActive(false);
+    } finally {
+      // Reset stop button state after completion
+      setStopButtonClicked(false);
     }
   };
 
@@ -616,7 +734,10 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   const progressPercentage = ((300 - timeLeft) / 300) * 100;
 
   const handleStartClick = async () => {
-    if (!hasStarted) {
+    if (!hasStarted && !startButtonClicked) {
+      // Disable button immediately to prevent multiple clicks
+      setStartButtonClicked(true);
+      
       try {
         // Start standard assessment session
         if (user?.email && assessmentId) {
@@ -646,6 +767,15 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           });
         }
         
+        // Ensure config is set right before connection
+        if (promptConfig) {
+          console.log('🔄 Re-applying config before connection:', promptConfig);
+          setConfig(promptConfig);
+        } else {
+          console.error('❌ No promptConfig available before connection!');
+        }
+        
+        // Connect to AI and start assessment
         await connect();
         
         // Start dual recording
@@ -660,6 +790,9 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         });
       } catch (error) {
         console.error('Error starting assessment:', error);
+        // Reset button state on error
+        setStartButtonClicked(false);
+        
         if (error instanceof Error) {
           if (error.message === 'ASSESSMENT_ALREADY_COMPLETED') {
             console.log('🔄 Assessment already completed, redirecting to results...');
@@ -718,7 +851,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   };
 
   const goHome = () => {
-    setLocation('/dashboard');
+    setLocation('/test-selection');
   };
 
 
@@ -751,71 +884,297 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
               Sales AI Assessment
             </h2>
             <p className="text-gray-600 dark:text-gray-300">
-              {loadingPrompt ? "Loading assessment configuration..." : "Ready to start your conversation with the AI prospect?"}
+              {loadingPrompt ? "Preparing your AI prospect experience..." : "Ready to start your conversation with the AI prospect?"}
             </p>
           </div>
 
           {/* Assessment Info Card */}
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm p-6">
-              {loadingPrompt ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <span className="ml-3 text-gray-600 dark:text-gray-300">Loading configuration...</span>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <span className="text-purple-600 text-sm">🤖</span>
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900 dark:text-white">AI Prospect Challenge</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-300">Interactive conversation with an analytical prospect</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-blue-600 text-sm">⏱️</span>
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900 dark:text-white">Duration</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-300">5 minutes maximum</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                      <span className="text-green-600 text-sm">🎯</span>
-                    </div>
-                    <div>
-                      <h3 className="font-medium text-gray-900 dark:text-white">Objective</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-300">Handle competitive pressure and build trust</p>
+          {loadingPrompt ? (
+            /* Loading Placeholder with Circular Design */
+            <div className="w-full max-w-5xl mx-auto px-4">
+              {/* Desktop layout placeholder */}
+              <div className="hidden md:flex relative items-center">
+                {/* Avatar Placeholder with Circles */}
+                <div className="w-[470px] h-[470px] rounded-3xl overflow-hidden bg-gray-100 dark:bg-gray-800 flex-shrink-0 relative">
+                  {/* Circular background pattern */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {/* Outer circles */}
+                    <div className="absolute w-96 h-96 rounded-full border-2 border-purple-200 dark:border-purple-800 opacity-30 animate-pulse"></div>
+                    <div className="absolute w-80 h-80 rounded-full border-2 border-purple-300 dark:border-purple-700 opacity-40 animate-pulse" style={{animationDelay: '0.5s'}}></div>
+                    <div className="absolute w-64 h-64 rounded-full border-2 border-purple-400 dark:border-purple-600 opacity-50 animate-pulse" style={{animationDelay: '1s'}}></div>
+                    
+                    {/* Center AI Robot */}
+                    <div className="relative z-10 p-8 bg-purple-500 rounded-full shadow-2xl">
+                      <AIRobotIcon />
                     </div>
                   </div>
                 </div>
-              )}
+
+                {/* Card Placeholder */}
+                <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 ml-[-80px] z-10 max-w-xl flex-1">
+                  <div className="animate-pulse">
+                    <div className="mb-6">
+                      <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-lg mb-2"></div>
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-lg w-3/4"></div>
+                    </div>
+
+                    <div className="mb-6">
+                      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-lg mb-3 w-1/3"></div>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+                        <div className="h-5 bg-blue-200 dark:bg-blue-800 rounded mb-2 w-2/3"></div>
+                        <div className="h-4 bg-blue-200 dark:bg-blue-800 rounded mb-1"></div>
+                        <div className="h-4 bg-blue-200 dark:bg-blue-800 rounded w-4/5"></div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-100 dark:bg-green-800 rounded-full"></div>
+                        <div>
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded mb-1 w-16"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-100 dark:bg-purple-800 rounded-full"></div>
+                        <div>
+                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded mb-1 w-14"></div>
+                          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-18"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mobile layout placeholder */}
+              <div className="md:hidden max-w-sm mx-auto text-center">
+                {/* Avatar Placeholder Mobile */}
+                <div className="w-full aspect-square bg-gray-100 dark:bg-gray-800 rounded-3xl overflow-hidden mb-6 relative">
+                  {/* Circular background pattern mobile */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="absolute w-72 h-72 rounded-full border-2 border-purple-200 dark:border-purple-800 opacity-30 animate-pulse"></div>
+                    <div className="absolute w-56 h-56 rounded-full border-2 border-purple-300 dark:border-purple-700 opacity-40 animate-pulse" style={{animationDelay: '0.5s'}}></div>
+                    <div className="absolute w-40 h-40 rounded-full border-2 border-purple-400 dark:border-purple-600 opacity-50 animate-pulse" style={{animationDelay: '1s'}}></div>
+                    
+                    {/* Center AI Robot Mobile */}
+                    <div className="relative z-10 p-6 bg-purple-500 rounded-full shadow-2xl scale-75">
+                      <AIRobotIcon />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card content placeholder mobile */}
+                <div className="px-4 animate-pulse">
+                  <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded-lg mb-2 mx-auto w-32"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-lg mb-4 mx-auto w-48"></div>
+                  
+                  <div className="mb-6">
+                    <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded-lg mb-2 mx-auto w-20"></div>
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+                      <div className="h-4 bg-blue-200 dark:bg-blue-800 rounded mb-1 w-3/4 mx-auto"></div>
+                      <div className="h-3 bg-blue-200 dark:bg-blue-800 rounded mx-auto"></div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 justify-center">
+                      <div className="w-8 h-8 bg-green-100 dark:bg-green-800 rounded-full"></div>
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 justify-center">
+                      <div className="w-8 h-8 bg-purple-100 dark:bg-purple-800 rounded-full"></div>
+                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-36"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Loading text */}
+              <div className="text-center mt-8">
+                <p className="text-gray-500 dark:text-gray-400 text-sm animate-pulse">Preparing your AI prospect...</p>
+              </div>
             </div>
-            
-            {/* Warning Badge */}
-            <WarningBadge 
-              show={showWarning} 
-              message={warningMessage}
-              className="mt-4"
-            />
-          </div>
+          ) : (
+            /* Single Random Persona Display */
+            <div className="w-full max-w-5xl mx-auto px-4">
+              {/* Desktop layout */}
+              <div className="hidden md:flex relative items-center">
+                {/* Avatar */}
+                <div className="w-[470px] h-[470px] rounded-3xl overflow-hidden bg-gray-200 dark:bg-neutral-800 flex-shrink-0">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="w-full h-full"
+                  >
+                    <img
+                      src="/ai-profile.png"
+                      alt={selectedPersona ? selectedPersona.name : 'AI Prospect'}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                  </motion.div>
+                </div>
+
+                {/* Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 ml-[-80px] z-10 max-w-xl flex-1">
+                  <motion.div
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+                  >
+                    <div className="mb-6">
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                        {selectedPersona ? selectedPersona.name : 'AI Prospect'}
+                      </h2>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-500">
+                        {selectedPersona ? selectedPersona.description : 'Interactive conversation with an analytical prospect'}
+                      </p>
+                    </div>
+
+                    {/* Scenario Section */}
+                    <div className="mb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                        Scenario
+                      </h3>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+                        <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                          {scenarioInfo?.title || 'Assessment Challenge'}
+                        </h4>
+                        <p className="text-blue-700 dark:text-blue-300 text-sm leading-relaxed">
+                          {scenarioInfo?.description || 'Handle competitive pressure and build trust with this prospect'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Assessment Details */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center">
+                          <span className="text-green-600 dark:text-green-300">⏱️</span>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-white">Duration</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">5 minutes max</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-purple-100 dark:bg-purple-800 rounded-full flex items-center justify-center">
+                          <span className="text-purple-600 dark:text-purple-300">🎯</span>
+                        </div>
+                        <div>
+                          <h4 className="font-medium text-gray-900 dark:text-white">Format</h4>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">Live video</p>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              </div>
+
+              {/* Mobile layout */}
+              <div className="md:hidden max-w-sm mx-auto text-center bg-transparent">
+                {/* Avatar */}
+                <div className="w-full aspect-square bg-gray-200 dark:bg-gray-700 rounded-3xl overflow-hidden mb-6">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="w-full h-full"
+                  >
+                    <img
+                      src="/ai-profile.png"
+                      alt={selectedPersona ? selectedPersona.name : 'AI Prospect'}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                  </motion.div>
+                </div>
+
+                {/* Card content */}
+                <div className="px-4">
+                  <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+                  >
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                      {selectedPersona ? selectedPersona.name : 'AI Prospect'}
+                    </h2>
+                    
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-4">
+                      {selectedPersona ? selectedPersona.description : 'Interactive conversation with an analytical prospect'}
+                    </p>
+                    
+                    {/* Scenario Section Mobile */}
+                    <div className="mb-6">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                        Scenario
+                      </h3>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+                        <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                          {scenarioInfo?.title || 'Assessment Challenge'}
+                        </h4>
+                        <p className="text-blue-700 dark:text-blue-300 text-sm leading-relaxed">
+                          {scenarioInfo?.description || 'Handle competitive pressure and build trust with this prospect'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {/* Assessment Details Mobile */}
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 justify-center">
+                        <div className="w-8 h-8 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center">
+                          <span className="text-green-600 dark:text-green-300 text-sm">⏱️</span>
+                        </div>
+                        <div className="text-left">
+                          <h4 className="font-medium text-gray-900 dark:text-white">5 minutes maximum</h4>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3 justify-center">
+                        <div className="w-8 h-8 bg-purple-100 dark:bg-purple-800 rounded-full flex items-center justify-center">
+                          <span className="text-purple-600 dark:text-purple-300 text-sm">🎯</span>
+                        </div>
+                        <div className="text-left">
+                          <h4 className="font-medium text-gray-900 dark:text-white">Live video conversation</h4>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Start Button */}
           <div className="text-center">
-            <Button 
+            <button 
               onClick={handleStartClick}
-              disabled={loadingPrompt}
-              className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg font-semibold text-lg disabled:bg-gray-400"
+              disabled={loadingPrompt || startButtonClicked}
+              className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:opacity-60 text-white py-4 px-8 rounded-lg font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none disabled:shadow-lg focus:outline-none focus:ring-4 focus:ring-blue-300"
             >
-              <Mic className="w-5 h-5 mr-2" />
-              {loadingPrompt ? "Loading..." : "Start Assessment"}
-            </Button>
+              {loadingPrompt ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  Loading...
+                </>
+              ) : startButtonClicked ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  Starting...
+                </>
+              ) : (
+                <>
+                  <Mic className="w-5 h-5 mr-2" />
+                  Start Assessment
+                </>
+              )}
+            </button>
           </div>
         </div>
       </main>
@@ -875,6 +1234,40 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         </div>
       </div>
 
+
+      {/* Behavior Warning Badge */}
+      <div style={{ 
+        position: 'absolute', 
+        top: '150px', 
+        left: '50%', 
+        transform: 'translateX(-50%)', 
+        zIndex: 20,
+        width: '100%',
+        maxWidth: '600px'
+      }}>
+        <WarningBadge
+          isVisible={showWarning}
+          message={warningMessage}
+          duration={5000}
+        />
+      </div>
+
+      {/* AI Connection Status */}
+      <div className="connection-status">
+        {connected ? (
+          <div className="status-connected">
+            <div className="w-4 h-4 bg-green-500 rounded-full"></div>
+            <span>AI Connected</span>
+          </div>
+        ) : (
+          <div className="status-disconnected">
+            <div className="w-4 h-4 bg-red-500 rounded-full"></div>
+            <span>AI Disconnected</span>
+          </div>
+        )}
+
+      </div>
+
       {/* Video Section - AI Robot Left, User Camera Right */}
       <div className="video-containers">
         {/* AI Robot Container - Left */}
@@ -890,6 +1283,9 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
               </div>
             </div>
           </div>
+          <span className="participant-label">
+            {selectedPersona ? `${selectedPersona.name} (AI Prospect)` : 'AI Prospect'}
+          </span>
         </div>
 
         {/* User Camera Container - Right */}
@@ -937,10 +1333,25 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       {/* Stop Button */}
       <button
         onClick={handleStartClick}
-        className="stop-conversation-btn"
+        disabled={stopButtonClicked || isUploading}
+        className={`stop-conversation-btn ${(stopButtonClicked || isUploading) ? 'disabled' : ''}`}
       >
-        <Square className="w-4 h-4" />
-        Stop the Convo
+        {isUploading ? (
+          <>
+            <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-white"></div>
+            Uploading...
+          </>
+        ) : stopButtonClicked ? (
+          <>
+            <Square className="w-4 h-4" />
+            Processing...
+          </>
+        ) : (
+          <>
+            <Square className="w-4 h-4" />
+            Stop the Convo
+          </>
+        )}
       </button>
 
       <style dangerouslySetInnerHTML={{
@@ -962,6 +1373,36 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
+          }
+
+          .connection-status {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            z-index: 10;
+          }
+
+          .status-connected,
+          .status-disconnected {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 0.75rem 1rem;
+            rounded: 0.5rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 0.5rem;
+          }
+
+          .status-connected span {
+            color: #10b981;
+          }
+
+          .status-disconnected span {
+            color: #ef4444;
           }
 
           .circular-progress {
@@ -1107,10 +1548,22 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
           }
 
-          .stop-conversation-btn:hover {
+          .stop-conversation-btn:hover:not(.disabled) {
             background: #1a1a1a;
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+          }
+          
+          .stop-conversation-btn.disabled {
+            background: #6b7280;
+            cursor: not-allowed;
+            opacity: 0.7;
+          }
+          
+          .stop-conversation-btn.disabled:hover {
+            background: #6b7280;
+            transform: none;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
           }
 
           .start-conversation-btn {
@@ -1171,76 +1624,14 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
 
 export default function SalesAIAssessment() {
   const [, params] = useRoute('/sales-ai/:assessmentId');
-  const [, setLocation] = useLocation();
-  const { user } = useAuth();
-  const [apiKey, setApiKey] = useState<string>('');
-
-  // Load API key from backend on component mount
-  useEffect(() => {
-    const loadApiKey = async () => {
-      if (!user?.email) {
-        return;
-      }
-
-      try {
-        const encodedEmail = encodeURIComponent(user.email);
-        const response = await fetch(`https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key/${encodedEmail}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.status === 'success' && data.data?.api_key) {
-            setApiKey(data.data.api_key);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading API key:', error);
-      }
-    };
-
-    loadApiKey();
-  }, [user?.email]);
+  const { geminiApiKey } = useAuth();
 
   if (!params?.assessmentId) {
     return <div>Invalid assessment ID</div>;
   }
 
-  if (!apiKey) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              API Key Required
-            </h2>
-            <p className="text-gray-600 mb-6">
-              A Gemini API key is required to use this assessment. 
-              Please configure your API key in the settings.
-            </p>
-            <div className="flex justify-center gap-3">
-              <Button 
-                onClick={() => setLocation('/settings')}
-                className="flex items-center gap-2"
-              >
-                <SettingsIcon className="w-4 h-4" />
-                Go to Settings
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setLocation('/dashboard')}
-                className="flex items-center gap-2"
-              >
-                <Home className="w-4 h-4" />
-                Back to Dashboard
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <LiveAPIProvider apiKey={apiKey}>
+    <LiveAPIProvider apiKey={geminiApiKey || ''}>
       <SalesAIAssessmentContent assessmentId={params.assessmentId} />
     </LiveAPIProvider>
   );

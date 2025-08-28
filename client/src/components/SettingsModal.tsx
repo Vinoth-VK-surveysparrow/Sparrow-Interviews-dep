@@ -19,6 +19,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/components/ThemeProvider";
 import { useToast } from "@/hooks/use-toast";
+import { 
+  saveGeminiApiKey, 
+  clearGeminiApiKey 
+} from "@/services/geminiApiService";
 
 interface PermissionStatus {
   granted: boolean;
@@ -29,7 +33,7 @@ interface PermissionStatus {
 
 export default function SettingsModal() {
   const [open, setOpen] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, signOut, geminiApiKey, refreshGeminiApiKey } = useAuth();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
 
@@ -37,6 +41,7 @@ export default function SettingsModal() {
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [isApiKeySaved, setIsApiKeySaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Permission states
   const [cameraStatus, setCameraStatus] = useState<PermissionStatus>({
@@ -50,31 +55,16 @@ export default function SettingsModal() {
     testing: false,
   });
 
-  // Load API key from backend on component mount
+  // Load API key from auth context
   useEffect(() => {
-    const loadApiKey = async () => {
-      if (!user?.email) {
-        return;
-      }
-
-      try {
-        const encodedEmail = encodeURIComponent(user.email);
-        const response = await fetch(`https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key/${encodedEmail}`);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.status === 'success' && data.data?.api_key) {
-            setApiKey(data.data.api_key);
-            setIsApiKeySaved(true);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading API key:', error);
-      }
-    };
-
-    loadApiKey();
-  }, [user?.email]);
+    if (geminiApiKey) {
+      setApiKey(geminiApiKey);
+      setIsApiKeySaved(true);
+    } else {
+      setApiKey('');
+      setIsApiKeySaved(false);
+    }
+  }, [geminiApiKey]);
 
   // API Key functions
   const handleSaveApiKey = async () => {
@@ -90,37 +80,31 @@ export default function SettingsModal() {
     if (!user?.email) {
       toast({
         title: "Error",
-        description: "Please ensure you are logged in to save the API key.",
+        description: "Please ensure you are logged in to save the API key",
         variant: "destructive",
       });
       return;
     }
 
+    setIsSaving(true);
     try {
-      const response = await fetch('https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: user.email,
-          api_key: apiKey.trim(),
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.status === 'success') {
-          setIsApiKeySaved(true);
-          toast({
-            title: "Success",
-            description: "Gemini API key saved successfully!",
-          });
-        } else {
-          throw new Error('Failed to save API key');
-        }
+      const success = await saveGeminiApiKey(user.email, apiKey.trim());
+      
+      if (success) {
+        setIsApiKeySaved(true);
+        toast({
+          title: "Success",
+          description: "Gemini API key saved successfully!",
+        });
+        
+        // Refresh the API key in auth context
+        await refreshGeminiApiKey();
       } else {
-        throw new Error('Failed to save API key');
+        toast({
+          title: "Error",
+          description: "Failed to save the API key. Please try again.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('Error saving API key:', error);
@@ -129,6 +113,8 @@ export default function SettingsModal() {
         description: "Failed to save the API key. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -136,34 +122,31 @@ export default function SettingsModal() {
     if (!user?.email) {
       toast({
         title: "Error",
-        description: "Please ensure you are logged in to remove the API key.",
+        description: "Please ensure you are logged in to remove the API key",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      // Clear from backend by saving empty string
-      const response = await fetch('https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api/api-key', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: user.email,
-          api_key: '',
-        }),
-      });
-
-      if (response.ok) {
+      const success = await clearGeminiApiKey(user.email);
+      
+      if (success) {
         setApiKey('');
         setIsApiKeySaved(false);
         toast({
           title: "Removed",
           description: "Gemini API key has been removed",
         });
+        
+        // Refresh the API key in auth context
+        await refreshGeminiApiKey();
       } else {
-        throw new Error('Failed to remove API key');
+        toast({
+          title: "Error",
+          description: "Failed to remove the API key. Please try again.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('Error removing API key:', error);
@@ -379,10 +362,10 @@ export default function SettingsModal() {
                   </div>
                   <Button
                     onClick={handleSaveApiKey}
-                    disabled={!apiKey.trim()}
+                    disabled={!apiKey.trim() || isSaving}
                     size="sm"
                   >
-                    Save
+                    {isSaving ? "Saving..." : "Save"}
                   </Button>
                 </div>
                 {isApiKeySaved && (

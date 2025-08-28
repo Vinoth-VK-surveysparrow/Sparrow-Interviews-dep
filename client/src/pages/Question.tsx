@@ -7,7 +7,7 @@ import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useAuth } from '@/hooks/useAuth';
 import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
-import WarningBadge from '@/components/WarningBadge';
+import { WarningBadge } from '@/components/WarningBadge';
 import { replacePlaceholders } from '@/lib/questionUtils';
 
 const questions = [
@@ -49,6 +49,7 @@ export default function Question() {
     delayBeforeStart: 25000, // Start monitoring after 15 seconds (when first image is captured)
     pollingInterval: 20000, // Check every 10 seconds
   });
+
 
 
   useEffect(() => {
@@ -122,11 +123,12 @@ export default function Question() {
                 {currentQuestion?.text ? replacePlaceholders(currentQuestion.text, user) : ''}
               </p>
               
-              {/* Warning Badge */}
-              <WarningBadge 
-                show={showWarning} 
+              {/* Behavior Warning Badge */}
+              <WarningBadge
+                isVisible={showWarning}
                 message={warningMessage}
-                className="mt-4"
+                duration={5000}
+                className="mt-6"
               />
             </div>
           </div>
