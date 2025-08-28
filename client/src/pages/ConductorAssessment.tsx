@@ -72,8 +72,8 @@ export default function ConductorAssessment() {
   // Behavior monitoring hook
   const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
     enabled: true,
-    delayBeforeStart: 15000, // Start monitoring after 15 seconds (when first image is captured)
-    pollingInterval: 10000, // Check every 10 seconds
+    delayBeforeStart: 25000, // Start monitoring after 15 seconds (when first image is captured)
+    pollingInterval: 20000, // Check every 10 seconds
   });
 
   const [assessmentState, setAssessmentState] = useState<AssessmentState>("loading");
@@ -969,7 +969,7 @@ export default function ConductorAssessment() {
         <div className="max-w-4xl mx-auto px-6 py-8">
           <div className="mb-6">
             <Button
-              onClick={() => setLocation('/test-selection')}
+              onClick={() => setLocation('/')}
               variant="outline"
               size="sm"
               className="flex items-center gap-2"
@@ -1060,13 +1060,12 @@ export default function ConductorAssessment() {
               {currentTopic}
             </h2>
             
-            {/* Behavior Warning Badge */}
+            {/* Warning Badge */}
             <div className="text-center">
-              <WarningBadge
-                isVisible={showWarning}
+              <WarningBadge 
+                show={showWarning} 
                 message={warningMessage}
-                duration={5000}
-                className="mt-4"
+                className="mb-4"
               />
             </div>
 
@@ -1380,9 +1379,10 @@ export default function ConductorAssessment() {
               Try Again
             </Button>
             <Button 
-
-              onClick={() => setLocation('/test-selection')}
-
+              onClick={() => {
+                stopMonitoring();
+                setLocation('/');
+              }}
               size="lg"
               className="bg-primary hover:bg-primary/90"
             >

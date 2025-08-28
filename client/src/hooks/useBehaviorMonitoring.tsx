@@ -47,10 +47,15 @@ export function useBehaviorMonitoring(options: UseBehaviorMonitoringOptions = {}
 
     try {
       const encodedEmail = encodeURIComponent(user.email);
-      const baseUrl = import.meta.env.VITE_PROCTORING_RESULTS_API;
-      const url = `${baseUrl}?email=${encodedEmail}&round=${session.assessmentId}`;
+      // Use environment variable for proctoring API endpoint, fallback to default if not set
+      const baseUrl = import.meta.env.VITE_PROCTORING_RESULTS_API || 'https://fizwdomhnwwc7avz3nufla3m5a0jhqvu.lambda-url.us-west-2.on.aws';
+      const url = `${baseUrl}/results?email=${encodedEmail}&round=${session.assessmentId}`;
       
-      console.log('🔍 Checking behavior monitoring:', { email: user.email, round: session.assessmentId });
+      console.log('🔍 Checking behavior monitoring:', { 
+        email: user.email, 
+        round: session.assessmentId,
+        endpoint: url 
+      });
       
       const response = await fetch(url, {
         method: 'GET',
@@ -69,17 +74,15 @@ export function useBehaviorMonitoring(options: UseBehaviorMonitoringOptions = {}
 
       if (data.recent_flag_id) {
         setFlagCount(prev => prev + 1);
-        
-        // Show warning badge
-        setWarningMessage("Do not look away from the screen and look at the camera");
+        setWarningMessage('Do not look away from the screen and look into the camera when answering questions. Explain with your hands fully visible in front of the camera');
         setShowWarning(true);
-
-        console.log('🚨 Behavior flag detected! Warning displayed to user.');
         
         // Auto-hide warning after 5 seconds
         setTimeout(() => {
           setShowWarning(false);
         }, 5000);
+
+        console.log('🚨 Behavior flag detected! Warning badge displayed to user.');
       }
     } catch (error) {
       console.error('❌ Error checking behavior monitoring:', error);
@@ -109,8 +112,6 @@ export function useBehaviorMonitoring(options: UseBehaviorMonitoringOptions = {}
     setIsMonitoring(true);
     isActiveRef.current = true;
     setFlagCount(0);
-    setShowWarning(false);
-    setWarningMessage('');
 
     // Start monitoring after the specified delay
     startTimeoutRef.current = setTimeout(() => {

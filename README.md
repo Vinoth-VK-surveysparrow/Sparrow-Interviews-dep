@@ -62,8 +62,15 @@ cp .env.example .env
 # Edit .env with your database credentials and API endpoints
 ```
 
-For the audio service, also set:
+Required environment variables:
 ```bash
+# Main API endpoint
+VITE_API_BASE_URL=your-api-base-url
+
+# Proctoring results API endpoint (for behavior monitoring)
+VITE_PROCTORING_RESULTS_API=https://your-proctoring-api-endpoint.lambda-url.region.on.aws
+
+# Audio service
 export S3_BUCKET=your-audio-bucket-name
 ```
 
