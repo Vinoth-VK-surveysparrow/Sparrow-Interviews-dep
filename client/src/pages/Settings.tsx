@@ -23,7 +23,7 @@ export default function Settings() {
   const { trackUserAction } = useClarity(true, 'Settings');
   const [isLoading, setIsLoading] = useState(true);
 
-  const GEMINI_API_KEY_FETCH_URL = import.meta.env.VITE_GEMINI_API_KEY_FETCH ;
+  const GEMINI_API_KEY_FETCH_URL = import.meta.env.VITE_GEMINI_API_KEY_FETCH;
 
   // API Key Service Functions
   const fetchApiKey = async (userEmail: string) => {

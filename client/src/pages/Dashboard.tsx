@@ -321,7 +321,11 @@ export default function Dashboard() {
   };
 
   const handleStartAssessment = async (assessmentId: string) => {
+    // IMMEDIATELY set loading state for instant feedback
+    setLoadingAssessment(assessmentId);
+    
     if (!user?.email) {
+      setLoadingAssessment(null); // Clear loading state on error
       toast({
         title: "Authentication Required", 
         description: "Please ensure you are logged in to start the assessment.",
@@ -332,6 +336,7 @@ export default function Dashboard() {
 
     // CRITICAL: Validate that the assessment exists within the current test
     if (!selectedTestId) {
+      setLoadingAssessment(null); // Clear loading state on error
       console.error(`❌ No test selected when trying to start assessment ${assessmentId}`);
       toast({
         title: "No Test Selected",
@@ -354,6 +359,7 @@ export default function Dashboard() {
     });
     
     if (!assessment) {
+      setLoadingAssessment(null); // Clear loading state on error
       console.error(`❌ Assessment ${assessmentId} not found in current test ${selectedTestId}. Available assessments:`, assessments.map(a => a.assessment_id));
       toast({
         title: "Assessment Not Found",
@@ -365,6 +371,7 @@ export default function Dashboard() {
 
     // Check unlock status using test-specific logic
     if (!assessment.unlocked) {
+      setLoadingAssessment(null); // Clear loading state on error
       console.log(`🔒 Assessment ${assessment.assessment_name} is locked in test ${selectedTestId}`);
       toast({
         title: "Assessment Locked",
@@ -440,6 +447,7 @@ export default function Dashboard() {
       // Route directly to conductor assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting conductor assessment (skipping questions fetch):', assessmentId);
       setLocation(`/conductor/${assessmentId}`);
+      // Keep loading state since we're navigating - will be cleared by route change
       return;
     }
     
@@ -447,12 +455,14 @@ export default function Dashboard() {
       // Route directly to triple-step assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting triple-step assessment (skipping questions fetch):', assessmentId);
       setLocation(`/triple-step/${assessmentId}`);
+      // Keep loading state since we're navigating - will be cleared by route change
       return;
     }
     
     if (assessment?.type === "Games-arena") {
       // Check if Gemini API key is configured for Games-arena assessment
       if (!hasGeminiApiKey) {
+        setLoadingAssessment(null); // Clear loading state on error
         toast({
           title: "Configuration Required",
           description: "Please configure your Gemini API key in Settings before starting this assessment.",
@@ -466,7 +476,7 @@ export default function Dashboard() {
       // Continue to standard workflow below (no return here)
     }
 
-    setLoadingAssessment(assessmentId);
+    // Loading state already set at the beginning
     
     try {
       // Always show "Starting..." first
