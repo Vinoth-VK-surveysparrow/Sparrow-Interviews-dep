@@ -212,8 +212,8 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
 
         parts = otherParts;
 
-        const content: ModelTurn = { modelTurn: { parts } };
-        this.emit("content", content);
+        const content: ModelTurn = { parts };
+        this.emit("content", { modelTurn: content });
         this.log(`server.content`, response);
       }
     } else {

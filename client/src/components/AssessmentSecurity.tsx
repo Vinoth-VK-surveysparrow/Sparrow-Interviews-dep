@@ -70,12 +70,24 @@ export function AssessmentSecurity() {
 
     // Detect permission dialogs
     const checkForPermissionDialogs = () => {
-      // Check if there are any active permission dialogs
+      // More comprehensive check for browser permission dialogs
       const hasActiveModals = document.querySelector('[role="dialog"]') ||
                             document.querySelector('.permission-dialog') ||
-                            document.activeElement?.closest('[role="dialog"]');
+                            document.querySelector('[data-permission-dialog]') ||
+                            document.activeElement?.closest('[role="dialog"]') ||
+                            // Check for common browser permission dialog selectors
+                            document.querySelector('div[class*="permission"]') ||
+                            document.querySelector('div[class*="Permission"]') ||
+                            document.querySelector('div[id*="permission"]') ||
+                            // Check if focus is on browser chrome elements
+                            document.activeElement === document.body ||
+                            document.activeElement === null;
       
-      if (hasActiveModals !== null) {
+      const isPermissionDialogLikely = hasActiveModals !== null ||
+                                      // Check if window lost focus to potential permission dialog
+                                      (!document.hasFocus() && !document.hidden);
+      
+      if (isPermissionDialogLikely) {
         setPermissionDialogOpen(true);
         
       } else {
@@ -90,6 +102,53 @@ export function AssessmentSecurity() {
       subtree: true, 
       attributes: true 
     });
+
+    // Additional listeners to detect permission requests
+    const handleFocusChange = () => {
+      setTimeout(checkForPermissionDialogs, 100);
+    };
+
+    const handleWindowBlurForPermissions = () => {
+      // When window loses focus, it might be due to permission dialog
+      setTimeout(() => {
+        if (!document.hasFocus() && !document.hidden) {
+          setPermissionDialogOpen(true);
+        }
+      }, 100);
+    };
+
+    const handleWindowFocusForPermissions = () => {
+      // When window regains focus, check if permission dialog closed
+      setTimeout(checkForPermissionDialogs, 100);
+    };
+
+    // Monitor focus changes that might indicate permission dialogs
+    document.addEventListener('focusin', handleFocusChange);
+    document.addEventListener('focusout', handleFocusChange);
+    window.addEventListener('blur', handleWindowBlurForPermissions, true); // Use capture
+    window.addEventListener('focus', handleWindowFocusForPermissions, true); // Use capture
+
+    // Add special handling for getUserMedia calls that trigger permission dialogs
+    const originalGetUserMedia = navigator.mediaDevices?.getUserMedia;
+    if (originalGetUserMedia) {
+      navigator.mediaDevices.getUserMedia = function(...args) {
+        // Set permission dialog state when getUserMedia is called
+        setPermissionDialogOpen(true);
+        
+        return originalGetUserMedia.apply(this, args).then(
+          (stream) => {
+            // Permission granted - dialog closed
+            setTimeout(() => setPermissionDialogOpen(false), 1000);
+            return stream;
+          },
+          (error) => {
+            // Permission denied or error - dialog closed
+            setTimeout(() => setPermissionDialogOpen(false), 1000);
+            throw error;
+          }
+        );
+      };
+    }
 
     // Prevent text selection and copying (only when no permission dialogs)
     const preventCopy = (e: Event) => {
@@ -237,16 +296,54 @@ export function AssessmentSecurity() {
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
 
-    // Disable text selection via CSS
-    document.body.style.userSelect = 'none';
-    document.body.style.webkitUserSelect = 'none';
+    // Disable text selection via CSS (but allow browser dialogs to function)
+    const applySelectRestrictions = () => {
+      const bodyStyle = document.body.style as any;
+      if (!permissionDialogOpen) {
+        bodyStyle.userSelect = 'none';
+        bodyStyle.webkitUserSelect = 'none';
+        bodyStyle.mozUserSelect = 'none';
+        bodyStyle.msUserSelect = 'none';
+      } else {
+        // Temporarily allow selection when permission dialog is open
+        bodyStyle.userSelect = '';
+        bodyStyle.webkitUserSelect = '';
+        bodyStyle.mozUserSelect = '';
+        bodyStyle.msUserSelect = '';
+      }
+    };
+
+    // Apply initial restrictions
+    applySelectRestrictions();
+
+    // Update restrictions when permission dialog state changes
+    const updateSelectRestrictions = () => {
+      applySelectRestrictions();
+    };
+
+    // Monitor permission dialog state changes
+    const permissionStateInterval = setInterval(updateSelectRestrictions, 500);
 
     // Cleanup function
     return () => {
       
       
+      // Clear intervals
+      clearInterval(permissionStateInterval);
+      
       // Disconnect permission observer
       permissionObserver.disconnect();
+      
+      // Remove new permission-related listeners
+      document.removeEventListener('focusin', handleFocusChange);
+      document.removeEventListener('focusout', handleFocusChange);
+      window.removeEventListener('blur', handleWindowBlurForPermissions, true);
+      window.removeEventListener('focus', handleWindowFocusForPermissions, true);
+      
+      // Restore original getUserMedia
+      if (originalGetUserMedia && navigator.mediaDevices) {
+        navigator.mediaDevices.getUserMedia = originalGetUserMedia;
+      }
       
       document.removeEventListener('copy', preventCopy);
       document.removeEventListener('cut', preventCopy);
@@ -260,15 +357,18 @@ export function AssessmentSecurity() {
       window.removeEventListener('focus', handleWindowFocus);
 
       // Restore text selection
-      document.body.style.userSelect = '';
-      document.body.style.webkitUserSelect = '';
+      const bodyStyle = document.body.style as any;
+      bodyStyle.userSelect = '';
+      bodyStyle.webkitUserSelect = '';
+      bodyStyle.mozUserSelect = '';
+      bodyStyle.msUserSelect = '';
 
       // Exit fullscreen
       if (document.exitFullscreen && document.fullscreenElement) {
         document.exitFullscreen().catch(console.warn);
       }
     };
-  }, [isInSecureMode]); // Only depend on the route change
+  }, [isInSecureMode, permissionDialogOpen]); // Depend on route and permission dialog state
 
   // Don't render anything if not in secure mode
   if (!isInSecureMode) return null;

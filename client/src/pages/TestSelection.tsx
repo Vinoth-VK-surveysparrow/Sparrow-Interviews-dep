@@ -20,10 +20,7 @@ interface UserTestsResponse {
   test_count: number;
 }
 
-// Interface for fallback API response (all available tests)
-interface AllTestsResponse {
-  tests: Test[];
-}
+
 
 // Sparrow logo component using the Symbol.svg (same as Dashboard and Assessment screens)
 const SparrowLogo = () => (
@@ -41,7 +38,7 @@ export default function TestSelection() {
   const [loadingTests, setLoadingTests] = useState(true);
   const [loadingTest, setLoadingTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isShowingFallbackTests, setIsShowingFallbackTests] = useState(false); // Track if showing fallback tests
+
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -80,48 +77,10 @@ export default function TestSelection() {
         // Check if user has any specific tests assigned
         if (data.tests && data.tests.length > 0) {
           setTests(data.tests);
-          setIsShowingFallbackTests(false); // User has assigned tests
         } else {
-          // =================================================================
-          // TEMPORARY FALLBACK FEATURE - EASY TO REMOVE LATER
-          // =================================================================
-          // When user has no specific tests, fetch all available tests
-          // TODO: Remove this entire fallback section when no longer needed
-          console.log('⚠️ No user-specific tests found, fetching all available tests as fallback');
-          
-          try {
-            const fallbackResponse = await fetch(`${API_BASE_URL}/tests`);
-            
-            if (!fallbackResponse.ok) {
-              throw new Error(`Failed to fetch all tests: ${fallbackResponse.status} ${fallbackResponse.statusText}`);
-            }
-            
-            const fallbackData: AllTestsResponse = await fallbackResponse.json();
-            console.log('✅ Fallback tests fetched:', fallbackData);
-            
-            setTests(fallbackData.tests || []);
-            setIsShowingFallbackTests(true); // Mark as showing fallback tests
-            
-            // Show a notification that we're showing all tests
-            toast({
-              title: "No Assigned Tests",
-              description: "Showing all available tests. Please contact admin for test assignment.",
-              variant: "default",
-            });
-            
-          } catch (fallbackError) {
-            console.error('❌ Failed to fetch fallback tests:', fallbackError);
-            // If fallback also fails, show empty state
-            setTests([]);
-            toast({
-              title: "No Tests Available",
-              description: "No tests found for your account. Please contact admin.",
-              variant: "destructive",
-            });
-          }
-          // =================================================================
-          // END OF TEMPORARY FALLBACK FEATURE
-          // =================================================================
+          // User has no tests assigned - show empty state
+          console.log('⚠️ No user-specific tests found');
+          setTests([]);
         }
       } catch (error) {
         console.error('❌ Failed to fetch user tests:', error);
@@ -275,9 +234,9 @@ export default function TestSelection() {
               <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-6 mb-6 mx-auto w-24 h-24 flex items-center justify-center">
                 <SparrowLogo />
               </div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">No Tests Available</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">No Assessments Scheduled</h2>
               <p className="text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-                No assessments have been assigned to your account. Please contact your administrator for access.
+                You don't have any assessments scheduled at the moment.
               </p>
             </div>
           </div>

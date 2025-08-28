@@ -7,22 +7,85 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Home, Save, Eye, EyeOff, Key, AlertCircle, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Settings() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load saved API key on component mount
-  useEffect(() => {
-    const savedKey = localStorage.getItem('gemini_api_key');
-    if (savedKey) {
-      setGeminiApiKey(savedKey);
+  const GEMINI_API_KEY_FETCH_URL = import.meta.env.VITE_GEMINI_API_KEY_FETCH ;
+
+  // API Key Service Functions
+  const fetchApiKey = async (userEmail: string) => {
+    try {
+      const encodedEmail = encodeURIComponent(userEmail);
+      const response = await fetch(`${GEMINI_API_KEY_FETCH_URL}/api-key/${encodedEmail}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success' && data.data?.api_key) {
+          return data.data.api_key;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching API key:', error);
+      return null;
     }
-  }, []);
+  };
+
+  const saveApiKeyToBackend = async (userEmail: string, apiKey: string) => {
+    try {
+      const response = await fetch(`${GEMINI_API_KEY_FETCH_URL}/api-key`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: userEmail,
+          api_key: apiKey,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.status === 'success';
+      }
+      return false;
+    } catch (error) {
+      console.error('Error saving API key:', error);
+      return false;
+    }
+  };
+
+  // Load API key from backend on component mount
+  useEffect(() => {
+    const loadApiKey = async () => {
+      if (!user?.email) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const apiKey = await fetchApiKey(user.email);
+        if (apiKey) {
+          setGeminiApiKey(apiKey);
+        }
+      } catch (error) {
+        console.error('Error loading API key:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadApiKey();
+  }, [user?.email]);
 
   const handleSaveApiKey = async () => {
     if (!geminiApiKey.trim()) {
@@ -34,15 +97,31 @@ export default function Settings() {
       return;
     }
 
+    if (!user?.email) {
+      toast({
+        variant: 'destructive',
+        title: 'Authentication Required',
+        description: 'Please ensure you are logged in to save the API key.',
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
-      // Save to localStorage
-      localStorage.setItem('gemini_api_key', geminiApiKey.trim());
+      const success = await saveApiKeyToBackend(user.email, geminiApiKey.trim());
       
-      toast({
-        title: 'API Key Saved',
-        description: 'Your Gemini API key has been saved successfully.',
-      });
+      if (success) {
+        toast({
+          title: 'API Key Saved',
+          description: 'Your Gemini API key has been saved successfully.',
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Save Failed',
+          description: 'Failed to save the API key to the server. Please try again.',
+        });
+      }
     } catch (error) {
       console.error('Error saving API key:', error);
       toast({
@@ -100,13 +179,33 @@ export default function Settings() {
     }
   };
 
-  const clearApiKey = () => {
-    setGeminiApiKey('');
-    localStorage.removeItem('gemini_api_key');
-    toast({
-      title: 'API Key Cleared',
-      description: 'Your Gemini API key has been removed.',
-    });
+  const clearApiKey = async () => {
+    if (!user?.email) {
+      toast({
+        variant: 'destructive',
+        title: 'Authentication Required',
+        description: 'Please ensure you are logged in to clear the API key.',
+      });
+      return;
+    }
+
+    try {
+      // Clear from backend by saving empty string
+      await saveApiKeyToBackend(user.email, '');
+      setGeminiApiKey('');
+      
+      toast({
+        title: 'API Key Cleared',
+        description: 'Your Gemini API key has been removed.',
+      });
+    } catch (error) {
+      console.error('Error clearing API key:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Clear Failed',
+        description: 'Failed to clear the API key. Please try again.',
+      });
+    }
   };
 
   const goHome = () => {
@@ -163,8 +262,9 @@ export default function Settings() {
                     type={showApiKey ? 'text' : 'password'}
                     value={geminiApiKey}
                     onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder="Enter your Gemini API key..."
+                    placeholder={isLoading ? "Loading..." : "Enter your Gemini API key..."}
                     className="pr-10"
+                    disabled={isLoading}
                   />
                   <Button
                     type="button"
@@ -180,15 +280,16 @@ export default function Settings() {
                     )}
                   </Button>
                 </div>
-                <p className="text-sm text-gray-500">
-                  This key is required for the Sales AI Cue Card assessment. 
-                  Your key is stored locally in your browser.
-                </p>
               </div>
 
               {/* API Key Status */}
               <div className="flex items-center gap-2 p-3 rounded-lg bg-gray-50">
-                {hasApiKey ? (
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-blue-500"></div>
+                    <span className="text-sm text-blue-700">Loading API key...</span>
+                  </>
+                ) : hasApiKey ? (
                   <>
                     <CheckCircle className="w-4 h-4 text-green-500" />
                     <span className="text-sm text-green-700">API key configured</span>
@@ -205,7 +306,7 @@ export default function Settings() {
               <div className="flex flex-wrap gap-3">
                 <Button
                   onClick={handleSaveApiKey}
-                  disabled={isSaving || !geminiApiKey.trim()}
+                  disabled={isSaving || !geminiApiKey.trim() || isLoading}
                   className="flex items-center gap-2"
                 >
                   <Save className="w-4 h-4" />
@@ -215,7 +316,7 @@ export default function Settings() {
                 <Button
                   variant="outline"
                   onClick={testConnection}
-                  disabled={isTestingConnection || !geminiApiKey.trim()}
+                  disabled={isTestingConnection || !geminiApiKey.trim() || isLoading}
                   className="flex items-center gap-2"
                 >
                   {isTestingConnection ? 'Testing...' : 'Test Connection'}

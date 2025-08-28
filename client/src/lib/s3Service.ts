@@ -607,6 +607,21 @@ export class S3Service {
       completed_at: new Date().toISOString(),
       timestamp: now
     });
+    
+    // Trigger a custom event to notify other parts of the app
+    this.notifyAssessmentCompleted(assessmentId, userEmail);
+  }
+
+  // Utility method to notify when an assessment is completed
+  static notifyAssessmentCompleted(assessmentId: string, userEmail: string): void {
+    const assessmentCompletedEvent = new CustomEvent('assessmentCompleted', {
+      detail: {
+        assessmentId: assessmentId,
+        userEmail: userEmail
+      }
+    });
+    window.dispatchEvent(assessmentCompletedEvent);
+    console.log(`📢 Assessment completion event dispatched for ${assessmentId}`);
   }
 
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRoute, Link } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, ArrowRight, Home, Volume2, ChevronDown } from 'lucide-react';
+import { CheckCircle, ArrowRight, Home, Volume2, ChevronDown, Target } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,7 +27,7 @@ export default function Results() {
 
   useEffect(() => {
     const initializeResults = async () => {
-      // Mark assessment as completed in cache
+      // Mark assessment as completed in cache (this will automatically trigger the event)
       if (params?.assessmentId && user?.email) {
         
         S3Service.markAssessmentCompleted(user.email, params.assessmentId);
@@ -140,12 +140,20 @@ export default function Results() {
                                 <ArrowRight className="ml-2 h-4 w-4" />
                               </Button>
                             </Link>
-                            <Link to="/">
-                              <Button variant="outline">
-                                <Home className="mr-2 h-4 w-4" />
-                                Home
-                              </Button>
-                            </Link>
+                            <div className="flex gap-2">
+                              <Link to="/">
+                                <Button variant="outline">
+                                  <Home className="mr-2 h-4 w-4" />
+                                  Home
+                                </Button>
+                              </Link>
+                              <Link to="/dashboard">
+                                <Button variant="outline">
+                                  <Target className="mr-2 h-4 w-4" />
+                                  Rounds
+                                </Button>
+                              </Link>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -156,12 +164,20 @@ export default function Results() {
                           <p className="text-muted-foreground mb-4">
                             You have completed all available assessments. Well done!
                           </p>
-                          <Link to="/">
-                            <Button className="bg-teal-600 hover:bg-teal-700 text-white">
-                              <Home className="mr-2 h-4 w-4" />
-                              Return to Dashboard
-                            </Button>
-                          </Link>
+                          <div className="flex gap-2">
+                            <Link to="/">
+                              <Button className="bg-teal-600 hover:bg-teal-700 text-white">
+                                <Home className="mr-2 h-4 w-4" />
+                                Return to Dashboard
+                              </Button>
+                            </Link>
+                            <Link to="/dashboard">
+                              <Button variant="outline">
+                                <Target className="mr-2 h-4 w-4" />
+                                Rounds
+                              </Button>
+                            </Link>
+                          </div>
                         </div>
                       )}
                     </div>

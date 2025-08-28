@@ -51,9 +51,7 @@ export interface ServerContent {
 }
 
 export interface ModelTurn {
-  modelTurn: {
-    parts: Part[];
-  };
+  parts: Part[];
 }
 
 export interface ToolCall {
@@ -112,6 +110,6 @@ export function isTurnComplete(serverContent: ServerContent): boolean {
   return Boolean(serverContent.turnComplete);
 }
 
-export function isModelTurn(serverContent: ServerContent): serverContent is ServerContent & { modelTurn: ModelTurn["modelTurn"] } {
+export function isModelTurn(serverContent: ServerContent): serverContent is ServerContent & { modelTurn: ModelTurn } {
   return Boolean(serverContent.modelTurn);
 }

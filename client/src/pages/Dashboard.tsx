@@ -114,6 +114,47 @@ export default function Dashboard() {
     };
   }, []);
 
+  // State to trigger refresh when returning from assessments
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Add focus listener to refresh assessments when user returns from other pages
+  useEffect(() => {
+    const handleFocus = () => {
+      if (selectedTestId && user?.email) {
+        console.log('🔄 Dashboard focused - triggering refresh');
+        // Trigger a refresh by updating the state
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && selectedTestId && user?.email) {
+        console.log('🔄 Dashboard visible again - triggering refresh');
+        // Trigger a refresh by updating the state
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    const handleAssessmentCompleted = (event: CustomEvent) => {
+      const { assessmentId, userEmail } = event.detail;
+      if (selectedTestId && user?.email === userEmail) {
+        console.log('🔄 Assessment completed event received - triggering refresh');
+        // Trigger a refresh by updating the state
+        setRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('assessmentCompleted', handleAssessmentCompleted as EventListener);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('assessmentCompleted', handleAssessmentCompleted as EventListener);
+    };
+  }, [selectedTestId, user?.email]);
+
   // Get test_id from URL params or localStorage
   useEffect(() => {
     const urlParams = new URLSearchParams(location.split('?')[1] || '');
@@ -212,7 +253,7 @@ export default function Dashboard() {
     };
 
     fetchTestAssessments();
-  }, [toast, user?.email, authLoading, selectedTestId]);
+  }, [toast, user?.email, authLoading, selectedTestId, refreshTrigger]);
 
   // Function to refresh assessment states (completion and unlock status)
   const refreshAssessmentStates = async () => {
@@ -329,14 +370,43 @@ export default function Dashboard() {
             variant: "default",
           });
           
-          // Update the assessment state to reflect completion
-          setAssessments(prevAssessments => 
-            prevAssessments.map(a => 
+          // Update the assessment state to reflect completion and recalculate unlock status
+          setAssessments(prevAssessments => {
+            const updatedAssessments = prevAssessments.map(a => 
               a.assessment_id === assessmentId 
                 ? { ...a, completed: true }
                 : a
-            )
-          );
+            );
+            
+            // After updating completion status, also update unlock status for all assessments
+            return updatedAssessments.map(assessment => {
+              if (selectedTestId && user?.email) {
+                // Re-calculate unlock status based on updated completion states
+                const testAssessment: TestAssessment = {
+                  assessment_id: assessment.assessment_id,
+                  assessment_name: assessment.assessment_name,
+                  order: assessment.order,
+                  description: assessment.description,
+                  type: assessment.type || 'unknown',
+                  test_id: selectedTestId
+                };
+                
+                const testAssessments: TestAssessment[] = updatedAssessments.map(a => ({
+                  assessment_id: a.assessment_id,
+                  assessment_name: a.assessment_name,
+                  order: a.order,
+                  description: a.description,
+                  type: a.type || 'unknown',
+                  test_id: selectedTestId
+                }));
+                
+                const unlocked = isTestAssessmentUnlocked(user.email, testAssessment, testAssessments);
+                
+                return { ...assessment, unlocked };
+              }
+              return assessment;
+            });
+          });
           return;
         }
       }
@@ -409,14 +479,53 @@ export default function Dashboard() {
         
         
         
-        // CRITICAL: Mark assessment as completed in S3Service cache
+        // CRITICAL: Mark assessment as completed in S3Service cache (this will automatically trigger the event)
         if (user?.email) {
           S3Service.markAssessmentCompleted(user.email, assessmentId);
-          
         }
         
-        // Refresh all assessments to update unlock status
-        await refreshAssessmentStates();
+        // IMMEDIATELY update the local state to reflect completion
+        setAssessments(prevAssessments => {
+          const updatedAssessments = prevAssessments.map(a => 
+            a.assessment_id === assessmentId 
+              ? { ...a, completed: true }
+              : a
+          );
+          
+          // After updating completion status, also update unlock status for all assessments
+          return updatedAssessments.map(assessment => {
+            if (selectedTestId && user?.email) {
+              // Re-calculate unlock status based on updated completion states
+              const allAssessments = updatedAssessments.map(a => ({
+                assessment_id: a.assessment_id,
+                assessment_name: a.assessment_name,
+                order: a.order,
+                description: a.description,
+                type: a.type
+              }));
+              
+              const testAssessment: TestAssessment = {
+                assessment_id: assessment.assessment_id,
+                assessment_name: assessment.assessment_name,
+                order: assessment.order,
+                description: assessment.description,
+                type: assessment.type || 'unknown',
+                test_id: selectedTestId
+              };
+              
+              const testAssessments: TestAssessment[] = allAssessments.map(a => ({
+                ...a,
+                type: a.type || 'unknown',
+                test_id: selectedTestId
+              }));
+              
+              const unlocked = isTestAssessmentUnlocked(user.email, testAssessment, testAssessments);
+              
+              return { ...assessment, unlocked };
+            }
+            return assessment;
+          });
+        });
         
         toast({
           title: "Assessment Completed",

@@ -31,7 +31,7 @@ googleProvider.addScope('email');
 googleProvider.addScope('profile');
 
 // API endpoint for authorization check
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://kl85uizp68.execute-api.us-west-2.amazonaws.com/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ;
 
 // Cache for authorization results to avoid repeated API calls
 const authorizationCache = new Map<string, { authorized: boolean; timestamp: number }>();
