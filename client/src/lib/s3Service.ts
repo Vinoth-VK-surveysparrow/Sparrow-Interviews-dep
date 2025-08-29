@@ -187,7 +187,7 @@ export class S3Service {
 
   static async initiateAssessment(request: InitiateAssessmentRequest): Promise<InitiateAssessmentResponse> {
     try {
-      
+
 
       const response = await fetch(`${API_BASE_URL}/assessment-responses/initiate`, {
         method: 'POST',
@@ -233,8 +233,8 @@ export class S3Service {
 
   static async uploadAudio(presignedUrl: string, audioBlob: Blob): Promise<void> {
     try {
-      
-      
+
+
       const response = await fetch(presignedUrl, {
         method: 'PUT',
         body: audioBlob,
@@ -248,8 +248,8 @@ export class S3Service {
         console.error('S3 upload failed:', response.status, response.statusText, errorText);
         throw new Error(`Failed to upload audio: ${response.status} ${response.statusText}`);
       }
-      
-      
+
+
     } catch (error) {
       console.error('Error uploading audio:', error);
       throw error;
@@ -258,13 +258,13 @@ export class S3Service {
 
   static async uploadImage(presignedPost: any, imageBlob: Blob, filename: string): Promise<void> {
     try {
-      
-      
-      
-      
+
+
+
+
 
       const formData = new FormData();
-      
+
       // CRITICAL: Determine the correct content type based on the file
       let contentType = imageBlob.type || 'image/jpeg';
       if (!contentType.startsWith('image/')) {
@@ -278,32 +278,32 @@ export class S3Service {
           default: contentType = 'image/jpeg';
         }
       }
-      
-      
+
+
 
       // IMPORTANT: Always add Content-Type first, even if not in presigned fields
       formData.append('Content-Type', contentType);
-      
+
 
       // Add all other fields from the presigned POST
       Object.keys(presignedPost.fields).forEach(key => {
         if (key === 'key') {
           const keyValue = presignedPost.fields[key].replace('${filename}', filename);
           formData.append(key, keyValue);
-          
+
         } else if (key !== 'Content-Type') {
           // Skip Content-Type if it's in presigned fields since we already added it
           formData.append(key, presignedPost.fields[key]);
-          
+
         }
       });
-      
+
       // Add the file last - this is crucial!
       formData.append('file', imageBlob, filename);
-      
-      
-      
-      
+
+
+
+
 
       const response = await fetch(presignedPost.url, {
         method: 'POST',
@@ -311,13 +311,13 @@ export class S3Service {
         // Don't set Content-Type header - browser will set multipart/form-data with boundary
       });
 
-      
-      
+
+
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error('S3 upload error:', errorText);
-        
+
         // Parse S3 XML error if available
         if (errorText.includes('<?xml')) {
           try {
@@ -332,11 +332,11 @@ export class S3Service {
             console.error('Could not parse S3 error XML');
           }
         }
-        
+
         throw new Error(`Failed to upload image: ${response.status} ${response.statusText}`);
       }
-      
-      
+
+
     } catch (error) {
       console.error('Error uploading image:', error);
       throw error;
@@ -345,7 +345,7 @@ export class S3Service {
 
   static async uploadLogs(request: LogsUploadRequest): Promise<LogsUploadResponse> {
     try {
-      
+
 
       const response = await fetch(`${API_BASE_URL}/log-upload`, {
         method: 'POST',
@@ -362,7 +362,7 @@ export class S3Service {
       }
 
       const result = await response.json();
-      
+
       return result;
     } catch (error) {
       console.error('Error uploading logs:', error);
@@ -372,7 +372,7 @@ export class S3Service {
 
   static async verifyAudio(request: AudioVerificationRequest): Promise<AudioVerificationResponse> {
     try {
-      
+
 
       const response = await fetch(`${API_BASE_URL}/verify-audio`, {
         method: 'POST',
@@ -389,7 +389,7 @@ export class S3Service {
       }
 
       const result = await response.json();
-      
+
       return result;
     } catch (error) {
       console.error('Error verifying audio:', error);
@@ -411,15 +411,15 @@ export class S3Service {
   static async getAssessments(): Promise<Assessment[]> {
     try {
       const now = Date.now();
-      
+
       // Check if we have valid cache
       if (this.assessmentCache && (now - this.assessmentCache.timestamp) < this.CACHE_DURATION) {
-        
+
         return this.assessmentCache.data;
       }
 
-      
-      
+
+
       const response = await fetch(`${API_BASE_URL}/assessments`, {
         method: 'GET',
         headers: {
@@ -430,90 +430,90 @@ export class S3Service {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Failed to fetch assessments:', response.status, response.statusText, errorText);
-        
+
         // If we have cached data and the API fails, return cached data
         if (this.assessmentCache) {
-          
+
           return this.assessmentCache.data;
         }
-        
+
         throw new Error(`Failed to fetch assessments: ${response.status} ${response.statusText}`);
       }
 
       const responseText = await response.text();
       const responseHash = this.hashString(responseText);
-      
+
       // Check if response has changed compared to cache
       if (this.assessmentCache && this.assessmentCache.hash === responseHash) {
-        
+
         this.assessmentCache.timestamp = now;
         return this.assessmentCache.data;
       }
 
       // Parse the response
       const data: AssessmentsResponse = JSON.parse(responseText);
-      
-      
+
+
       // Sort by order
       const sortedAssessments = data.assessments.sort((a, b) => a.order - b.order);
-      
+
       // Update cache
       this.assessmentCache = {
         data: sortedAssessments,
         timestamp: now,
         hash: responseHash
       };
-      
+
       if (this.assessmentCache.hash !== responseHash) {
-        
+
       } else {
-        
+
       }
-      
+
       return sortedAssessments;
     } catch (error) {
       console.error('Error fetching assessments:', error);
-      
+
       // If we have cached data and there's an error, return cached data
       if (this.assessmentCache) {
-        
+
         return this.assessmentCache.data;
       }
-      
+
       throw error;
     }
   }
 
   // Method to manually clear the cache if needed
   static clearAssessmentCache(): void {
-    
+
     this.assessmentCache = null;
   }
 
   // Method to clear completion cache (for debugging)
   static clearCompletionCache(): void {
-    
+
     this.completedAssessmentCache = {};
   }
 
   static async fetchQuestions(request: FetchQuestionsRequest): Promise<Question[]> {
     try {
       const now = Date.now();
-      
+
       // Check completion cache first
       const userCache = this.completedAssessmentCache[request.user_email];
       if (userCache && userCache[request.assessment_id]) {
         const cachedCompletion = userCache[request.assessment_id];
         const cacheAge = now - cachedCompletion.timestamp;
-        
+
         if (cacheAge < this.COMPLETION_CACHE_DURATION) {
-          
+
           throw new Error(`ASSESSMENT_COMPLETED:${JSON.stringify(cachedCompletion)}`);
         }
       }
-      
-      
-      
+
+
+
       const response = await fetch(`${API_BASE_URL}/fetch-questions`, {
         method: 'POST',
         headers: {
@@ -529,11 +529,11 @@ export class S3Service {
       }
 
       const data: FetchQuestionsResponse = await response.json();
-      
+
       // Check if assessment is already completed
       if (data.status === 'completed') {
-        
-        
+
+
         // Cache the completion status
         this.cacheCompletedAssessment(request.user_email, request.assessment_id, {
           status: data.status,
@@ -542,10 +542,10 @@ export class S3Service {
           audio_key: data.audio_key,
           timestamp: now
         });
-        
+
         throw new Error(`ASSESSMENT_COMPLETED:${JSON.stringify(data)}`);
       }
-      
+
       // Handle different assessment types based on their response structure
       if (request.type === 'Games-arena') {
         // Games-arena returns prompt data in 'content' field, not 'questions'
@@ -553,9 +553,9 @@ export class S3Service {
         if (!promptData) {
           throw new Error('No prompt data returned for Games-arena assessment');
         }
-        
+
         console.log('🎯 Games-arena prompt data received:', promptData);
-        
+
         // For Games-arena, return the prompt as a single "question" for compatibility
         const dynamoPromptData = promptData as DynamoPrompt; // Cast to DynamoPrompt for Games-arena
         const promptQuestion: Question = {
@@ -576,11 +576,11 @@ export class S3Service {
         if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
           throw new Error(`No questions returned for ${request.type || 'unknown'} assessment type`);
         }
-      
-      // Sort by order
-      const sortedQuestions = data.questions.sort((a, b) => a.order - b.order);
-      
-      return sortedQuestions;
+
+        // Sort by order
+        const sortedQuestions = data.questions.sort((a, b) => a.order - b.order);
+
+        return sortedQuestions;
       }
     } catch (error) {
       console.error('Error fetching questions:', error);
@@ -593,9 +593,9 @@ export class S3Service {
     if (!this.completedAssessmentCache[userEmail]) {
       this.completedAssessmentCache[userEmail] = {};
     }
-    
+
     this.completedAssessmentCache[userEmail][assessmentId] = completionData;
-    
+
   }
 
   // Method to mark assessment as completed (call this after successful submission)
@@ -607,7 +607,7 @@ export class S3Service {
       completed_at: new Date().toISOString(),
       timestamp: now
     });
-    
+
     // Trigger a custom event to notify other parts of the app
     this.notifyAssessmentCompleted(assessmentId, userEmail);
   }
@@ -632,7 +632,7 @@ export class S3Service {
     if (!userCache || !userCache[assessmentId]) {
       return false;
     }
-    
+
     const cacheAge = Date.now() - userCache[assessmentId].timestamp;
     return cacheAge < this.COMPLETION_CACHE_DURATION;
   }
@@ -641,32 +641,32 @@ export class S3Service {
   static async isAssessmentUnlocked(userEmail: string, assessmentId: string): Promise<boolean> {
     try {
       const assessments = await this.getAssessments();
-      
+
       // Find the target assessment
       const targetAssessment = assessments.find(a => a.assessment_id === assessmentId);
       if (!targetAssessment) {
-        
+
         return false;
       }
 
       // First assessment (lowest order) is always unlocked
       const lowestOrder = Math.min(...assessments.map(a => a.order));
       if (targetAssessment.order === lowestOrder) {
-        
+
         return true;
       }
 
       // Check if all previous assessments are completed
       const previousAssessments = assessments.filter(a => a.order < targetAssessment.order);
-      
+
       for (const prevAssessment of previousAssessments) {
         if (!this.isAssessmentCompleted(userEmail, prevAssessment.assessment_id)) {
-          
+
           return false;
         }
       }
 
-      
+
       return true;
     } catch (error) {
       console.error('Error checking assessment unlock status:', error);
@@ -679,17 +679,17 @@ export class S3Service {
     try {
       // Fetch test-specific assessments
       const response = await fetch(`${API_BASE_URL}/assessments/test/${testId}`);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       const testAssessments = data.assessments || [];
-      
+
       // Sort by order to ensure we check in the correct sequence
       testAssessments.sort((a: any, b: any) => a.order - b.order);
-      
+
       // Find the first assessment in this test that is not completed
       for (const testAssessment of testAssessments) {
         if (!this.isAssessmentCompleted(userEmail, testAssessment.assessment_id)) {
@@ -701,7 +701,7 @@ export class S3Service {
             type: testAssessment.type,
             order: testAssessment.order,
           };
-          
+
           // For test-specific assessments, use custom unlock logic
           const isUnlocked = this.isTestAssessmentUnlocked(userEmail, testAssessment, testAssessments);
           if (isUnlocked) {
@@ -726,22 +726,22 @@ export class S3Service {
   private static isTestAssessmentUnlocked(userEmail: string, targetAssessment: any, allTestAssessments: any[]): boolean {
     // Find the minimum order (first assessment)
     const minOrder = Math.min(...allTestAssessments.map((a: any) => a.order));
-    
+
     // First assessment is always unlocked
     if (targetAssessment.order === minOrder) {
       return true;
     }
-    
+
     // Check if all previous assessments (lower order) are completed
     const previousAssessments = allTestAssessments.filter((a: any) => a.order < targetAssessment.order);
-    
+
     for (const prevAssessment of previousAssessments) {
       const isCompleted = this.isAssessmentCompleted(userEmail, prevAssessment.assessment_id);
       if (!isCompleted) {
         return false;
       }
     }
-    
+
     return true;
   }
 
@@ -750,23 +750,23 @@ export class S3Service {
     console.warn('⚠️ getNextUnlockedAssessment is deprecated - use getNextUnlockedAssessmentInTest instead');
     try {
       const assessments = await this.getAssessments();
-      
+
       // Find the first assessment that is not completed
       for (const assessment of assessments) {
         if (!this.isAssessmentCompleted(userEmail, assessment.assessment_id)) {
           // Check if it's unlocked
           const isUnlocked = await this.isAssessmentUnlocked(userEmail, assessment.assessment_id);
           if (isUnlocked) {
-            
+
             return assessment;
           } else {
-            
+
             return null; // If next incomplete assessment is locked, no unlocked assessments available
           }
         }
       }
 
-      
+
       return null;
     } catch (error) {
       console.error('Error getting next unlocked assessment:', error);
@@ -778,22 +778,22 @@ export class S3Service {
   static async getNextAssessment(currentAssessmentId: string): Promise<Assessment | null> {
     try {
       const assessments = await this.getAssessments();
-      
+
       // Find current assessment
       const currentAssessment = assessments.find(a => a.assessment_id === currentAssessmentId);
       if (!currentAssessment) {
-        
+
         return null;
       }
-      
+
       // Find next assessment by order
       const nextAssessment = assessments.find(a => a.order > currentAssessment.order);
-      
+
       if (nextAssessment) {
-        
+
         return nextAssessment;
       } else {
-        
+
         return null;
       }
     } catch (error) {
@@ -830,11 +830,11 @@ export class S3Service {
 
       const data = await response.json();
       console.log('Raw data received from backend:', data);
-      
+
       if (data.status === 'completed') {
         throw new Error(`ASSESSMENT_COMPLETED:${JSON.stringify(data)}`);
       }
-      
+
       // Handle both old format (content) and new format (questions)
       let content: TripleStepContent;
       if (data.content) {
@@ -848,22 +848,22 @@ export class S3Service {
       } else {
         throw new Error('No Triple Step content or questions returned from the API');
       }
-      
+
       // Validate that we have the correct TripleStep format
       if (typeof content !== 'object' || Array.isArray(content)) {
         throw new Error('Invalid TripleStep content format - expected topic-word mapping object');
       }
-      
+
       // Ensure we have at least some topics and words
       const topics = Object.keys(content);
       if (topics.length === 0) {
         throw new Error('No topics found in TripleStep content');
       }
-      
+
       // Select only 3 random topics from the available topics
       const shuffledTopics = [...topics].sort(() => Math.random() - 0.5);
       const selectedTopics = shuffledTopics.slice(0, Math.min(3, topics.length));
-      
+
       // Convert to standard Question format (only 3 questions)
       const questions: Question[] = selectedTopics.map((topic, index) => ({
         question_id: `q${index + 1}`,
@@ -873,7 +873,7 @@ export class S3Service {
         // Store the words for this topic in a custom field - we'll need this for the game
         words: content[topic] || []
       }));
-      
+
       console.log('[S3Service] Triple Step questions converted successfully:', {
         totalTopicsAvailable: topics.length,
         selectedTopics: selectedTopics.length,
@@ -881,7 +881,7 @@ export class S3Service {
         selectedTopicNames: selectedTopics,
         totalWords: selectedTopics.reduce((sum, topic) => sum + (content[topic]?.length || 0), 0)
       });
-      
+
       return questions;
     } catch (error) {
       console.error('Error fetching Triple Step questions:', error);
@@ -889,4 +889,3 @@ export class S3Service {
     }
   }
 }
- 

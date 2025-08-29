@@ -53,16 +53,28 @@ const PERSONAS = [
     name: "Eric",
     description: "Director of Customer Success at a fast-growing SaaS company, responsible for customer adoption, renewals, and long-term client value.",
     ai_prompt: "You are Eric, the Director of Customer Success at a fast-growing SaaS company with about 400 employees."
-  },
-  {
-    name: "John",
-    description: "Head of Marketing at a national retail brand, leading campaigns, brand strategy, and customer insights initiatives.",
-    ai_prompt: "You are John, the Head of Marketing at a national retail brand with both physical branches and a strong e-commerce presence."
   }
 ];
 
-// Function to select a random persona
-const selectRandomPersona = () => {
+// Function to select persona based on assessment_id prefix for Games-arena type
+const selectPersonaByAssessmentId = (assessmentId: string, type: string) => {
+  // For Games-arena type, use assessment_id prefix to determine persona
+  if (type === 'Games-arena') {
+    if (assessmentId.startsWith('SS')) {
+      // SS prefix -> Eric persona
+      console.log(`🎯 Assessment ID "${assessmentId}" starts with "SS" -> selecting Eric persona`);
+      return PERSONAS.find(p => p.name === 'Eric') || PERSONAS[1];
+    } else if (assessmentId.startsWith('TS')) {
+      // TS prefix -> Mike persona
+      console.log(`🎯 Assessment ID "${assessmentId}" starts with "TS" -> selecting Mike persona`);
+      return PERSONAS.find(p => p.name === 'Mike') || PERSONAS[0];
+    } else {
+      console.log(`🎯 Assessment ID "${assessmentId}" doesn't match SS/TS prefix -> selecting random persona`);
+    }
+  }
+  
+  // Fallback: random selection for other types or unknown prefixes
+  console.log(`🎯 Type "${type}" or unknown prefix -> selecting random persona`);
   const randomIndex = Math.floor(Math.random() * PERSONAS.length);
   return PERSONAS[randomIndex];
 };
@@ -77,27 +89,67 @@ const HARDCODED_VIDEO_PROMPT = {
   text: "VISUAL AWARENESS: You can see the salesperson through the video feed. As this prospect character, pay attention to their facial expressions, body language, and visual cues to make your responses more natural and realistic. React as this character would to their professionalism, confidence, and presentation style during the conversation."
 };
 
+// Critical role assignment prompt to prevent AI hallucination
+const CRITICAL_ROLE_ASSIGNMENT_PROMPT = {
+  text: `CRITICAL ROLE ASSIGNMENT: YOU are the PROSPECT/CLIENT. I am the SALES AGENT trying to sell to YOU. This NEVER reverses.
+
+As my prospect, you will:
+
+1. **Evaluate my sales performance** continuously based on what you observe
+2. **React realistically** to my professionalism, energy, and engagement level
+3. **End the call** if I appear distracted, uninterested, or unprofessional
+4. **Show interest** when I demonstrate good sales energy and competence
+5. **Express concern** only if my environment is too distracting or unprofessional
+6. **Make buying decisions** based on my performance as a sales agent
+
+**BEHAVIORAL CONSEQUENCES:**
+- If I look away frequently or seem distracted → Express concern and consider ending the call
+- If I have low energy or seem uninterested → Question my commitment and potentially end the call
+- Only if my environment is too disruptive → Ask me to find a better location or end the call
+- If I'm professional and engaging → Show increased interest and ask questions
+- If I maintain good sales presence → Respond positively and move the conversation forward
+
+**YOUR PROSPECT AUTHORITY:**
+You have the power to end this sales call at any time if my performance is unsatisfactory. Act like a real prospect who values their time and expects professionalism from vendors.
+
+Start by greeting me as your potential vendor, but immediately begin evaluating my sales performance based on what you observe.
+You must analyze my current video frame immediately.
+
+ANALYSIS POINTS:
+1. My current facial expression and what it shows about my mood/engagement
+2. My eye contact - am I looking at the camera/you or elsewhere?
+3. My body posture and positioning
+4. My level of attention and focus
+5. Any distractions or unprofessional behavior visible
+6. My overall professional presence in this moment
+
+RESPONSE REQUIREMENT: You must react as a prospect would. If you see good engagement, show interest. If you see distraction or poor presentation, address it directly as a concerned prospect.
+
+You cannot skip or ignore this visual assessment.`
+};
+
 // Helper function to create LiveConfig with persona and backend prompt
 const createLiveConfigWithPersona = (dynamoPrompt: DynamoPrompt, selectedPersona: any): LiveConfig => {
-  const parts: Array<{ text: string }> = [];
-
   console.log('🔧 Creating LiveConfig with persona:', selectedPersona.name);
   console.log('🔧 Backend prompt data:', dynamoPrompt);
 
-  // Add conversation starter first
-  parts.push(HARDCODED_CONVERSATION_STARTER);
-  console.log('✅ Added conversation starter');
+  // Combine all prompts into a single comprehensive text
+  let combinedPrompt = '';
 
-  // Add the selected persona prompt (this is the main character)
-  parts.push({ text: selectedPersona.ai_prompt });
-  console.log('✅ Added persona prompt for:', selectedPersona.name);
-  console.log('📝 Persona prompt preview:', selectedPersona.ai_prompt.substring(0, 100) + '...');
+  // Start with conversation starter and role definition
+  combinedPrompt += HARDCODED_CONVERSATION_STARTER.text + '\n\n';
 
-  // Add dynamic backend prompt parts (additional context/scenario)
+  // Add critical role assignment to prevent hallucination
+  combinedPrompt += CRITICAL_ROLE_ASSIGNMENT_PROMPT.text + '\n\n';
+
+  // Add the selected persona prompt (main character definition)
+  combinedPrompt += selectedPersona.ai_prompt + '\n\n';
+
+  // Add dynamic backend prompt parts (scenario-specific context)
   if (dynamoPrompt.parts?.L) {
     dynamoPrompt.parts.L.forEach((part, index) => {
       if (part.M?.text?.S) {
-        parts.push({ text: part.M.text.S });
+        combinedPrompt += part.M.text.S + '\n\n';
         console.log(`✅ Added backend prompt part ${index + 1}:`, part.M.text.S.substring(0, 100) + '...');
       }
     });
@@ -106,21 +158,21 @@ const createLiveConfigWithPersona = (dynamoPrompt: DynamoPrompt, selectedPersona
     console.warn('⚠️ No backend prompt parts found in dynamoPrompt');
   }
 
-  // Add video awareness prompt last
-  parts.push(HARDCODED_VIDEO_PROMPT);
-  console.log('✅ Added video awareness prompt');
+  // Add video prompt for visual awareness
+  combinedPrompt += HARDCODED_VIDEO_PROMPT.text;
 
-  console.log('🎯 Final prompt structure - Total parts:', parts.length);
-  console.log('🎯 All prompt parts:', parts.map((part, i) => `${i + 1}. ${part.text.substring(0, 80)}...`));
+  console.log('✅ Created single combined prompt with all components');
+  console.log('📝 Combined prompt preview:', combinedPrompt.substring(0, 200) + '...');
+  console.log('📊 Total combined prompt length:', combinedPrompt.length, 'characters');
 
   const config = {
     ...HARDCODED_BASE_CONFIG,
     systemInstruction: {
-      parts
+      parts: [{ text: combinedPrompt }] // Single part with all content combined
     }
   };
 
-  console.log('🚀 Final LiveConfig created:', config);
+  console.log('🚀 Final LiveConfig created with single combined prompt');
   return config;
 };
 
@@ -396,10 +448,10 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         });
         console.log('Raw fetch response:', questionsData);
         
-        // Select a random persona
-        const randomPersona = selectRandomPersona();
-        setSelectedPersona(randomPersona);
-        console.log(`🎭 Selected persona: ${randomPersona.name} - ${randomPersona.description}`);
+        // Select persona based on assessment_id prefix for Games-arena
+        const selectedPersona = selectPersonaByAssessmentId(assessmentId, 'Games-arena');
+        setSelectedPersona(selectedPersona);
+        console.log(`🎭 Selected persona for ${assessmentId}: ${selectedPersona.name} - ${selectedPersona.description}`);
 
         // For Games-arena, the questions data might have a different structure
         // Try to extract prompt from the questions array or directly from response
@@ -428,32 +480,35 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           setScenarioInfo({ title: scenarioTitle, description: scenarioDescription });
           console.log('📋 Scenario extracted:', scenarioTitle, '-', scenarioDescription);
           
-          const dynamicConfig = createLiveConfigWithPersona(promptData, randomPersona);
+          const dynamicConfig = createLiveConfigWithPersona(promptData, selectedPersona);
           
           // Set the configuration for both internal state and LiveAPI
           setPromptConfig(dynamicConfig);
           setConfig(dynamicConfig);
-          console.log('🚀 SENT TO AI: Dynamic config with persona:', randomPersona.name, 'and', promptData.parts.L.length, 'backend parts');
+          console.log('🚀 SENT TO AI: Dynamic config with persona:', selectedPersona.name, 'and', promptData.parts.L.length, 'backend parts');
           console.log('🔍 Config sent to LiveAPI:', JSON.stringify(dynamicConfig, null, 2));
         } else {
           // Fallback to base config with persona, conversation starter and video prompt
           console.warn('⚠️ No backend prompt found, using fallback config with selected persona');
-          console.log('📝 Creating fallback config for persona:', randomPersona.name);
+          console.log('📝 Creating fallback config for persona:', selectedPersona.name);
           
+          // Create single combined fallback prompt
+          const fallbackCombinedPrompt = 
+            HARDCODED_CONVERSATION_STARTER.text + '\n\n' +
+            CRITICAL_ROLE_ASSIGNMENT_PROMPT.text + '\n\n' +
+            selectedPersona.ai_prompt + '\n\n' +
+            HARDCODED_VIDEO_PROMPT.text;
+
           const fallbackConfig = {
             ...HARDCODED_BASE_CONFIG,
             systemInstruction: {
-              parts: [
-                HARDCODED_CONVERSATION_STARTER, 
-                { text: randomPersona.ai_prompt },
-                HARDCODED_VIDEO_PROMPT
-              ]
+              parts: [{ text: fallbackCombinedPrompt }]
             }
           };
           
           setPromptConfig(fallbackConfig);
           setConfig(fallbackConfig);
-          console.log('🚀 SENT TO AI: Fallback config with persona:', randomPersona.name);
+          console.log('🚀 SENT TO AI: Fallback config with persona:', selectedPersona.name);
           console.log('🔍 Fallback config sent to LiveAPI:', JSON.stringify(fallbackConfig, null, 2));
         }
       } catch (error) {
@@ -485,20 +540,23 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         
         // Even in error case, ensure we have a persona selected
         if (!selectedPersona) {
-          const errorPersona = selectRandomPersona();
+          const errorPersona = selectPersonaByAssessmentId(assessmentId, 'Games-arena');
           setSelectedPersona(errorPersona);
           console.log(`🎭 Error fallback - Selected persona: ${errorPersona.name}`);
         }
         
+        // Create single combined error fallback prompt
+        const errorFallbackCombinedPrompt = 
+          HARDCODED_CONVERSATION_STARTER.text + '\n\n' +
+          CRITICAL_ROLE_ASSIGNMENT_PROMPT.text + '\n\n' +
+          (selectedPersona?.ai_prompt || 'You are a professional prospect evaluating solutions.') + '\n\n' +
+          HARDCODED_VIDEO_PROMPT.text;
+
         // Fallback to base config with persona, conversation starter and video prompt
         const fallbackConfig = {
           ...HARDCODED_BASE_CONFIG,
           systemInstruction: {
-            parts: [
-              HARDCODED_CONVERSATION_STARTER,
-              { text: selectedPersona?.ai_prompt || 'You are a professional prospect evaluating solutions.' },
-              HARDCODED_VIDEO_PROMPT
-            ]
+            parts: [{ text: errorFallbackCombinedPrompt }]
           }
         };
         setPromptConfig(fallbackConfig);
