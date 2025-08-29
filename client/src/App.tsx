@@ -80,11 +80,12 @@ function SecurityWrapper() {
   
   // Apply restrictions ONLY during the actual assessment content pages
   // NOT on rules/preparation pages - only when user is actively taking the test
+  // Exclude routes that have internal rules/setup phases:
+  // - /triple-step/ and /sales-ai/ have their own internal rules states
+  // - /conductor/ starts assessment immediately
   const isActiveAssessmentContent = location.startsWith('/assessment/') || 
                                    location.startsWith('/question/') ||
-                                   location.startsWith('/conductor/') ||
-                                   location.startsWith('/triple-step/') ||
-                                   location.startsWith('/sales-ai/');
+                                   location.startsWith('/conductor/');
 
   // Debug logging for clarity
   console.log(`🔒 SecurityWrapper - Location: ${location}, Active Assessment Content: ${isActiveAssessmentContent}`);
@@ -93,10 +94,17 @@ function SecurityWrapper() {
   if (isActiveAssessmentContent) {
     console.log(`🔒 Applying SecurityRestrictions for ${location}`);
     // During actual assessment: Full restrictions including window switching
-    return <SecurityRestrictions enableWindowBlurRestriction={true} />;
+    return (
+      <>
+        <SecurityRestrictions enableWindowBlurRestriction={true} />
+        <AssessmentSecurity />
+        <NavigationBlocker />
+      </>
+    );
   }
   
   // No restrictions on ANY other pages - Dashboard, Home, Settings, Rules, Test Selection
+  // Triple-Step and Sales-AI will handle their own security when in active assessment mode
   console.log(`✅ No restrictions applied for ${location} - Full browser functionality available`);
   return null;
 }
@@ -105,7 +113,6 @@ function Router() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header />
-      <AssessmentSecurity />
       <SecurityWrapper />
       <Switch>
         <Route path="/login" component={Login} />
@@ -176,106 +183,13 @@ function App() {
     clarityService.init();
   }, []);
 
-  // Prevent manual refresh and back button navigation
-  React.useEffect(() => {
-    // Prevent refresh (Ctrl+R, F5, Cmd+R)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        (e.ctrlKey && e.key === 'r') ||
-        (e.metaKey && e.key === 'r') ||
-        e.key === 'F5'
-      ) {
-        e.preventDefault();
-        
-        return false;
-      }
-    };
-
-    // More aggressive back button prevention
-    const preventBackNavigation = () => {
-      // Add multiple history entries to make back button ineffective
-      window.history.pushState(null, '', window.location.href);
-      window.history.pushState(null, '', window.location.href);
-      window.history.pushState(null, '', window.location.href);
-    };
-
-    // Handle popstate event (back/forward button)
-    const handlePopState = (e: PopStateEvent) => {
-      // Prevent the default back navigation
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      
-      // Immediately push multiple states back aggressively
-      const currentUrl = window.location.href;
-      setTimeout(() => {
-        for (let i = 0; i < 5; i++) {
-          window.history.pushState(
-            { block: true, index: i }, 
-            'Navigation Blocked', 
-            currentUrl
-          );
-        }
-      }, 0);
-      
-      
-      
-      // No alert - silent blocking
-      return false;
-    };
-
-    // Prevent page unload (closing tab, etc.)
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const message = 'Are you sure you want to leave? Your progress might be lost.';
-      e.preventDefault();
-      e.returnValue = message;
-      return message;
-    };
-
-    // Handle hash changes (prevents # navigation)
-    const handleHashChange = (e: HashChangeEvent) => {
-      e.preventDefault();
-      window.location.hash = '';
-      
-    };
-
-    // Initial setup
-    preventBackNavigation();
-
-    // Add event listeners
-    document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('popstate', handlePopState, true); // Use capture phase
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('hashchange', handleHashChange);
-
-    // More aggressive history buffer maintenance
-    const historyInterval = setInterval(() => {
-      const currentUrl = window.location.href;
-      // Always maintain a buffer of history entries
-      for (let i = 0; i < 3; i++) {
-        window.history.pushState(
-          { maintained: true, timestamp: Date.now(), index: i }, 
-          'History Buffer', 
-          currentUrl
-        );
-      }
-    }, 500); // Check every 500ms instead of 1000ms
-
-    // Cleanup
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('popstate', handlePopState, true);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('hashchange', handleHashChange);
-      clearInterval(historyInterval);
-    };
-  }, []);
+  // Navigation restrictions are now handled in SecurityWrapper for assessment pages only
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AssessmentProvider>
           <TooltipProvider>
-            <NavigationBlocker />
             <Toaster />
             <Router />
           </TooltipProvider>

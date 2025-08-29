@@ -659,10 +659,9 @@ export default function Dashboard() {
                    assessment.completed 
                      ? 'border-green-200 bg-green-50 dark:bg-green-900/20' 
                      : assessment.unlocked
-                     ? 'border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md cursor-pointer'
+                     ? 'border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md'
                      : 'border-gray-300 bg-gray-50 dark:bg-gray-800'
                 }`}
-                onClick={() => assessment.unlocked && !assessment.completed && handleStartAssessment(assessment.assessment_id)}
               >
                 <CardContent className="p-8 h-full flex flex-col justify-between relative">
                    {/* Locked State Overlay */}
@@ -740,7 +739,7 @@ export default function Dashboard() {
                       <Button
                         onClick={() => handleStartAssessment(assessment.assessment_id)}
                         disabled={loadingAssessment === assessment.assessment_id}
-                        className="group relative overflow-hidden w-full" 
+                        className="w-full relative z-20" 
                         size="lg"
                       >
                         {loadingAssessment === assessment.assessment_id ? (
@@ -749,14 +748,7 @@ export default function Dashboard() {
                             Starting...
                           </>
                         ) : (
-                          <>
-                            <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
-                              Start Now
-                            </span>
-                            <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
-                              <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
-                            </i>
-                          </>
+                          "Start Now"
                         )}
                       </Button>
                     ) : (

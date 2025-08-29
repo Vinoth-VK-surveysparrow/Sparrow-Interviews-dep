@@ -20,6 +20,9 @@ import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
 import { WarningBadge } from '@/components/WarningBadge';
 import { motion } from 'framer-motion';
 import { useClarity } from '@/hooks/useClarity';
+import SecurityRestrictions from '@/components/SecurityRestrictions';
+import { AssessmentSecurity } from '@/components/AssessmentSecurity';
+import { NavigationBlocker } from '@/components/NavigationBlocker';
 
 
 // Hardcoded base system configuration
@@ -1227,6 +1230,11 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   // Stream page - shows when assessment is active
   return (
     <div className="video-assessment-area">
+      {/* Apply security restrictions only when assessment is actively running */}
+      <SecurityRestrictions enableWindowBlurRestriction={true} />
+      <AssessmentSecurity />
+      <NavigationBlocker />
+      
       {/* Hidden canvas for video processing */}
               <canvas style={{ display: "none" }} ref={renderCanvasRef} />
         
