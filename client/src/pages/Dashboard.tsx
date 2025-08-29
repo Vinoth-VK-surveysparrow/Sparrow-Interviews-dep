@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
 import { useClarity } from '@/hooks/useClarity';
+import CardPlaceholder from '@/components/CardPlaceholder';
 
 // Sparrow logo component using the Symbol.svg
 const SparrowLogo = () => (
@@ -569,9 +570,39 @@ export default function Dashboard() {
   if (loadingAssessments) {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="text-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-300">Loading assessments...</p>
+        <div className="space-y-8">
+          {/* Header with Back Button */}
+          <div className="flex justify-start">
+            <Button
+              onClick={() => setLocation('/test-selection')}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Tests
+            </Button>
+          </div>
+          
+          <div className="text-center">
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Assessment Rounds
+            </h1>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+              Complete the assessment rounds in order to proceed with your evaluation.
+            </p>
+          </div>
+          <br></br>
+          <br></br>
+
+          {/* Placeholder cards while loading */}
+          <div className="relative">
+            <div className="overflow-x-auto pb-4">
+              <div className="flex gap-6 min-w-max px-1">
+                <CardPlaceholder count={4} />
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     );

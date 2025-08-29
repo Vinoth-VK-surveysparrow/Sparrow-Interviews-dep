@@ -7,6 +7,7 @@ import { ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
+import CardPlaceholder from '@/components/CardPlaceholder';
 
 // Test interface based on your API response
 interface Test {
@@ -155,11 +156,25 @@ export default function TestSelection() {
   if (loadingTests) {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="space-y-8">
           <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-6 text-blue-600" />
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">Loading Tests</h2>
-            <p className="text-gray-600 dark:text-gray-300">Fetching available assessments for you...</p>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Assessment Tests
+            </h1>
+            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
+              Choose from the available tests below to begin your assessment journey.
+            </p>
+          </div>
+          <br></br>
+          <br></br>
+
+          {/* Placeholder cards while loading */}
+          <div className="relative">
+            <div className="overflow-x-auto pb-4">
+              <div className="flex gap-6 min-w-max px-1 justify-center">
+                <CardPlaceholder count={3} />
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -185,79 +200,101 @@ export default function TestSelection() {
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-            Select Your Assessment
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
+            Assessment Tests
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
             Choose from the available tests below to begin your assessment journey.
           </p>
         </div>
 
-        {/* Test Cards - Centered Layout */}
-        <div className="flex justify-center">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl">
-            {tests.map((test) => (
-              <Card 
-                key={test.test_id}
-                className="w-80 h-[480px] shadow-sm transition-all duration-200 overflow-hidden border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-lg cursor-pointer transform hover:scale-105"
-                onClick={() => handleSelectTest(test.test_id)}
-              >
-                <CardContent className="p-8 h-full flex flex-col justify-between relative">
-                  {/* Icon Section */}
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-6 mb-6 flex items-center justify-center">
-                    <SparrowLogo />
-                  </div>
-                  
-                  {/* Content Section */}
-                  <div className="flex-1">
+        <br></br>
+        <br></br>
+
+        {/* Horizontal scrollable container with navigation - same as Dashboard */}
+        <div className="relative">
+          <div className="overflow-x-auto pb-4" id="tests-container">
+            <div className={`flex gap-6 min-w-max px-1 ${tests.length === 1 ? 'justify-center' : ''}`}>
+              {tests.map((test) => (
+                <Card 
+                  key={test.test_id}
+                  className="flex-shrink-0 w-72 h-[480px] shadow-sm transition-all duration-200 overflow-hidden relative border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md cursor-pointer"
+                  onClick={() => handleSelectTest(test.test_id)}
+                >
+                  <CardContent className="p-8 h-full flex flex-col justify-between relative">
+                    {/* Icon Section */}
+                    <div className="bg-gray-100 dark:bg-custom-dark-2 rounded-lg p-6 mb-6 flex items-center justify-center">
+                      <SparrowLogo />
+                    </div>
+                    
+                    {/* Content Section */}
                     <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
                       {test.test_name}
                     </h3>
-                    <p className="text-sm leading-relaxed mb-6 text-gray-600 dark:text-gray-300">
+                    <p className="text-sm leading-relaxed mb-4 text-gray-600 dark:text-gray-300">
                       {test.description}
                     </p>
-                  </div>
-                  
-                  {/* Button Section */}
-                  <div>
-                    <Button
-                      onClick={() => handleSelectTest(test.test_id)}
-                      disabled={loadingTest === test.test_id}
-                      className="group relative overflow-hidden w-full" 
-                      size="lg"
-                    >
-                      {loadingTest === test.test_id ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Selecting...
-                        </>
-                      ) : (
-                        <>
-                          <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
-                            Select Test
-                          </span>
-                          <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
-                            <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
-                          </i>
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    
+                    {/* Button Section */}
+                    <div className="mt-auto">
+                      <Button
+                        onClick={() => handleSelectTest(test.test_id)}
+                        disabled={loadingTest === test.test_id}
+                        className="group relative overflow-hidden w-full" 
+                        size="lg"
+                      >
+                        {loadingTest === test.test_id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Selecting...
+                          </>
+                        ) : (
+                          <>
+                            <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
+                              Select Test
+                            </span>
+                            <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
+                              <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+                            </i>
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
+          
+          {/* Right arrow indicator */}
+          {tests.length > 2 && (
+            <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10">
+              <Button
+                variant="outline"
+                size="sm"
+                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-lg border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white/95 dark:hover:bg-gray-700/95"
+                onClick={() => {
+                  const container = document.getElementById('tests-container');
+                  if (container) {
+                    container.scrollBy({ left: 300, behavior: 'smooth' });
+                  }
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {tests.length === 0 && !loadingTests && (
           <div className="flex items-center justify-center min-h-[40vh]">
             <div className="text-center">
-              <div className="bg-gray-100 dark:bg-gray-800 rounded-full p-6 mb-6 mx-auto w-24 h-24 flex items-center justify-center">
+              <div className="bg-gray-100 dark:bg-custom-dark-2 rounded-lg p-6 mb-6 mx-auto w-24 h-24 flex items-center justify-center">
                 <SparrowLogo />
               </div>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">No Assessments Scheduled</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">No Tests Available</h2>
               <p className="text-gray-600 dark:text-gray-300 max-w-md mx-auto">
-                You don't have any assessments scheduled at the moment.
+                You don't have any tests assigned at the moment. Please contact your administrator.
               </p>
             </div>
           </div>

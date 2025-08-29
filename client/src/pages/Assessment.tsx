@@ -20,6 +20,7 @@ import { WarningBadge } from '@/components/WarningBadge';
 // Enhanced Circular Timer component that serves as Next button
 const CircularTimer = memo(({ 
   timeLeft, 
+  totalTime,
   isActive, 
   onClick, 
   isFinishing, 
@@ -27,13 +28,13 @@ const CircularTimer = memo(({
   isUploading
 }: { 
   timeLeft: number; 
+  totalTime: number;
   isActive: boolean; 
   onClick: () => void; 
   isFinishing: boolean;
   isLastQuestion: boolean;
   isUploading: boolean;
 }) => {
-  const totalTime = 60; // Always 60 seconds
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
@@ -109,7 +110,8 @@ export default function Assessment() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60); // Fixed 60 seconds for each question
+  const [timeLeft, setTimeLeft] = useState(60); // Will be set dynamically from backend
+  const [questionTimeLimit, setQuestionTimeLimit] = useState(60); // Store the time limit from backend
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [assessmentStarted, setAssessmentStarted] = useState(false);
@@ -235,6 +237,13 @@ export default function Assessment() {
         }
 
         console.log(`✅ Assessment ${params.assessmentId} validated in test ${selectedTestId}`);
+        
+        // Set the time limit from backend response
+        const timeLimitFromBackend = assessmentInTest.time_limit || 60; // Default to 60 if not provided
+        setQuestionTimeLimit(timeLimitFromBackend);
+        setTimeLeft(timeLimitFromBackend);
+        
+        console.log(`⏱️ Using time limit from backend: ${timeLimitFromBackend} seconds for assessment type: ${assessmentInTest.type}`);
         
         // Now fetch questions using the assessment type
         const fetchedQuestions = await fetchQuestions(params.assessmentId, assessmentInTest.type);
@@ -452,7 +461,7 @@ export default function Assessment() {
       }
       
       setCurrentQuestionIndex(nextIndex);
-      setTimeLeft(60); // Always exactly 60 seconds per question
+      setTimeLeft(questionTimeLimit); // Use dynamic time limit from backend
       setIsTimerActive(true);
       resetTranscript(); // Clear previous transcript for new question
       
@@ -644,6 +653,7 @@ export default function Assessment() {
                     <div>
                       <CircularTimer 
                         timeLeft={timeLeft} 
+                        totalTime={questionTimeLimit}
                         isActive={isTimerActive}
                         onClick={handleNextQuestion}
                         isFinishing={isFinishing}

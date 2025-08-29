@@ -158,7 +158,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const renderCanvasRef = React.useRef<HTMLCanvasElement>(null);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(300); // Will be set dynamically from backend
+  const [assessmentTimeLimit, setAssessmentTimeLimit] = useState(300); // Store time limit from backend
   const timerRef = React.useRef<NodeJS.Timeout | null>(null);
   const [promptConfig, setPromptConfig] = useState<LiveConfig | null>(null);
   const [loadingPrompt, setLoadingPrompt] = useState(true);
@@ -378,6 +379,13 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         }
 
         console.log(`✅ Games-arena assessment ${assessmentId} validated in test ${selectedTestId}`);
+        
+        // Set the time limit from backend response (for Sales AI, this is total session time)
+        const timeLimitFromBackend = assessmentInTest.time_limit || 300; // Default to 300 if not provided
+        setAssessmentTimeLimit(timeLimitFromBackend);
+        setTimeLeft(timeLimitFromBackend);
+        
+        console.log(`⏱️ Using time limit from backend: ${timeLimitFromBackend} seconds for Sales AI assessment`);
         
         // Use the standard S3Service.fetchQuestions which includes completion checks
         // This ensures the same workflow as other assessments
@@ -674,7 +682,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         // Calculate assessment duration
         const duration = assessmentStartTimeRef.current 
           ? Math.round((Date.now() - assessmentStartTimeRef.current.getTime()) / 1000)
-          : 300 - timeLeft;
+          : assessmentTimeLimit - timeLeft;
           
         console.log('📝 Games-arena conversation completed, Duration:', duration, 'seconds');
       }
@@ -731,7 +739,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   };
 
   // Calculate progress percentage
-  const progressPercentage = ((300 - timeLeft) / 300) * 100;
+  const progressPercentage = ((assessmentTimeLimit - timeLeft) / assessmentTimeLimit) * 100;
 
   const handleStartClick = async () => {
     if (!hasStarted && !startButtonClicked) {
@@ -782,7 +790,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         await startDualRecording();
         
         setHasStarted(true);
-        setTimeLeft(300); // Reset timer to 5 minutes
+        setTimeLeft(assessmentTimeLimit); // Reset timer to dynamic time limit
         
         toast({
           title: "Assessment Started",
@@ -841,7 +849,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       stopMonitoring();
       
       setHasStarted(false);
-      setTimeLeft(300); // Reset timer
+      setTimeLeft(assessmentTimeLimit); // Reset timer
       
       toast({
         title: "Assessment Ended",
@@ -1058,7 +1066,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
                         </div>
                         <div>
                           <h4 className="font-medium text-gray-900 dark:text-white">Duration</h4>
-                          <p className="text-sm text-gray-600 dark:text-gray-300">5 minutes max</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">{Math.floor(assessmentTimeLimit / 60)} minutes max</p>
                         </div>
                       </div>
                       

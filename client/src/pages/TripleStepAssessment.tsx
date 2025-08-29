@@ -21,6 +21,7 @@ import { useClarity } from '@/hooks/useClarity';
 
 const CircularTimer = memo(({ 
   timeLeft, 
+  totalTime,
   isActive, 
   onClick, 
   isFinishing, 
@@ -28,13 +29,14 @@ const CircularTimer = memo(({
   isUploading
 }: { 
   timeLeft: number; 
+  totalTime: number;
   isActive: boolean; 
   onClick: () => void; 
   isFinishing: boolean;
   isLastQuestion: boolean;
   isUploading: boolean;
 }) => {
-  const totalTime = 240; // 4 minutes for TripleStep
+  // totalTime is now passed as a parameter
   const percentage = ((totalTime - timeLeft) / totalTime) * 100;
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
@@ -155,7 +157,8 @@ export default function TripleStepAssessment() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(240); // 4 minutes per question
+  const [timeLeft, setTimeLeft] = useState(240); // Will be set dynamically from backend
+  const [questionTimeLimit, setQuestionTimeLimit] = useState(240); // Store the time limit from backend
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
   const [assessmentStarted, setAssessmentStarted] = useState(false);
@@ -230,6 +233,39 @@ export default function TripleStepAssessment() {
 
       try {
         setLoadingQuestions(true);
+        
+        // First, get the assessment details to fetch time limit
+        const selectedTestId = localStorage.getItem('selectedTestId');
+        if (!selectedTestId) {
+          console.error('❌ No test selected - redirecting to test selection');
+          setLocation('/test-selection');
+          return;
+        }
+
+        // Validate assessment exists in current test and get time limit
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+        const testResponse = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        
+        if (!testResponse.ok) {
+          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
+        }
+        
+        const testData = await testResponse.json();
+        const testAssessments = testData.assessments || [];
+        const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === params.assessmentId);
+        
+        if (!assessmentInTest) {
+          console.error(`❌ Assessment ${params.assessmentId} not found in test ${selectedTestId}`);
+          setLocation('/');
+          return;
+        }
+
+        // Set the time limit from backend response (for Triple Step, this is per question)
+        const timeLimitFromBackend = assessmentInTest.time_limit || 240; // Default to 240 if not provided
+        setQuestionTimeLimit(timeLimitFromBackend);
+        setTimeLeft(timeLimitFromBackend);
+        
+        console.log(`⏱️ Using time limit from backend: ${timeLimitFromBackend} seconds per question for Triple Step assessment`);
         
         // Use the standard fetchQuestions but with Triple-Step type
         const fetchedQuestions = await S3Service.fetchQuestions({
@@ -656,7 +692,7 @@ export default function TripleStepAssessment() {
         });
         
         // Reset timer
-        setTimeLeft(240);
+        setTimeLeft(questionTimeLimit);
         setIsTimerActive(true);
         setGameStartTime(Date.now());
         
@@ -757,6 +793,7 @@ export default function TripleStepAssessment() {
               <div className="flex-shrink-0">
                 <CircularTimer 
                 timeLeft={timeLeft} 
+                totalTime={questionTimeLimit}
                 isActive={isTimerActive}
                 onClick={handleNextQuestion}
                 isFinishing={isFinishing}

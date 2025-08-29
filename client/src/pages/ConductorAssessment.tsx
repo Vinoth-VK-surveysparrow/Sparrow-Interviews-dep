@@ -82,6 +82,7 @@ export default function ConductorAssessment() {
   const [currentTopic, setCurrentTopic] = useState("");
   const [currentEnergyLevel, setCurrentEnergyLevel] = useState(5);
   const [timeRemaining, setTimeRemaining] = useState(0);
+  const [assessmentTimeLimit, setAssessmentTimeLimit] = useState(60); // Store time limit from backend
   const [assessmentStartTime, setAssessmentStartTime] = useState(0);
   const [energyChanges, setEnergyChanges] = useState<EnergyChange[]>([]);
   const [showBreathe, setShowBreathe] = useState(false);
@@ -153,6 +154,45 @@ export default function ConductorAssessment() {
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  // Fetch assessment time limit from backend
+  useEffect(() => {
+    const fetchAssessmentTimeLimit = async () => {
+      if (!params?.assessmentId) return;
+
+      try {
+        const selectedTestId = localStorage.getItem('selectedTestId');
+        if (!selectedTestId) {
+          console.error('❌ No test selected');
+          return;
+        }
+
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+        const testResponse = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        
+        if (!testResponse.ok) {
+          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
+        }
+        
+        const testData = await testResponse.json();
+        const testAssessments = testData.assessments || [];
+        const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === params.assessmentId);
+        
+        if (assessmentInTest && assessmentInTest.time_limit) {
+          const timeLimitFromBackend = assessmentInTest.time_limit;
+          setAssessmentTimeLimit(timeLimitFromBackend);
+          setTimeRemaining(timeLimitFromBackend);
+          
+          console.log(`⏱️ Using time limit from backend: ${timeLimitFromBackend} seconds for Conductor assessment`);
+        }
+      } catch (error) {
+        console.error('❌ Failed to fetch assessment time limit:', error);
+        // Keep default values if fetch fails
+      }
+    };
+
+    fetchAssessmentTimeLimit();
+  }, [params?.assessmentId]);
 
 
 
@@ -683,7 +723,7 @@ export default function ConductorAssessment() {
   // Start assessment
   const startAssessment = useCallback(async () => {
     setAssessmentState("playing");
-    setTimeRemaining(config?.gameSettings.duration || 60);
+    setTimeRemaining(assessmentTimeLimit);
     setAssessmentStartTime(Date.now());
     setCurrentEnergyLevel(5);
     setEnergyChanges([]);
@@ -705,7 +745,7 @@ export default function ConductorAssessment() {
     }, 1000);
 
     scheduleNextChange();
-  }, [config, startRecording, scheduleNextChange]);
+  }, [config, startRecording, scheduleNextChange, assessmentTimeLimit]);
 
   // End assessment
   const endAssessment = useCallback(async () => {
@@ -1034,7 +1074,7 @@ export default function ConductorAssessment() {
 
   if (assessmentState === "playing") {
     const energyInfo = getCurrentEnergyInfo();
-    const duration = config?.gameSettings.duration || 60;
+    const duration = assessmentTimeLimit;
     const progress = ((duration - timeRemaining) / duration) * 100;
 
     // Show loading if energy info is not available
