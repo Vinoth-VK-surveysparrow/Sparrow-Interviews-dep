@@ -7,9 +7,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AssessmentProvider } from "@/contexts/AssessmentContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "@/pages/Dashboard";
 import TestSelection from "@/pages/TestSelection";
+import AdminDashboard from "@/pages/AdminDashboard";
+import AssessmentProgress from "@/pages/AssessmentProgress";
+import AssessmentUsers from "@/pages/AssessmentUsers";
+import UserDetails from "@/pages/UserDetails";
 import Rules from "@/pages/Rules";
 import Question from "@/pages/Question";
 import Assessment from "@/pages/Assessment";
@@ -19,7 +24,7 @@ import TripleStepAssessment from "@/pages/TripleStepAssessment";
 import SalesAIAssessment from "@/pages/SalesAIAssessment";
 import Settings from "@/pages/Settings";
 import Login from "@/pages/Login";
-import NotFound from "@/pages/not-found";
+import NotFoundPage from "@/pages/NotFoundPage";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
 import { AssessmentSecurity } from "@/components/AssessmentSecurity";
 import { clarityService } from "@/lib/clarityService";
@@ -131,6 +136,26 @@ function Router() {
             <Dashboard />
           </ProtectedRoute>
         </Route>
+        <Route path="/admin">
+          <AdminProtectedRoute>
+            <AdminDashboard />
+          </AdminProtectedRoute>
+        </Route>
+        <Route path="/admin/assessment-progress/:testId">
+          <AdminProtectedRoute>
+            <AssessmentProgress />
+          </AdminProtectedRoute>
+        </Route>
+        <Route path="/admin/assessment-users/:assessmentId">
+          <AdminProtectedRoute>
+            <AssessmentUsers />
+          </AdminProtectedRoute>
+        </Route>
+        <Route path="/admin/user/:userEmail">
+          <AdminProtectedRoute>
+            <UserDetails />
+          </AdminProtectedRoute>
+        </Route>
         <Route path="/rules/:assessmentId">
           <ProtectedRoute>
             <Rules />
@@ -171,7 +196,7 @@ function Router() {
             <Results />
           </ProtectedRoute>
         </Route>
-        <Route component={NotFound} />
+        <Route component={NotFoundPage} />
       </Switch>
     </div>
   );

@@ -24,6 +24,7 @@ export default function Settings() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+
   
   // Microsoft Clarity tracking
   const { trackUserAction } = useClarity(true, 'Settings');
@@ -31,27 +32,30 @@ export default function Settings() {
 
 
 
-  // Load API key from backend on component mount
+  // Load API key and user role from backend on component mount
   useEffect(() => {
-    const loadApiKey = async () => {
+    const loadDataAndRole = async () => {
       if (!user?.email) {
         setIsLoading(false);
         return;
       }
 
       try {
+        // Load API key
         const apiKey = await fetchGeminiApiKey(user.email);
         if (apiKey) {
           setGeminiApiKey(apiKey);
         }
+
+
       } catch (error) {
-        console.error('Error loading API key:', error);
+        console.error('Error loading data:', error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadApiKey();
+    loadDataAndRole();
   }, [user?.email]);
 
   const handleSaveApiKey = async () => {
@@ -322,6 +326,7 @@ export default function Settings() {
           </Card>
 
           {/* Additional Settings (for future use) */}
+
           <Card>
             <CardHeader>
               <CardTitle>Assessment Preferences</CardTitle>

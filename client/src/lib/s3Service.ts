@@ -1,4 +1,12 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// Centralized admin API URL from environment
+const ADMIN_API_URL = import.meta.env.VITE_ADMIN_URL ;
+
+// Common headers for API requests to prevent CORS preflight issues
+const getRequestHeaders = () => ({
+  'Content-Type': 'application/json',
+  'Accept': 'application/json',
+});
 
 export interface AssessmentInteraction {
   question: string;
@@ -177,6 +185,94 @@ export interface FetchTripleStepResponse {
   content?: TripleStepContent;
   status?: string;
   message?: string;
+}
+
+// Admin interfaces for all tests endpoint
+export interface AdminTest {
+  test_id: string;
+  test_name: string;
+}
+
+export interface AllTestsResponse {
+  status: string;
+  total_tests: number;
+  tests: AdminTest[];
+  timestamp: string;
+}
+
+// Assessment progress interfaces
+export interface AssessmentProgress {
+  assessment_id: string;
+  assessment_name: string;
+  description: string;
+  time_limit: number;
+  completed_count: number;
+}
+
+export interface AssessmentProgressResponse {
+  status: string;
+  data: {
+    test_id: string;
+    assessments: AssessmentProgress[];
+    timestamp: string;
+  };
+}
+
+// Assessment users interfaces
+export interface AssessmentUser {
+  user_email: string;
+  test_id: string;
+  completed_at: string;
+  status: string;
+}
+
+export interface AssessmentUsersResponse {
+  status: string;
+  assessment_id: string;
+  assessment_name: string;
+  description: string;
+  time_limit: number;
+  total_users_completed: number;
+  users: AssessmentUser[];
+  timestamp: string;
+}
+
+// All users interfaces
+export interface AllUser {
+  user_email: string;
+  last_active: string | null;
+}
+
+export interface AllUsersResponse {
+  status: string;
+  total_users: number;
+  users: AllUser[];
+  timestamp: string;
+}
+
+// User Details interfaces
+export interface UserAssessment {
+  assessment_id: string;
+  assessment_name: string;
+  completed_at: string;
+  image_count: number;
+}
+
+export interface UserTest {
+  test_id: string;
+  status: string;
+  started_at: string;
+  last_updated: string;
+  completed_assessments: UserAssessment[];
+  total_assessments_completed: number;
+  total_images_uploaded: number;
+}
+
+export interface UserDetails {
+  status: string;
+  user_email: string;
+  total_tests: number;
+  tests: UserTest[];
 }
 
 export class S3Service {
@@ -799,6 +895,138 @@ export class S3Service {
     } catch (error) {
       console.error('Error getting next assessment:', error);
       return null;
+    }
+  }
+
+  // Admin method to fetch all tests
+  static async getAllTests(): Promise<AdminTest[]> {
+    try {
+      console.log('🔍 Fetching all tests for admin');
+
+      const response = await fetch(`${ADMIN_API_URL}/tests`, {
+        method: 'GET',
+        headers: getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch all tests:', response.status, response.statusText, errorText);
+        throw new Error(`Failed to fetch all tests: ${response.status} ${response.statusText}`);
+      }
+
+      const data: AllTestsResponse = await response.json();
+      console.log('✅ All tests fetched:', data);
+
+      return data.tests || [];
+    } catch (error) {
+      console.error('Error fetching all tests:', error);
+      throw error;
+    }
+  }
+
+  // Admin method to fetch assessment progress for a specific test
+  static async getAssessmentProgress(testId: string): Promise<AssessmentProgress[]> {
+    try {
+      console.log('🔍 Fetching assessment progress for test:', testId);
+
+      const response = await fetch(`${ADMIN_API_URL}/assessment-progress/${testId}`, {
+        method: 'GET',
+        headers: getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch assessment progress:', response.status, response.statusText, errorText);
+        throw new Error(`Failed to fetch assessment progress: ${response.status} ${response.statusText}`);
+      }
+
+      const data: AssessmentProgressResponse = await response.json();
+      console.log('✅ Assessment progress fetched:', data);
+
+      return data.data.assessments || [];
+    } catch (error) {
+      console.error('Error fetching assessment progress:', error);
+      throw error;
+    }
+  }
+
+  // Admin method to fetch users who completed a specific assessment
+  static async getAssessmentUsers(assessmentId: string): Promise<AssessmentUsersResponse> {
+    try {
+      console.log('🔍 Fetching users for assessment:', assessmentId);
+
+      const response = await fetch(`${ADMIN_API_URL}/assessment-users/${assessmentId}`, {
+        method: 'GET',
+        headers: getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch assessment users:', response.status, response.statusText, errorText);
+        throw new Error(`Failed to fetch assessment users: ${response.status} ${response.statusText}`);
+      }
+
+      const data: AssessmentUsersResponse = await response.json();
+      console.log('✅ Assessment users fetched:', data);
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching assessment users:', error);
+      throw error;
+    }
+  }
+
+  // Admin method to fetch all users
+  static async getAllUsers(): Promise<AllUser[]> {
+    try {
+      console.log('🔍 Fetching all users for admin');
+
+      const response = await fetch(`${ADMIN_API_URL}/all-users`, {
+        method: 'GET',
+        headers: getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch all users:', response.status, response.statusText, errorText);
+        throw new Error(`Failed to fetch all users: ${response.status} ${response.statusText}`);
+      }
+
+      const data: AllUsersResponse = await response.json();
+      console.log('✅ All users fetched:', data);
+
+      return data.users || [];
+    } catch (error) {
+      console.error('Error fetching all users:', error);
+      throw error;
+    }
+  }
+
+  // Get user details by email
+  static async getUserDetails(userEmail: string): Promise<UserDetails> {
+    try {
+      console.log('🔍 Fetching user details for:', userEmail);
+      
+      const response = await fetch(`${ADMIN_API_URL}/user/${userEmail}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch user details:', response.status, response.statusText, errorText);
+        throw new Error(`Failed to fetch user details: ${response.status} ${response.statusText}`);
+      }
+
+      const data: UserDetails = await response.json();
+      console.log('✅ User details fetched:', data);
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching user details:', error);
+      throw error;
     }
   }
 

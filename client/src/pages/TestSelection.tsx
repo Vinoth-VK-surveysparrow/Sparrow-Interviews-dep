@@ -3,11 +3,13 @@ import { useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ChevronRight, Loader2, AlertCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { ChevronRight, Loader2, AlertCircle, Settings } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
 import CardPlaceholder from '@/components/CardPlaceholder';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 // Test interface based on your API response
 interface Test {
@@ -18,6 +20,7 @@ interface Test {
 
 interface UserTestsResponse {
   user_email: string;
+  role: string;
   tests: Test[];
   test_count: number;
 }
@@ -37,9 +40,11 @@ const SparrowLogo = () => (
 
 export default function TestSelection() {
   const [tests, setTests] = useState<Test[]>([]);
+  const [userRole, setUserRole] = useState<string>('');
   const [loadingTests, setLoadingTests] = useState(true);
   const [loadingTest, setLoadingTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -86,6 +91,9 @@ export default function TestSelection() {
         
         const data: UserTestsResponse = await response.json();
         console.log('✅ User tests fetched:', data);
+        
+        // Set user role
+        setUserRole(data.role || '');
         
         // Check if user has any specific tests assigned
         if (data.tests && data.tests.length > 0) {
@@ -199,6 +207,48 @@ export default function TestSelection() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
+        {/* Admin Access - Top Left for Admin Users Only */}
+        {userRole === 'admin' && (
+          <div className="flex justify-start">
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  <img src="/Admin.png" alt="Admin" className="h-4 w-4" />
+                  Admin Panel
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-80">
+                <SheetHeader>
+                  <SheetTitle className="flex items-center gap-2">
+                    <img src="/Admin.png" alt="Admin" className="h-5 w-5" />
+                    Admin Panel
+                  </SheetTitle>
+                  <SheetDescription>
+                    Manage tests and assessments
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="mt-6">
+                  <Button 
+                    onClick={() => {
+                      setLocation('/admin');
+                      setSidebarOpen(false);
+                    }}
+                    className="w-full justify-start"
+                    variant="outline"
+                  >
+                    <img src="/Admin.png" alt="Admin" className="h-4 w-4 mr-2" />
+                    Admin Dashboard
+                  </Button>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        )}
+
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
             Assessment Tests
