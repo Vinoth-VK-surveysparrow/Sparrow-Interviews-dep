@@ -1,6 +1,11 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 // Centralized admin API URL from environment
-const ADMIN_API_URL = import.meta.env.VITE_ADMIN_URL ;
+const ADMIN_API_URL = import.meta.env.VITE_API_ADMIN_URL ;
+
+// Debug: Log the admin API URL in development
+if (import.meta.env.DEV) {
+  console.log('🔧 Admin API URL:', ADMIN_API_URL);
+}
 
 // Common headers for API requests to prevent CORS preflight issues
 const getRequestHeaders = () => ({
@@ -1006,12 +1011,10 @@ export class S3Service {
   static async getUserDetails(userEmail: string): Promise<UserDetails> {
     try {
       console.log('🔍 Fetching user details for:', userEmail);
-      
+
       const response = await fetch(`${ADMIN_API_URL}/user/${userEmail}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRequestHeaders(),
       });
 
       if (!response.ok) {
