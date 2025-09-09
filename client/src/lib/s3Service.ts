@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_ADMIN_URL = import.meta.env.VITE_API_ADMIN_URL || 'https://tqqg7hko9g.execute-api.us-west-2.amazonaws.com/api';
 
 export interface AssessmentInteraction {
   question: string;
@@ -896,7 +897,7 @@ export class S3Service {
       console.log('🔍 Fetching all tests for admin');
       
       // Use the metrics API endpoint mentioned in the web search results
-      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/tests`, {
+      const response = await fetch(`${API_ADMIN_URL}/tests`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -925,7 +926,7 @@ export class S3Service {
       console.log('🔍 Fetching assessment progress for test:', testId);
       
       // Use the metrics API endpoint for assessment progress
-      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/assessment-progress/${testId}`, {
+      const response = await fetch(`${API_ADMIN_URL}/assessment-progress/${testId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -954,7 +955,7 @@ export class S3Service {
       console.log('🔍 Fetching users for assessment:', assessmentId);
       
       // Use the metrics API endpoint for assessment users
-      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/assessment-users/${assessmentId}`, {
+      const response = await fetch(`${API_ADMIN_URL}/assessment-users/${assessmentId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -983,7 +984,7 @@ export class S3Service {
       console.log('🔍 Fetching all users for admin');
       
       // Use the metrics API endpoint for all users
-      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/all-users`, {
+      const response = await fetch(`${API_ADMIN_URL}/all-users`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1011,7 +1012,7 @@ export class S3Service {
     try {
       console.log('🔍 Fetching user details for:', userEmail);
       
-      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/user/${userEmail}`, {
+      const response = await fetch(`${API_ADMIN_URL}/user/${userEmail}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
