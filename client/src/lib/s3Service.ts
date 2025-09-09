@@ -1,17 +1,4 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-// Centralized admin API URL from environment
-const ADMIN_API_URL = import.meta.env.VITE_API_ADMIN_URL ;
-
-// Debug: Log the admin API URL in development
-if (import.meta.env.DEV) {
-  console.log('🔧 Admin API URL:', ADMIN_API_URL);
-}
-
-// Common headers for API requests to prevent CORS preflight issues
-const getRequestHeaders = () => ({
-  'Content-Type': 'application/json',
-  'Accept': 'application/json',
-});
 
 export interface AssessmentInteraction {
   question: string;
@@ -907,10 +894,13 @@ export class S3Service {
   static async getAllTests(): Promise<AdminTest[]> {
     try {
       console.log('🔍 Fetching all tests for admin');
-
-      const response = await fetch(`${ADMIN_API_URL}/tests`, {
+      
+      // Use the metrics API endpoint mentioned in the web search results
+      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/tests`, {
         method: 'GET',
-        headers: getRequestHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
@@ -933,10 +923,13 @@ export class S3Service {
   static async getAssessmentProgress(testId: string): Promise<AssessmentProgress[]> {
     try {
       console.log('🔍 Fetching assessment progress for test:', testId);
-
-      const response = await fetch(`${ADMIN_API_URL}/assessment-progress/${testId}`, {
+      
+      // Use the metrics API endpoint for assessment progress
+      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/assessment-progress/${testId}`, {
         method: 'GET',
-        headers: getRequestHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
@@ -959,10 +952,13 @@ export class S3Service {
   static async getAssessmentUsers(assessmentId: string): Promise<AssessmentUsersResponse> {
     try {
       console.log('🔍 Fetching users for assessment:', assessmentId);
-
-      const response = await fetch(`${ADMIN_API_URL}/assessment-users/${assessmentId}`, {
+      
+      // Use the metrics API endpoint for assessment users
+      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/assessment-users/${assessmentId}`, {
         method: 'GET',
-        headers: getRequestHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
@@ -985,10 +981,13 @@ export class S3Service {
   static async getAllUsers(): Promise<AllUser[]> {
     try {
       console.log('🔍 Fetching all users for admin');
-
-      const response = await fetch(`${ADMIN_API_URL}/all-users`, {
+      
+      // Use the metrics API endpoint for all users
+      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/all-users`, {
         method: 'GET',
-        headers: getRequestHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
@@ -1011,10 +1010,12 @@ export class S3Service {
   static async getUserDetails(userEmail: string): Promise<UserDetails> {
     try {
       console.log('🔍 Fetching user details for:', userEmail);
-
-      const response = await fetch(`${ADMIN_API_URL}/user/${userEmail}`, {
+      
+      const response = await fetch(`${import.meta.env.VITE_API_ADMIN_URL}/user/${userEmail}`, {
         method: 'GET',
-        headers: getRequestHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
