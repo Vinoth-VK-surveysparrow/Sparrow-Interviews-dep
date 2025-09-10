@@ -111,6 +111,16 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+  .theme {
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-color-destructive-foreground: var(----color-destructive-foreground);
+  }
+  :root {
+    --destructive-foreground: oklch(1 0 0);
+  }
+  .dark {
+    --destructive-foreground: oklch(1 0 0);
+  }
 }
 
 /* Custom dark theme utilities with specified colors */
@@ -208,5 +218,14 @@
       0 24px 24px 0 #357a78 inset,
       0 0 4px 1.2px rgba(74, 156, 166, 0.4),
       0 0 6px 1.8px rgba(62, 142, 138, 0.3);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
   }
 }

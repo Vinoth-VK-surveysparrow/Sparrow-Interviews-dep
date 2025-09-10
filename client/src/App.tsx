@@ -3,6 +3,7 @@ import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { CenteredToaster } from "@/components/ui/centered-toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AssessmentProvider } from "@/contexts/AssessmentContext";
@@ -216,6 +217,7 @@ function App() {
         <AssessmentProvider>
           <TooltipProvider>
             <Toaster />
+            <CenteredToaster />
             <Router />
           </TooltipProvider>
         </AssessmentProvider>

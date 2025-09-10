@@ -190,18 +190,14 @@ export default function AssessmentProgress() {
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back
           </Button>
-          <div className="flex items-center gap-3">
-            <SparrowIcon />
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                Assessment Progress
-              </h1>
-              <p className="text-lg text-gray-600 dark:text-gray-300">
-                {testName}
-              </p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Assessment Progress
+            </h1>
+            <p className="text-lg text-gray-600 dark:text-gray-300">
+              {testName}
+            </p>
           </div>
         </div>
 

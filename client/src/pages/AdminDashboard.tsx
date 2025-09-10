@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -17,13 +17,14 @@ import {
   AvatarFallback,
   AvatarImage,
 } from '@/components/ui/avatar';
-import { ArrowRight, AlertCircle, Loader2, Users, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Eye, Home, RefreshCw } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ArrowRight, AlertCircle, Loader2, Users, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Eye, Home, RefreshCw, FileText } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
 import { S3Service, AdminTest, AllUser } from '@/lib/s3Service';
 import { TestsListPlaceholder, UsersTablePlaceholder } from '@/components/ui/table-placeholder';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs-custom';
+import { Badge } from '@/components/ui/badge-advanced';
 
 // SurveySparrow logo component
 const SparrowIcon = () => (
@@ -45,105 +46,21 @@ interface ListItem {
   test_id: string;
 }
 
-// Toggle component
-const SlideTabs = ({ activeTab, onTabChange }: { activeTab: string; onTabChange: (tab: string) => void }) => {
-  const [position, setPosition] = useState({
-    left: 0,
-    width: 0,
-    opacity: 0,
-  });
-
-  const tabs = ['Tests', 'Users'];
-
-  useEffect(() => {
-    // Set initial position for active tab
-    const activeIndex = tabs.indexOf(activeTab);
-    if (activeIndex !== -1) {
-      const activeElement = document.querySelector(`[data-tab="${activeTab}"]`) as HTMLElement;
-      if (activeElement) {
-        const { width } = activeElement.getBoundingClientRect();
-        setPosition({
-          left: activeElement.offsetLeft,
-          width,
-          opacity: 1,
-        });
-      }
-    }
-  }, [activeTab]);
-
+// Modern Tabs component using custom design
+const ModernTabs = ({ activeTab, onTabChange }: { activeTab: string; onTabChange: (tab: string) => void }) => {
   return (
-    <ul
-      onMouseLeave={() => {
-        // Keep cursor on active tab when mouse leaves
-        const activeIndex = tabs.indexOf(activeTab);
-        if (activeIndex !== -1) {
-          const activeElement = document.querySelector(`[data-tab="${activeTab}"]`) as HTMLElement;
-          if (activeElement) {
-            const { width } = activeElement.getBoundingClientRect();
-            setPosition({
-              left: activeElement.offsetLeft,
-              width,
-              opacity: 1,
-            });
-          }
-        }
-      }}
-      className="relative flex w-fit rounded-full border border-gray-300 bg-white p-0.5"
-    >
-      {tabs.map((tab) => (
-        <Tab 
-          key={tab} 
-          setPosition={setPosition} 
-          isActive={activeTab === tab}
-          onClick={() => onTabChange(tab)}
-          tabName={tab}
-        >
-          {tab}
-        </Tab>
-      ))}
-      <Cursor position={position} />
-    </ul>
-  );
-};
-
-const Tab = ({ children, setPosition, isActive, onClick, tabName }: any) => {
-  const ref = useRef<HTMLLIElement>(null);
-
-  return (
-    <li
-      ref={ref}
-      data-tab={tabName}
-      onMouseEnter={() => {
-        if (!ref?.current) return;
-
-        const { width } = ref.current.getBoundingClientRect();
-
-        setPosition({
-          left: ref.current.offsetLeft,
-          width,
-          opacity: 1,
-        });
-      }}
-      onClick={onClick}
-      className={`relative z-20 block cursor-pointer px-3 py-1.5 text-xs font-medium transition-colors rounded-full ${
-        isActive 
-          ? 'text-white' 
-          : 'text-gray-700 hover:text-gray-900'
-      }`}
-    >
-      {children}
-    </li>
-  );
-};
-
-const Cursor = ({ position }: any) => {
-  return (
-    <motion.li
-      animate={{
-        ...position,
-      }}
-      className="absolute z-10 h-7 rounded-full bg-gray-900"
-    />
+    <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="Tests" className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-black dark:text-white" />
+          Tests
+        </TabsTrigger>
+        <TabsTrigger value="Users" className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-black dark:text-white" />
+          Users
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
   );
 };
 
@@ -290,8 +207,8 @@ export default function AdminDashboard() {
     const name = email.split('@')[0];
     const displayName = name.charAt(0).toUpperCase() + name.slice(1);
     const initials = displayName.substring(0, 2).toUpperCase();
-    const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${email}`;
-    
+    const avatarUrl = '/user.png';
+
     return { displayName, initials, avatarUrl };
   };
 
@@ -366,30 +283,42 @@ export default function AdminDashboard() {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <img src="/Admin.png" alt="Admin" className="h-6 w-6" />
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Admin Dashboard
-              </h1>
+          {/* Fixed Header - Consistent with main layout */}
+          <div className="flex items-center justify-between min-h-[4rem]">
+            <div className="flex items-center gap-2">
+              <img src="/Admin.png" alt="Admin" className="h-8 w-8" />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Admin Dashboard
+                </h1>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Manage assessment tests and users
+                </p>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Manage assessment tests and users
-            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation('/test-selection')}
+              className="flex items-center gap-2 flex-shrink-0"
+            >
+              <Home className="h-4 w-4" />
+              Home
+            </Button>
           </div>
 
           {/* Toggle */}
-          <div className="flex justify-start">
-            <SlideTabs activeTab={activeTab} onTabChange={handleTabChange} />
+          <div className="flex justify-start max-w-md">
+            <ModernTabs activeTab={activeTab} onTabChange={handleTabChange} />
           </div>
           
           {/* Loading Placeholders */}
           {activeTab === 'Tests' ? (
-            <section className="py-8">
+            <section className="py-8 min-h-[60vh]">
               <TestsListPlaceholder />
             </section>
           ) : (
-            <section className="py-8">
+            <section className="py-8 min-h-[60vh]">
               <div className="container mx-auto px-0 md:px-8">
                 <div className="flex gap-4 items-center justify-between mb-6">
                   <div className="h-10 w-64 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
@@ -407,16 +336,28 @@ export default function AdminDashboard() {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-4">
+          {/* Fixed Header - Consistent with main layout */}
+          <div className="flex items-center justify-between min-h-[4rem]">
+            <div className="flex items-center gap-2">
               <img src="/Admin.png" alt="Admin" className="h-8 w-8" />
-              <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-                Admin Dashboard
-              </h1>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Admin Dashboard
+                </h1>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Manage assessment tests and users
+                </p>
+              </div>
             </div>
-            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Manage all assessment tests and view their rounds
-            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation('/test-selection')}
+              className="flex items-center gap-2 flex-shrink-0"
+            >
+              <Home className="h-4 w-4" />
+              Home
+            </Button>
           </div>
           
           <div className="flex items-center justify-center min-h-[40vh]">
@@ -435,23 +376,24 @@ export default function AdminDashboard() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="text-center flex-1">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <img src="/Admin.png" alt="Admin" className="h-8 w-8" />
+        {/* Fixed Header - No layout shifts */}
+        <div className="flex items-center justify-between min-h-[4rem]">
+          <div className="flex items-center gap-2">
+            <img src="/Admin.png" alt="Admin" className="h-8 w-8" />
+            <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                 Admin Dashboard
               </h1>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Manage assessment tests and users
+              </p>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Manage assessment tests and users
-            </p>
           </div>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setLocation('/test-selection')}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 flex-shrink-0"
           >
             <Home className="h-4 w-4" />
             Home
@@ -459,14 +401,14 @@ export default function AdminDashboard() {
         </div>
 
         {/* Toggle */}
-        <div className="flex justify-start">
-          <SlideTabs activeTab={activeTab} onTabChange={handleTabChange} />
+        <div className="flex justify-start max-w-md">
+          <ModernTabs activeTab={activeTab} onTabChange={handleTabChange} />
         </div>
 
         {/* Content based on active tab */}
         {activeTab === 'Tests' ? (
           /* Tests View */
-          <section className="py-8">
+          <section className="py-8 min-h-[60vh]">
             <div className="container mx-auto px-0 md:px-8">
               <div className="flex flex-col">
                 <Separator />
@@ -505,7 +447,7 @@ export default function AdminDashboard() {
           </section>
         ) : (
           /* Users View */
-          <section className="py-8">
+          <section className="py-8 min-h-[60vh]">
             <div className="container mx-auto px-0 md:px-8">
               {/* Users Controls */}
               <div className="flex gap-4 items-center justify-between mb-6">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { ArrowLeft, User, Calendar, Image, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, User, Calendar, Image, CheckCircle, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,26 +33,39 @@ import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { useCenteredToast } from '@/hooks/use-centered-toast';
 import { useClarity } from '@/hooks/useClarity';
 import { S3Service, UserDetails as UserDetailsType } from '@/lib/s3Service';
 import { TablePlaceholder } from '@/components/ui/table-placeholder';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // Define columns for table
 const allTestColumns = [
   "Test ID",
-  "Status", 
+  "Status",
   "Started",
   "Last Updated",
   "Completed Assessments",
   "Images Uploaded",
+  "Clear Data",
 ] as const;
 
 const allAssessmentColumns = [
   "Assessment Name",
   "Assessment ID",
   "Test ID",
-  "Completed At", 
+  "Completed At",
   "Images Count",
+  "Clear Data",
 ] as const;
 
 export default function UserDetails() {
@@ -68,7 +81,14 @@ export default function UserDetails() {
   
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
+  // Deletion loading states
+  const [deletingTest, setDeletingTest] = useState<string | null>(null);
+  const [deletingAssessment, setDeletingAssessment] = useState<string | null>(null);
+  // Delete confirmation dialogs
+  const [deleteTestDialog, setDeleteTestDialog] = useState<{ open: boolean; testId: string; testName: string } | null>(null);
+  const [deleteAssessmentDialog, setDeleteAssessmentDialog] = useState<{ open: boolean; assessmentId: string; assessmentName: string } | null>(null);
   const { toast } = useToast();
+  const { toast: centeredToast } = useCenteredToast();
   const { trackUserAction } = useClarity();
 
   // Extract user email from route parameters
@@ -80,12 +100,132 @@ export default function UserDetails() {
     }
   }, [match, userEmail]);
 
+  const deleteTestAssessments = async (testId: string) => {
+    try {
+      // Show loading toast
+      centeredToast({
+        title: "Deleting...",
+        description: "Removing test data and associated files...",
+        variant: "loading",
+      });
+
+      const adminApiUrl = import.meta.env.VITE_API_ADMIN_URL ;
+      const response = await fetch(`${adminApiUrl}/delete-test-assessments`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_email: userEmail,
+          test_id: testId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete test assessments');
+      }
+
+      const result = await response.json();
+      console.log('Delete test assessments result:', result);
+
+      centeredToast({
+        title: "Test Data Deleted Successfully",
+        description: `Removed all assessments and files for test ${testId}`,
+        variant: "success",
+      });
+
+      // Refresh the page after successful deletion
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error) {
+      console.error('Error deleting test assessments:', error);
+      centeredToast({
+        title: "Deletion Failed",
+        description: "Failed to delete test assessments. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingTest(null);
+    }
+  };
+
+  const deleteAssessment = async (assessmentId: string) => {
+    try {
+      // Show loading toast
+      centeredToast({
+        title: "Deleting...",
+        description: "Removing assessment data and associated files...",
+        variant: "loading",
+      });
+
+      const adminApiUrl = import.meta.env.VITE_API_ADMIN_URL || 'https://tqqg7hko9g.execute-api.us-west-2.amazonaws.com/api';
+      const response = await fetch(`${adminApiUrl}/delete-assessment`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_email: userEmail,
+          assessment_id: assessmentId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete assessment');
+      }
+
+      const result = await response.json();
+      console.log('Delete assessment result:', result);
+
+      centeredToast({
+        title: "Assessment Deleted Successfully",
+        description: `Removed assessment ${assessmentId} and associated files`,
+        variant: "success",
+      });
+
+      // Refresh the page after successful deletion
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (error) {
+      console.error('Error deleting assessment:', error);
+      centeredToast({
+        title: "Deletion Failed",
+        description: "Failed to delete assessment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAssessment(null);
+    }
+  };
+
+  const handleDeleteTest = (testId: string, testName: string) => {
+    setDeleteTestDialog({ open: true, testId, testName });
+  };
+
+  const handleDeleteAssessment = (assessmentId: string, assessmentName: string) => {
+    setDeleteAssessmentDialog({ open: true, assessmentId, assessmentName });
+  };
+
+  const confirmDeleteTest = async () => {
+    if (!deleteTestDialog) return;
+
+    setDeletingTest(deleteTestDialog.testId);
+    setDeleteTestDialog(null);
+    await deleteTestAssessments(deleteTestDialog.testId);
+  };
+
+  const confirmDeleteAssessment = async () => {
+    if (!deleteAssessmentDialog) return;
+
+    setDeletingAssessment(deleteAssessmentDialog.assessmentId);
+    setDeleteAssessmentDialog(null);
+    await deleteAssessment(deleteAssessmentDialog.assessmentId);
+  };
+
   const fetchUserDetails = async () => {
     try {
       setLoading(true);
       setError(null);
       trackUserAction('admin_view_user_details', { user_email: userEmail });
-      
+
       const data = await S3Service.getUserDetails(userEmail);
       setUserDetails(data);
     } catch (err) {
@@ -135,8 +275,8 @@ export default function UserDetails() {
     const name = email.split('@')[0];
     const displayName = name.charAt(0).toUpperCase() + name.slice(1);
     const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-    const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
-    
+    const avatarUrl = '/user.png';
+
     return { displayName, initials, avatarUrl };
   };
 
@@ -243,7 +383,6 @@ export default function UserDetails() {
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Admin
           </Button>
           
           <Alert variant="destructive">
@@ -268,7 +407,6 @@ export default function UserDetails() {
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Admin
           </Button>
           
           <div className="text-center py-12">
@@ -289,55 +427,73 @@ export default function UserDetails() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button 
-            variant="outline" 
-            onClick={handleBack}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Admin
-          </Button>
-          
-          <div className="flex items-center gap-3">
-            <Avatar className="h-12 w-12">
-              <AvatarImage src={avatarUrl} alt={displayName} />
-              <AvatarFallback>{initials}</AvatarFallback>
-            </Avatar>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {userEmail}
-              </h1>
+        {/* User Card */}
+        <div className="w-full max-w-4xl p-1.5 rounded-2xl relative isolate overflow-hidden bg-white/5 dark:bg-black/90 bg-gradient-to-br from-black/5 to-black/[0.02] dark:from-white/5 dark:to-white/[0.02] backdrop-blur-xl backdrop-saturate-[180%] border border-black/10 dark:border-white/10 shadow-[0_8px_16px_rgb(0_0_0_/_0.15)] dark:shadow-[0_8px_16px_rgb(0_0_0_/_0.25)] will-change-transform translate-z-0">
+          <div className="w-full p-5 rounded-xl relative bg-gradient-to-br from-black/[0.05] to-transparent dark:from-white/[0.08] dark:to-transparent backdrop-blur-md backdrop-saturate-150 border border-black/[0.05] dark:border-white/[0.08] text-black/90 dark:text-white shadow-sm will-change-transform translate-z-0 before:absolute before:inset-0 before:bg-gradient-to-br before:from-black/[0.02] before:to-black/[0.01] dark:before:from-white/[0.03] dark:before:to-white/[0.01] before:opacity-0 before:transition-opacity before:pointer-events-none hover:before:opacity-100">
+            <div className="flex items-center justify-between">
+              {/* Left side - Back button and User info */}
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  className="flex items-center gap-2 h-10 w-10 p-0"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <div className="h-12 w-12 rounded-full overflow-hidden">
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1">
+                        <span className="font-semibold text-black dark:text-white/90">
+                          {displayName}
+                        </span>
+                      </div>
+                      <span className="text-black dark:text-white/60 text-sm">
+                        {userEmail}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right side - Stats */}
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <img src="/Completed Icon 50.png" alt="Completed" className="h-8 w-8" />
+                    <div className="text-right">
+                      <p className="text-xs text-black dark:text-white/60">Completed</p>
+                      <p className="text-lg font-bold text-black dark:text-white/90">
+                        {userDetails.tests.reduce((sum, test) => sum + test.total_assessments_completed, 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <img src="/Image Icons 50.png" alt="Images" className="h-8 w-8" />
+                    <div className="text-right">
+                      <p className="text-xs text-black dark:text-white/60">Images</p>
+                      <p className="text-lg font-bold text-black dark:text-white/90">
+                        {userDetails.tests.reduce((sum, test) => sum + test.total_images_uploaded, 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-6">
-            <div className="flex items-center gap-3">
-              <img src="/Completed Icon 50.png" alt="Completed" className="h-10 w-10" />
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Completed Assessments</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {userDetails.tests.reduce((sum, test) => sum + test.total_assessments_completed, 0)}
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <div className="flex items-center gap-3">
-              <img src="/Image Icons 50.png" alt="Images" className="h-10 w-10" />
-              <div>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Images Uploaded</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {userDetails.tests.reduce((sum, test) => sum + test.total_images_uploaded, 0)}
-                </p>
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* Tests Table */}
@@ -403,6 +559,7 @@ export default function UserDetails() {
                 {visibleTestColumns.includes("Last Updated") && <TableHead className="w-[180px]">Last Updated</TableHead>}
                 {visibleTestColumns.includes("Completed Assessments") && <TableHead className="w-[150px]">Completed Assessments</TableHead>}
                 {visibleTestColumns.includes("Images Uploaded") && <TableHead className="w-[120px]">Images Uploaded</TableHead>}
+                {visibleTestColumns.includes("Clear Data") && <TableHead className="w-[100px]">Clear Data</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -434,6 +591,19 @@ export default function UserDetails() {
                     )}
                     {visibleTestColumns.includes("Images Uploaded") && (
                       <TableCell className="whitespace-nowrap">{test.total_images_uploaded}</TableCell>
+                    )}
+                    {visibleTestColumns.includes("Clear Data") && (
+                      <TableCell className="whitespace-nowrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteTest(test.test_id, test.test_id)}
+                          disabled={deletingTest === test.test_id}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     )}
                   </TableRow>
                 ))
@@ -511,6 +681,7 @@ export default function UserDetails() {
                   {visibleAssessmentColumns.includes("Test ID") && <TableHead className="w-[150px]">Test ID</TableHead>}
                   {visibleAssessmentColumns.includes("Completed At") && <TableHead className="w-[180px]">Completed At</TableHead>}
                   {visibleAssessmentColumns.includes("Images Count") && <TableHead className="w-[120px]">Images Count</TableHead>}
+                  {visibleAssessmentColumns.includes("Clear Data") && <TableHead className="w-[100px]">Clear Data</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -539,6 +710,19 @@ export default function UserDetails() {
                         {visibleAssessmentColumns.includes("Images Count") && (
                           <TableCell className="whitespace-nowrap">{assessment.image_count}</TableCell>
                         )}
+                        {visibleAssessmentColumns.includes("Clear Data") && (
+                          <TableCell className="whitespace-nowrap">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteAssessment(assessment.assessment_id, assessment.assessment_name)}
+                              disabled={deletingAssessment === assessment.assessment_id}
+                              className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   ) : (
@@ -553,6 +737,54 @@ export default function UserDetails() {
             </Table>
           </div>
         )}
+
+        {/* Delete Test Confirmation Dialog */}
+        <AlertDialog open={deleteTestDialog?.open || false} onOpenChange={(open) => setDeleteTestDialog(open ? deleteTestDialog : null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Test Data</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete all data for test "{deleteTestDialog?.testName}"?
+                This will remove all assessments, progress data, and associated files from S3 storage.
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteTest}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={deletingTest !== null}
+              >
+                {deletingTest ? 'Deleting...' : 'Delete Data'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Assessment Confirmation Dialog */}
+        <AlertDialog open={deleteAssessmentDialog?.open || false} onOpenChange={(open) => setDeleteAssessmentDialog(open ? deleteAssessmentDialog : null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Assessment Data</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the assessment "{deleteAssessmentDialog?.assessmentName}"?
+                This will remove the assessment data and associated files from S3 storage.
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteAssessment}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={deletingAssessment !== null}
+              >
+                {deletingAssessment ? 'Deleting...' : 'Delete Assessment'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </main>
   );

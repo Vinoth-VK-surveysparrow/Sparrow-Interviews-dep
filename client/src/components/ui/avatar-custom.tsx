@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { cva, VariantProps } from 'class-variance-authority';
-import { Avatar as AvatarPrimitive } from 'radix-ui';
+import { Avatar as AvatarPrimitive } from '@radix-ui/react-avatar';
 
 const avatarStatusVariants = cva('flex items-center rounded-full size-2 border-2 border-background', {
   variants: {
@@ -38,7 +38,7 @@ function AvatarFallback({ className, ...props }: React.ComponentProps<typeof Ava
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
-        'flex h-full w-full items-center justify-center rounded-full text-muted-foreground text-xs',
+        'flex h-full w-full items-center justify-center rounded-full border border-border bg-accent text-accent-foreground text-xs',
         className,
       )}
       {...props}
@@ -65,4 +65,3 @@ function AvatarStatus({
 }
 
 export { Avatar, AvatarFallback, AvatarImage, AvatarIndicator, AvatarStatus, avatarStatusVariants };
-

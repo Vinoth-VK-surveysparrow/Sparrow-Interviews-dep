@@ -215,17 +215,24 @@ export interface AssessmentProgressResponse {
 export interface AssessmentUser {
   user_email: string;
   test_id: string;
-  completed_at: string;
+  completed_at: string | null;
   status: string;
+}
+
+export interface AssessmentSummary {
+  total_users_assigned: number;
+  total_users_completed: number;
+  total_users_not_started: number;
 }
 
 export interface AssessmentUsersResponse {
   status: string;
   assessment_id: string;
+  test_id: string;
   assessment_name: string;
   description: string;
   time_limit: number;
-  total_users_completed: number;
+  summary?: AssessmentSummary; // Made optional to handle backward compatibility
   users: AssessmentUser[];
   timestamp: string;
 }

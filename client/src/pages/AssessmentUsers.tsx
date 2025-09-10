@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useRoute } from 'wouter';
 import { Button } from '@/components/ui/button';
+import { Button as CustomButton } from '@/components/ui/button-custom';
 import { Input } from '@/components/ui/input';
 import { 
   Table,
@@ -29,12 +30,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, AlertCircle, Loader2, Crown, RefreshCw } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Loader2, Crown, RefreshCw, ChevronUp, ChevronDown, ArrowUpDown, CheckCircle, Users, Clock, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
-import { S3Service, AssessmentUsersResponse, AssessmentUser } from '@/lib/s3Service';
+import { S3Service, AssessmentUsersResponse, AssessmentUser, AssessmentSummary } from '@/lib/s3Service';
+import { Progress, ProgressCircle } from '@/components/ui/progress-custom';
 
 // SurveySparrow logo component
 const SparrowIcon = () => (
@@ -67,7 +69,11 @@ export default function AssessmentUsers() {
   const [visibleColumns, setVisibleColumns] = useState<string[]>([...allColumns]);
   const [emailFilter, setEmailFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  
+
+  // Sorting state
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
   
@@ -115,12 +121,53 @@ export default function AssessmentUsers() {
     fetchAssessmentUsers();
   }, [match, params?.assessmentId, toast]);
 
-  const filteredUsers = assessmentData?.users.filter((userRecord) => {
-    return (
-      (!emailFilter || userRecord.user_email.toLowerCase().includes(emailFilter.toLowerCase())) &&
-      (!statusFilter || userRecord.status === statusFilter)
-    );
-  }) || [];
+  // Sorting function
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Get sorted and filtered users
+  const processedUsers = useMemo(() => {
+    if (!assessmentData?.users) return [];
+
+    // First filter
+    let filtered = assessmentData.users.filter((userRecord) => {
+      const emailMatch = !emailFilter || userRecord.user_email.toLowerCase().includes(emailFilter.toLowerCase());
+      const statusMatch = !statusFilter || userRecord.status === statusFilter;
+      return emailMatch && statusMatch;
+    });
+
+    // Then sort
+    if (sortField) {
+      filtered = filtered.sort((a, b) => {
+        let aValue: any = a[sortField as keyof AssessmentUser];
+        let bValue: any = b[sortField as keyof AssessmentUser];
+
+        // Handle null values for completed_at
+        if (sortField === 'completed_at') {
+          aValue = aValue || '';
+          bValue = bValue || '';
+        }
+
+        // Convert to strings for comparison
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+
+        if (sortDirection === 'asc') {
+          return aStr.localeCompare(bStr);
+        } else {
+          return bStr.localeCompare(aStr);
+        }
+      });
+    }
+
+    return filtered;
+  }, [assessmentData?.users, emailFilter, statusFilter, sortField, sortDirection]);
 
   const toggleColumn = (col: string) => {
     setVisibleColumns((prev) =>
@@ -135,8 +182,8 @@ export default function AssessmentUsers() {
     const name = email.split('@')[0];
     const displayName = name.charAt(0).toUpperCase() + name.slice(1);
     const initials = displayName.substring(0, 2).toUpperCase();
-    const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${email}`;
-    
+    const avatarUrl = '/user.png';
+
     return { displayName, initials, avatarUrl };
   };
 
@@ -198,40 +245,103 @@ export default function AssessmentUsers() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.history.back()}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-          <div className="flex items-center gap-3">
-            <SparrowIcon />
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                Assessment Users
-              </h1>
-              {assessmentData && (
-                <div className="space-y-1">
-                  <p className="text-lg text-gray-900 dark:text-white font-medium">
-                    {assessmentData.assessment_name}
-                  </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {assessmentData.description}
-                  </p>
-                  <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                    <span>Time Limit: {assessmentData.time_limit} minutes</span>
-                    <span>Total Completed: {assessmentData.total_users_completed}</span>
+        {/* Assessment Card */}
+        <div className="w-full max-w-4xl p-1.5 rounded-2xl relative isolate overflow-hidden bg-white/5 dark:bg-black/90 bg-gradient-to-br from-black/5 to-black/[0.02] dark:from-white/5 dark:to-white/[0.02] backdrop-blur-xl backdrop-saturate-[180%] border border-black/10 dark:border-white/10 shadow-[0_8px_16px_rgb(0_0_0_/_0.15)] dark:shadow-[0_8px_16px_rgb(0_0_0_/_0.25)] will-change-transform translate-z-0">
+          <div className="w-full p-5 rounded-xl relative bg-gradient-to-br from-black/[0.05] to-transparent dark:from-white/[0.08] dark:to-transparent backdrop-blur-md backdrop-saturate-150 border border-black/[0.05] dark:border-white/[0.08] text-black/90 dark:text-white shadow-sm will-change-transform translate-z-0 before:absolute before:inset-0 before:bg-gradient-to-br before:from-black/[0.02] before:to-black/[0.01] dark:before:from-white/[0.03] dark:before:to-white/[0.01] before:opacity-0 before:transition-opacity before:pointer-events-none hover:before:opacity-100">
+            <div className="flex items-start justify-between">
+              {/* Left side - Back button and Assessment info */}
+              <div className="flex items-start gap-4 flex-1">
+                <Button
+                  variant="outline"
+                  onClick={() => window.history.back()}
+                  className="flex items-center gap-2 h-10 w-10 p-0 mt-1"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="flex-1">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-black dark:text-white/90 text-lg">
+                      {assessmentData?.assessment_name || 'Assessment Users'}
+                    </span>
+                    {assessmentData && (
+                      <>
+                        <span className="text-black dark:text-white/60 text-sm">
+                          {assessmentData.description}
+                        </span>
+                        <span className="text-black dark:text-white/50 text-xs mt-1">
+                          Time Limit: {assessmentData.time_limit} minutes
+                        </span>
+
+                        {/* Stats below the title */}
+                        {assessmentData.summary && (
+                          <div className="flex items-center gap-6 mt-4">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="h-5 w-5 text-green-500" />
+                              <div>
+                                <p className="text-xs text-black dark:text-white/60">Completed</p>
+                                <p className="text-lg font-bold text-black dark:text-white/90">
+                                  {assessmentData.summary.total_users_completed}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Users className="h-5 w-5 text-blue-500" />
+                              <div>
+                                <p className="text-xs text-black dark:text-white/60">Assigned</p>
+                                <p className="text-lg font-bold text-black dark:text-white/90">
+                                  {assessmentData.summary.total_users_assigned}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-5 w-5 text-orange-500" />
+                              <div>
+                                <p className="text-xs text-black dark:text-white/60">Not Started</p>
+                                <p className="text-lg font-bold text-black dark:text-white/90">
+                                  {assessmentData.summary.total_users_not_started}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
+                </div>
+              </div>
+
+              {/* Right side - Progress Circle */}
+              {assessmentData && !loading && !error && (
+                <div className="flex items-start ml-4">
+                  <ProgressCircle
+                    value={assessmentData.summary
+                      ? (assessmentData.summary.total_users_completed / assessmentData.summary.total_users_assigned) * 100
+                      : (processedUsers.filter(u => u.status === 'completed').length / processedUsers.length) * 100
+                    }
+                    size={80}
+                    strokeWidth={6}
+                    className="text-green-500"
+                    trackClassName="text-gray-200 dark:text-gray-600"
+                  >
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-black dark:text-white">
+                        {assessmentData.summary
+                          ? Math.round((assessmentData.summary.total_users_completed / assessmentData.summary.total_users_assigned) * 100)
+                          : Math.round((processedUsers.filter(u => u.status === 'completed').length / processedUsers.length) * 100)
+                        }%
+                      </div>
+                    </div>
+                  </ProgressCircle>
                 </div>
               )}
             </div>
           </div>
         </div>
+
+
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -306,12 +416,32 @@ export default function AssessmentUsers() {
                   {visibleColumns.includes("Email") && <TableHead className="w-[250px]">Email</TableHead>}
                   {visibleColumns.includes("Test ID") && <TableHead className="w-[150px]">Test ID</TableHead>}
                   {visibleColumns.includes("Completed At") && <TableHead className="w-[180px]">Completed At</TableHead>}
-                  {visibleColumns.includes("Status") && <TableHead className="w-[100px]">Status</TableHead>}
+                  {visibleColumns.includes("Status") && (
+                    <TableHead className="w-[100px]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSort('status')}
+                        className="h-auto p-0 font-medium hover:bg-transparent"
+                      >
+                        Status
+                        {sortField === 'status' ? (
+                          sortDirection === 'asc' ? (
+                            <ChevronUp className="ml-1 h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="ml-1 h-4 w-4" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="ml-1 h-4 w-4 opacity-50" />
+                        )}
+                      </Button>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.length ? (
-                  filteredUsers.map((userRecord, index) => {
+                {processedUsers.length ? (
+                  processedUsers.map((userRecord, index) => {
                     const { displayName, initials, avatarUrl } = getUserDisplayInfo(userRecord.user_email);
                     
                     return (
@@ -322,7 +452,7 @@ export default function AssessmentUsers() {
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Avatar className="h-8 w-8 ring-2 ring-white hover:z-10">
+                                    <Avatar className="h-8 w-8 hover:z-10">
                                       <AvatarImage src={avatarUrl} alt={displayName} />
                                       <AvatarFallback>{initials}</AvatarFallback>
                                     </Avatar>
@@ -349,7 +479,7 @@ export default function AssessmentUsers() {
                         )}
                         {visibleColumns.includes("Completed At") && (
                           <TableCell className="whitespace-nowrap">
-                            {formatDate(userRecord.completed_at)}
+                            {userRecord.completed_at ? formatDate(userRecord.completed_at) : 'Not completed'}
                           </TableCell>
                         )}
                         {visibleColumns.includes("Status") && (
@@ -359,10 +489,11 @@ export default function AssessmentUsers() {
                                 "whitespace-nowrap",
                                 userRecord.status === "completed" && "bg-green-500 text-white",
                                 userRecord.status === "in_progress" && "bg-yellow-500 text-white",
-                                userRecord.status === "pending" && "bg-gray-400 text-white",
+                                userRecord.status === "not_started" && "bg-red-400 text-white",
+                                userRecord.status === "pending" && "bg-blue-400 text-white",
                               )}
                             >
-                              {userRecord.status}
+                              {userRecord.status === "not_started" ? "Not Completed" : userRecord.status}
                             </Badge>
                           </TableCell>
                         )}

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { Slot as SlotPrimitive } from '@radix-ui/react-slot';
 
 // Define CardContext
 type CardContextType = {
