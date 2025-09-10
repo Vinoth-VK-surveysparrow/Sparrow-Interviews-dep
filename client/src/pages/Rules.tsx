@@ -6,8 +6,11 @@ import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useAssessment } from '@/contexts/AssessmentContext';
 import { S3Service, Assessment } from '@/lib/s3Service';
-import { Home } from 'lucide-react';
+import { Home, Loader2 } from 'lucide-react';
 import { useClarity } from '@/hooks/useClarity';
+import { fetchGeminiApiKey, validateGeminiApiKey } from '@/services/geminiApiService';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Rules() {
   const [, params] = useRoute('/rules/:assessmentId');
@@ -16,6 +19,7 @@ export default function Rules() {
   const [microphonePermission, setMicrophonePermission] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [loading, setLoading] = useState(true);
+  const [validatingApiKey, setValidatingApiKey] = useState(false);
   
   // Microsoft Clarity tracking
   const { trackUserAction, setUserId, setTag } = useClarity(true, 'Rules');
@@ -23,6 +27,8 @@ export default function Rules() {
   const { startCamera, hasPermission: hasCameraPermission } = useCameraCapture();
   const { startRecording } = useAudioRecording();
   const { startSession } = useAssessment();
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   const requestPermissions = async () => {
     try {
@@ -47,9 +53,70 @@ export default function Rules() {
       return;
     }
 
+    // SPECIAL VALIDATION: Check API key for Games-arena assessments
+    if (assessment?.type === "Games-arena") {
+      console.log('🎯 Rules page - Games-arena assessment detected - validating API key...');
+      setValidatingApiKey(true);
+
+      try {
+        // Fetch the actual API key from backend
+        const apiKey = await fetchGeminiApiKey(user?.email || '');
+        if (!apiKey) {
+          console.log('🚫 Rules page - Games-arena API key not found');
+
+          toast({
+            title: "API Key Required",
+            description: "Please configure your Gemini API key in Settings to access Games-arena assessments.",
+            variant: "destructive",
+          });
+
+          // Open settings modal instead of starting assessment
+          window.dispatchEvent(new Event('open-settings-modal'));
+          setValidatingApiKey(false);
+          return;
+        }
+
+        // Validate that the API key actually works by making a test call
+        console.log('🔗 Rules page - Testing Games-arena API key validity...');
+        const isValid = await validateGeminiApiKey(apiKey);
+
+        if (!isValid) {
+          console.log('🚫 Rules page - Games-arena API key validation failed');
+
+          toast({
+            title: "Invalid API Key",
+            description: "Your Gemini API key is not working. Please check your API key in Settings and try again.",
+            variant: "destructive",
+          });
+
+          // Open settings modal instead of starting assessment
+          window.dispatchEvent(new Event('open-settings-modal'));
+          setValidatingApiKey(false);
+          return;
+        }
+
+        console.log('✅ Rules page - Games-arena API key validation successful - proceeding to assessment');
+        setValidatingApiKey(false);
+
+      } catch (error) {
+        console.error('❌ Rules page - Error validating Games-arena API key:', error);
+
+        toast({
+          title: "Validation Error",
+          description: "Unable to validate your Gemini API key. Please try again or check your settings.",
+          variant: "destructive",
+        });
+
+        // Open settings modal instead of starting assessment
+        window.dispatchEvent(new Event('open-settings-modal'));
+        setValidatingApiKey(false);
+        return;
+      }
+    }
+
     if (params?.assessmentId) {
       startSession(params.assessmentId);
-      
+
       // Route based on assessment type
       if (assessment?.type === 'Games-arena') {
         // For Games-arena, go to the AI conversation page
@@ -237,12 +304,19 @@ export default function Rules() {
         </div>
 
         <div className="text-center">
-          <Button 
+          <Button
             onClick={startAssessment}
-            disabled={cameraPermission !== 'granted' || microphonePermission !== 'granted'}
+            disabled={cameraPermission !== 'granted' || microphonePermission !== 'granted' || validatingApiKey}
             className="bg-teal-primary text-white py-4 px-8 rounded-lg font-semibold text-lg hover:bg-teal-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 dark:focus:ring-offset-dark-primary disabled:bg-gray-400"
           >
-            Start Assessment
+            {validatingApiKey ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Validating API Key...
+              </>
+            ) : (
+              'Start Assessment'
+            )}
           </Button>
         </div>
       </div>

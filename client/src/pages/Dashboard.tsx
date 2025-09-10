@@ -7,6 +7,7 @@ import { ChevronRight, CheckCircle, Loader2, AlertCircle, Lock, ArrowLeft, Alert
 import { useState, useEffect } from 'react';
 import { useS3Upload } from '@/hooks/useS3Upload';
 import { useAuth } from '@/hooks/useAuth';
+import { fetchGeminiApiKey, validateGeminiApiKey } from '@/services/geminiApiService';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
 import { useClarity } from '@/hooks/useClarity';
@@ -77,7 +78,8 @@ export default function Dashboard() {
   // Role-based access state
   const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
   const { initiateAssessment, fetchQuestions } = useS3Upload();
-  const { user, loading: authLoading, hasGeminiApiKey } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const [hasGeminiApiKey, setHasGeminiApiKey] = useState(false);
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   
@@ -94,6 +96,49 @@ export default function Dashboard() {
       }
     }
   }, [user?.email, user?.displayName, selectedTestId, setUserId, setTag]);
+
+  // Check if Gemini API key is configured
+  useEffect(() => {
+    const checkApiKey = async () => {
+      if (user?.email) {
+        try {
+          const apiKey = await fetchGeminiApiKey(user.email);
+          setHasGeminiApiKey(!!apiKey);
+        } catch (error) {
+          console.error('Error checking Gemini API key:', error);
+          setHasGeminiApiKey(false);
+        }
+      } else {
+        setHasGeminiApiKey(false);
+      }
+    };
+
+    checkApiKey();
+  }, [user?.email]);
+
+  // Listen for API key updates from SettingsModal
+  useEffect(() => {
+    const handleApiKeyUpdate = () => {
+      console.log('🔄 Dashboard - Received API key update event');
+      if (user?.email) {
+        // Re-check API key status after update
+        fetchGeminiApiKey(user.email).then(apiKey => {
+          const hasKey = !!apiKey;
+          console.log('🔑 Dashboard - Updated API key status:', hasKey);
+          setHasGeminiApiKey(hasKey);
+        }).catch(error => {
+          console.error('❌ Dashboard - Error updating API key status:', error);
+          setHasGeminiApiKey(false);
+        });
+      }
+    };
+
+    window.addEventListener('gemini-api-key-updated', handleApiKeyUpdate);
+
+    return () => {
+      window.removeEventListener('gemini-api-key-updated', handleApiKeyUpdate);
+    };
+  }, [user?.email]);
   
   // Debug function for development
   const handleClearCache = () => {
@@ -440,17 +485,66 @@ export default function Dashboard() {
     }
     
     if (assessment?.type === "Games-arena") {
-      // Check if Gemini API key is configured for Games-arena assessment
-      if (!hasGeminiApiKey) {
+      // Validate Gemini API key for Games-arena assessment
+      console.log('🔍 Validating Gemini API key for Games-arena assessment...');
+
+      try {
+        // First check if API key exists
+        if (!hasGeminiApiKey) {
+          setLoadingAssessment(null); // Clear loading state on error
+          toast({
+            title: "Configuration Required",
+            description: "Please configure your Gemini API key in Settings before starting this assessment.",
+            variant: "destructive",
+          });
+          // Open settings modal instead of navigating to settings page
+          window.dispatchEvent(new Event('open-settings-modal'));
+          return;
+        }
+
+        // Fetch the actual API key from backend
+        const apiKey = await fetchGeminiApiKey(user.email);
+        if (!apiKey) {
+          setLoadingAssessment(null); // Clear loading state on error
+          toast({
+            title: "API Key Not Found",
+            description: "Unable to retrieve your Gemini API key. Please check your settings.",
+            variant: "destructive",
+          });
+          // Open settings modal instead of navigating to settings page
+          window.dispatchEvent(new Event('open-settings-modal'));
+          return;
+        }
+
+        // Validate that the API key actually works by making a test call
+        console.log('🔗 Testing Gemini API key validity...');
+        const isValid = await validateGeminiApiKey(apiKey);
+
+        if (!isValid) {
+          setLoadingAssessment(null); // Clear loading state on error
+          toast({
+            title: "Invalid API Key",
+            description: "Your Gemini API key is not working. Please check your API key in Settings and try again.",
+            variant: "destructive",
+          });
+          // Open settings modal instead of navigating to settings page
+          window.dispatchEvent(new Event('open-settings-modal'));
+          return;
+        }
+
+        console.log('✅ Gemini API key validation successful');
+
+      } catch (error) {
+        console.error('❌ Error validating Gemini API key:', error);
         setLoadingAssessment(null); // Clear loading state on error
         toast({
-          title: "Configuration Required",
-          description: "Please configure your Gemini API key in Settings before starting this assessment.",
+          title: "Validation Error",
+          description: "Unable to validate your Gemini API key. Please try again or check your settings.",
           variant: "destructive",
         });
-        setLocation('/settings');
         return;
       }
+
       // Games-arena follows standard workflow: fetch questions → initiate → rules page
       console.log('🎯 Starting Games-arena assessment (standard workflow):', assessmentId);
       // Continue to standard workflow below (no return here)

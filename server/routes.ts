@@ -28,6 +28,43 @@ const loadConductorAssessment = () => {
   }
 };
 
+/**
+ * Fetch the Gemini API key dynamically from the database
+ * This ensures we never use hardcoded API keys in the server
+ */
+const fetchGeminiApiKey = async (): Promise<string | null> => {
+  try {
+    // For server-side usage, we'll use a default admin email or environment variable
+    // In production, this should be configured properly
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@sparrow.com';
+
+    console.log('🔑 Server: Fetching Gemini API key for:', adminEmail);
+
+    // Make internal API call to fetch the API key
+    const apiUrl = process.env.VITE_GEMINI_API_KEY_FETCH || 'https://noe76r75ni.execute-api.us-west-2.amazonaws.com/api';
+    const response = await fetch(`${apiUrl}/api-key/${encodeURIComponent(adminEmail)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === 'success' && data.data?.api_key) {
+        console.log('✅ Server: Successfully fetched API key');
+        return data.data.api_key;
+      }
+    }
+
+    console.error('❌ Server: Failed to fetch API key from backend');
+    return null;
+  } catch (error) {
+    console.error('❌ Server: Error fetching Gemini API key:', error);
+    return null;
+  }
+};
+
 const loadConductorConfig = () => {
   try {
     const filePath = join(process.cwd(), 'server', 'data', 'conductor-config.json');
@@ -147,8 +184,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const prompt = generateGamePrompt(gameData);
     
     try {
+      // Fetch API key dynamically instead of using hardcoded key
+      const apiKey = await fetchGeminiApiKey();
+      if (!apiKey) {
+        console.error('❌ No API key available for Gemini request');
+        return res.status(500).json({ error: 'API key not configured' });
+      }
+
       const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=AIzaSyAsxl9pOIzoLvctQ7hziqbEpFVjU1iDlUY`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: {
@@ -204,11 +248,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/generate-triple-step-content', async (req: Request, res: Response) => {
     try {
       const { difficulty, totalWords } = req.body;
-      
+
       const prompt = generateContentPrompt(difficulty, totalWords);
-      
+
+      // Fetch API key dynamically instead of using hardcoded key
+      const apiKey = await fetchGeminiApiKey();
+      if (!apiKey) {
+        console.error('❌ No API key available for triple-step content generation');
+        return res.status(500).json({ error: 'API key not configured' });
+      }
+
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=AIzaSyAsxl9pOIzoLvctQ7hziqbEpFVjU1iDlUY`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: {

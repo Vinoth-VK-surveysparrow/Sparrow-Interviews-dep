@@ -3,6 +3,7 @@ import { useRoute, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Home, Mic, MicOff, Square, Settings as SettingsIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { fetchGeminiApiKey } from '@/services/geminiApiService';
 import { useToast } from '@/hooks/use-toast';
 import { LiveAPIProvider, useLiveAPIContext } from '@/contexts/LiveAPIContext';
 import { LiveConfig } from '@/multimodal-live-types';
@@ -830,10 +831,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         setHasStarted(true);
         setTimeLeft(assessmentTimeLimit); // Reset timer to dynamic time limit
         
-        toast({
-          title: "Assessment Started",
-          description: "You have 5 minutes to complete this conversation.",
-        });
+        
       } catch (error) {
         console.error('Error starting assessment:', error);
         // Reset button state on error
@@ -1675,14 +1673,53 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
 
 export default function SalesAIAssessment() {
   const [, params] = useRoute('/sales-ai/:assessmentId');
-  const { geminiApiKey } = useAuth();
+  const { user } = useAuth();
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+
+  useEffect(() => {
+    const fetchApiKey = async () => {
+      if (user?.email) {
+        try {
+          const apiKey = await fetchGeminiApiKey(user.email);
+          setGeminiApiKey(apiKey || '');
+        } catch (error) {
+          console.error('Error fetching Gemini API key:', error);
+          setGeminiApiKey('');
+        }
+      }
+    };
+
+    fetchApiKey();
+  }, [user?.email]);
+
+  // Listen for API key updates from SettingsModal
+  useEffect(() => {
+    const handleApiKeyUpdate = () => {
+      console.log('🔄 SalesAIAssessment - Received API key update event');
+      if (user?.email) {
+        fetchGeminiApiKey(user.email).then(apiKey => {
+          console.log('🔑 SalesAIAssessment - Updated API key:', apiKey ? 'present' : 'missing');
+          setGeminiApiKey(apiKey || '');
+        }).catch(error => {
+          console.error('❌ SalesAIAssessment - Error updating API key:', error);
+          setGeminiApiKey('');
+        });
+      }
+    };
+
+    window.addEventListener('gemini-api-key-updated', handleApiKeyUpdate);
+
+    return () => {
+      window.removeEventListener('gemini-api-key-updated', handleApiKeyUpdate);
+    };
+  }, [user?.email]);
 
   if (!params?.assessmentId) {
     return <div>Invalid assessment ID</div>;
   }
 
   return (
-    <LiveAPIProvider apiKey={geminiApiKey || ''}>
+    <LiveAPIProvider apiKey={geminiApiKey}>
       <SalesAIAssessmentContent assessmentId={params.assessmentId} />
     </LiveAPIProvider>
   );

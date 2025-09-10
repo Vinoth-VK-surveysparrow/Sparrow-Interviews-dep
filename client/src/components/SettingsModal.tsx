@@ -17,11 +17,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
+import { fetchGeminiApiKey } from "@/services/geminiApiService";
 import { useTheme } from "@/components/ThemeProvider";
 import { useToast } from "@/hooks/use-toast";
-import { 
-  saveGeminiApiKey, 
-  clearGeminiApiKey 
+import {
+  saveGeminiApiKey
 } from "@/services/geminiApiService";
 
 interface PermissionStatus {
@@ -33,15 +33,16 @@ interface PermissionStatus {
 
 export default function SettingsModal() {
   const [open, setOpen] = useState(false);
-  const { user, signOut, geminiApiKey, refreshGeminiApiKey } = useAuth();
+  const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
   const { toast } = useToast();
 
   // API Key states
   const [apiKey, setApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(true);
   const [isApiKeySaved, setIsApiKeySaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Permission states
   const [cameraStatus, setCameraStatus] = useState<PermissionStatus>({
@@ -55,16 +56,54 @@ export default function SettingsModal() {
     testing: false,
   });
 
-  // Load API key from auth context
+  // Load API key from backend
   useEffect(() => {
-    if (geminiApiKey) {
-      setApiKey(geminiApiKey);
-      setIsApiKeySaved(true);
-    } else {
-      setApiKey('');
-      setIsApiKeySaved(false);
+    const loadApiKey = async () => {
+      if (user?.email) {
+        try {
+          const apiKey = await fetchGeminiApiKey(user.email);
+          console.log('🔑 SettingsModal - Fetched API key from backend:', apiKey);
+          if (apiKey) {
+            setApiKey(apiKey);
+            setIsApiKeySaved(true);
+            console.log('✅ SettingsModal - Set API key in UI state:', apiKey);
+          } else {
+            setApiKey('');
+            setIsApiKeySaved(false);
+          }
+        } catch (error) {
+          console.error('Error loading API key:', error);
+          setApiKey('');
+          setIsApiKeySaved(false);
+        }
+      }
+    };
+
+    loadApiKey();
+    // Allow manual input after initial load
+    setTimeout(() => setIsInitialLoad(false), 2000);
+  }, [user?.email]);
+
+  // Listen for open settings modal event
+  useEffect(() => {
+    const handleOpenSettings = () => {
+      console.log('🎯 SettingsModal - Received open settings event');
+      setOpen(true);
+    };
+
+    window.addEventListener('open-settings-modal', handleOpenSettings);
+
+    return () => {
+      window.removeEventListener('open-settings-modal', handleOpenSettings);
+    };
+  }, []);
+
+  // Monitor API key state changes
+  useEffect(() => {
+    if (apiKey) {
+      console.log('📊 SettingsModal - API key state changed to:', apiKey);
     }
-  }, [geminiApiKey]);
+  }, [apiKey]);
 
   // API Key functions
   const handleSaveApiKey = async () => {
@@ -98,7 +137,11 @@ export default function SettingsModal() {
         });
         
         // Refresh the API key in auth context and dispatch event
-        await refreshGeminiApiKey();
+        const updatedApiKey = await fetchGeminiApiKey(user.email);
+        if (updatedApiKey) {
+          setApiKey(updatedApiKey);
+        }
+        console.log('📤 SettingsModal - Dispatching API key update event');
         window.dispatchEvent(new Event('gemini-api-key-updated'));
       } else {
         toast({
@@ -119,46 +162,6 @@ export default function SettingsModal() {
     }
   };
 
-  const handleRemoveApiKey = async () => {
-    if (!user?.email) {
-      toast({
-        title: "Error",
-        description: "Please ensure you are logged in to remove the API key",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const success = await clearGeminiApiKey(user.email);
-      
-      if (success) {
-        setApiKey('');
-        setIsApiKeySaved(false);
-        toast({
-          title: "Removed",
-          description: "Gemini API key has been removed",
-        });
-        
-        // Refresh the API key in auth context and dispatch event
-        await refreshGeminiApiKey();
-        window.dispatchEvent(new Event('gemini-api-key-updated'));
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to remove the API key. Please try again.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error removing API key:', error);
-      toast({
-        title: "Error",
-        description: "Failed to remove the API key. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
 
   // Permission test functions
   const testCameraPermission = async () => {
@@ -349,8 +352,22 @@ export default function SettingsModal() {
                       type={showApiKey ? "text" : "password"}
                       placeholder="Enter your Gemini API key..."
                       value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
+                      onChange={(e) => {
+                        console.log('🔄 SettingsModal - Input value changed from:', apiKey, 'to:', e.target.value);
+                        // Prevent browser autofill from overwriting during initial load
+                        if (isInitialLoad && e.target.value !== apiKey) {
+                          console.log('🚫 SettingsModal - Blocking potential browser autofill during initial load');
+                          return;
+                        }
+                        setApiKey(e.target.value);
+                      }}
                       className="pr-10"
+                      onFocus={() => console.log('🎯 SettingsModal - Input field focused - Current API key value:', apiKey)}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
+                      data-form-type="other"
                     />
                     <Button
                       type="button"
@@ -371,19 +388,9 @@ export default function SettingsModal() {
                   </Button>
                 </div>
                 {isApiKeySaved && (
-                  <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
-                    <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                      <CheckCircle className="h-4 w-4" />
-                      <span className="text-sm">API key configured</span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRemoveApiKey}
-                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700"
-                    >
-                      Remove
-                    </Button>
+                  <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                    <CheckCircle className="h-4 w-4 text-green-700 dark:text-green-300" />
+                    <span className="text-sm text-green-700 dark:text-green-300">API key configured</span>
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
