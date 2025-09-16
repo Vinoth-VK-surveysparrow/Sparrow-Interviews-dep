@@ -350,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
        console.log('📋 Fetching assessments list (both external and local)');
        
        let allAssessments: any[] = [];
-       const API_BASE_URL = process.env.VITE_API_BASE_URL || 'https://kl85uizp68.execute-api.us-west-2.amazonaws.com/api';
+       const API_BASE_URL = process.env.VITE_API_BASE_URL ;
 
        // 1. Fetch existing assessments from the main API
        try {

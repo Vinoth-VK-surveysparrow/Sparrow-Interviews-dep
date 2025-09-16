@@ -16,13 +16,14 @@ import {
 
 export default function Results() {
   const [, params] = useRoute('/results/:assessmentId');
-  const [nextAssessment, setNextAssessment] = useState<Assessment | null>(null);
-  const [loadingNext, setLoadingNext] = useState(true);
+  const [nextAssessmentData, setNextAssessmentData] = useState<any>(null);
+  const [loadingNext, setLoadingNext] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [loadingAudio, setLoadingAudio] = useState(true);
   const [audioError, setAudioError] = useState(false);
   const [audioRetryCount, setAudioRetryCount] = useState(0);
   const [activeTabId, setActiveTabId] = useState<number | null>(1);
+  const [audioUploaded, setAudioUploaded] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const { getAudioDownloadUrl } = useS3Upload();
@@ -44,33 +45,7 @@ export default function Results() {
         S3Service.markAssessmentCompleted(user.email, params.assessmentId);
       }
       
-      // Check for next unlocked assessment within the current test
-      if (params?.assessmentId) {
-        try {
-          setLoadingNext(true);
-          
-          // Get the current test_id from localStorage
-          const selectedTestId = localStorage.getItem('selectedTestId');
-          if (selectedTestId) {
-            const next = await S3Service.getNextUnlockedAssessmentInTest(user.email, selectedTestId);
-            setNextAssessment(next);
-            
-            if (next) {
-              console.log(`✅ Next assessment in test ${selectedTestId}:`, next.assessment_name);
-            } else {
-              console.log(`✅ All assessments completed in test ${selectedTestId}`);
-            }
-          } else {
-            console.warn('⚠️ No test selected - cannot find next assessment');
-            setNextAssessment(null);
-          }
-        } catch (error) {
-          console.error('❌ Error getting next unlocked assessment:', error);
-          setNextAssessment(null);
-        } finally {
-          setLoadingNext(false);
-        }
-      }
+      // Audio will be marked as uploaded when successfully loaded
 
       // Fetch audio download URL
       if (params?.assessmentId) {
@@ -84,9 +59,11 @@ export default function Results() {
           if (audioDownloadUrl) {
             console.log('✅ Audio download URL received:', audioDownloadUrl);
             setAudioUrl(audioDownloadUrl);
+            setAudioUploaded(true); // Mark audio as uploaded when URL is successfully received
           } else {
             console.warn('⚠️ No audio download URL received - audio may still be processing');
             setAudioError(true);
+            setAudioUploaded(false);
           }
         } catch (error) {
           console.error('❌ Error fetching audio download URL:', error);
@@ -115,6 +92,76 @@ export default function Results() {
     initializeResults();
   }, [toast, params?.assessmentId, user?.email, getAudioDownloadUrl]);
 
+  // Function to fetch next assessment from API
+  const fetchNextAssessment = async () => {
+    if (!user?.email) {
+      console.error('❌ fetchNextAssessment: No user email available');
+      return null;
+    }
+
+    const selectedTestId = localStorage.getItem('selectedTestId');
+    if (!selectedTestId) {
+      console.error('❌ fetchNextAssessment: No test ID available');
+      return null;
+    }
+
+    try {
+      setLoadingNext(true);
+      console.log('🚀 fetchNextAssessment: Calling API with:', {
+        user_email: user.email,
+        test_id: selectedTestId
+      });
+
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+      const response = await fetch(`${API_BASE_URL}/next-assessment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_email: user.email,
+          test_id: selectedTestId
+        })
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (!response.ok) {
+        console.error('❌ Failed to fetch next assessment - Status:', response.status);
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
+        return null;
+      }
+
+      const data = await response.json();
+      console.log('✅ Next assessment response:', data);
+
+      setNextAssessmentData(data);
+      return data;
+    } catch (error) {
+      console.error('❌ Error fetching next assessment:', error);
+      console.error('❌ Error details:', error instanceof Error ? error.message : String(error));
+      return null;
+    } finally {
+      setLoadingNext(false);
+    }
+  };
+
+  // Handle next assessment button click
+  const handleNextAssessment = async () => {
+    const data = await fetchNextAssessment();
+    if (data?.next_assessment) {
+      console.log('🎯 Routing to next assessment:', data.next_assessment.assessment_id);
+      window.location.href = `/rules/${data.next_assessment.assessment_id}`;
+    } else {
+      console.log('✅ All assessments completed');
+      toast({
+        title: "All Assessments Completed! 🎉",
+        description: "Congratulations! You've completed all assessments in this test.",
+      });
+    }
+  };
+
   // Retry audio download if it failed and we haven't exceeded retry limit
   useEffect(() => {
     if (audioError && audioRetryCount < 3 && params?.assessmentId && user?.email) {
@@ -130,10 +177,12 @@ export default function Results() {
           if (audioDownloadUrl) {
             console.log('✅ Audio download URL received on retry:', audioDownloadUrl);
             setAudioUrl(audioDownloadUrl);
+            setAudioUploaded(true); // Mark audio as uploaded on retry success
             setAudioRetryCount(0); // Reset retry count on success
           } else {
             setAudioRetryCount(prev => prev + 1);
             setAudioError(true);
+            setAudioUploaded(false);
           }
         } catch (error) {
           console.error(`❌ Audio retry ${audioRetryCount + 1} failed:`, error);
@@ -175,66 +224,57 @@ export default function Results() {
                     
                     {/* Navigation Section */}
                     <div className="pt-6 border-t border-gray-200 dark:border-gray-600">
-                      {loadingNext ? (
-                        <div className="flex items-center py-4">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600"></div>
-                          <span className="ml-3 text-muted-foreground">Checking for next assessment...</span>
-                        </div>
-                      ) : nextAssessment ? (
-                        <div>
-                          <h4 className="text-lg font-semibold text-foreground mb-3">
-                            Ready for the Next Challenge?
-                          </h4>
-                          <p className="text-muted-foreground mb-4">
-                            Great job! Your next assessment "{nextAssessment.assessment_name}" is now available.
-                          </p>
+                      {/* Show Next Assessment button only when audio is uploaded and ready */}
+                      {audioUploaded && !loadingAudio && !audioError && (
+                        <div className="mb-4">
                           <div className="flex items-center gap-3">
-                            <Link to={`/rules/${nextAssessment.assessment_id}`}>
-                              <Button className="bg-teal-600 hover:bg-teal-700 text-white">
-                                Next Assessment
-                                <ArrowRight className="ml-2 h-4 w-4" />
-                              </Button>
-                            </Link>
-                            <div className="flex gap-2">
-                              <Link to="/">
-                                <Button variant="outline">
-                                  <Home className="mr-2 h-4 w-4" />
-                                  Home
-                                </Button>
-                              </Link>
-                              <Link to="/dashboard">
-                                <Button variant="outline">
-                                  <Target className="mr-2 h-4 w-4" />
-                                  Rounds
-                                </Button>
-                              </Link>
+                            <Button
+                              onClick={handleNextAssessment}
+                              disabled={loadingNext}
+                              className="bg-teal-600 hover:bg-teal-700 text-white"
+                            >
+                              {loadingNext ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                              ) : (
+                                <>
+                                  Next Assessment
+                                  <ArrowRight className="ml-2 h-4 w-4" />
+                                </>
+                              )}
+                            </Button>
+                          </div>
+
+                          {/* Show API response message */}
+                          {nextAssessmentData && (
+                            <div className="mt-3">
+                              <p className="text-sm text-gray-600 dark:text-gray-300">
+                                {nextAssessmentData.message}
+                              </p>
+                              {nextAssessmentData.next_assessment && (
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                  Next: {nextAssessmentData.next_assessment.assessment_name}
+                                </p>
+                              )}
                             </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <h4 className="text-lg font-semibold text-foreground mb-3">
-                            🎉 Congratulations!
-                          </h4>
-                          <p className="text-muted-foreground mb-4">
-                            You have completed all available assessments. Well done!
-                          </p>
-                          <div className="flex gap-2">
-                            <Link to="/">
-                              <Button className="bg-teal-600 hover:bg-teal-700 text-white">
-                                <Home className="mr-2 h-4 w-4" />
-                                Return to Dashboard
-                              </Button>
-                            </Link>
-                            <Link to="/dashboard">
-                              <Button variant="outline">
-                                <Target className="mr-2 h-4 w-4" />
-                                Rounds
-                              </Button>
-                            </Link>
-                          </div>
+                          )}
                         </div>
                       )}
+
+                      {/* Home and Dashboard buttons */}
+                      <div className="flex gap-2">
+                        <Link to="/">
+                          <Button variant="outline">
+                            <Home className="mr-2 h-4 w-4" />
+                            Home
+                          </Button>
+                        </Link>
+                        <Link to="/dashboard">
+                          <Button variant="outline">
+                            <Target className="mr-2 h-4 w-4" />
+                            Rounds
+                          </Button>
+                        </Link>
+                      </div>
                     </div>
 
                     {/* Mobile Audio Player */}

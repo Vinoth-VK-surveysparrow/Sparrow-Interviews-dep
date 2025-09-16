@@ -245,12 +245,12 @@ export default function AssessmentUsers() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
-        {/* Assessment Card */}
-        <div className="w-full max-w-4xl p-1.5 rounded-2xl relative isolate overflow-hidden bg-white/5 dark:bg-black/90 bg-gradient-to-br from-black/5 to-black/[0.02] dark:from-white/5 dark:to-white/[0.02] backdrop-blur-xl backdrop-saturate-[180%] border border-black/10 dark:border-white/10 shadow-[0_8px_16px_rgb(0_0_0_/_0.15)] dark:shadow-[0_8px_16px_rgb(0_0_0_/_0.25)] will-change-transform translate-z-0">
-          <div className="w-full p-5 rounded-xl relative bg-gradient-to-br from-black/[0.05] to-transparent dark:from-white/[0.08] dark:to-transparent backdrop-blur-md backdrop-saturate-150 border border-black/[0.05] dark:border-white/[0.08] text-black/90 dark:text-white shadow-sm will-change-transform translate-z-0 before:absolute before:inset-0 before:bg-gradient-to-br before:from-black/[0.02] before:to-black/[0.01] dark:before:from-white/[0.03] dark:before:to-white/[0.01] before:opacity-0 before:transition-opacity before:pointer-events-none hover:before:opacity-100">
-            <div className="flex items-start justify-between">
+        {/* Assessment Layout - Card + Progress Circle */}
+        <div className="flex items-center gap-60">
+          {/* Assessment Content - No Box */}
+          <div className="flex-1 max-w-3xl ml-8">
               {/* Left side - Back button and Assessment info */}
-              <div className="flex items-start gap-4 flex-1">
+              <div className="flex items-start gap-4">
                 <Button
                   variant="outline"
                   onClick={() => window.history.back()}
@@ -312,33 +312,32 @@ export default function AssessmentUsers() {
                   </div>
                 </div>
               </div>
-
-              {/* Right side - Progress Circle */}
-              {assessmentData && !loading && !error && (
-                <div className="flex items-start ml-4">
-                  <ProgressCircle
-                    value={assessmentData.summary
-                      ? (assessmentData.summary.total_users_completed / assessmentData.summary.total_users_assigned) * 100
-                      : (processedUsers.filter(u => u.status === 'completed').length / processedUsers.length) * 100
-                    }
-                    size={80}
-                    strokeWidth={6}
-                    className="text-green-500"
-                    trackClassName="text-gray-200 dark:text-gray-600"
-                  >
-                    <div className="text-center">
-                      <div className="text-lg font-bold text-black dark:text-white">
-                        {assessmentData.summary
-                          ? Math.round((assessmentData.summary.total_users_completed / assessmentData.summary.total_users_assigned) * 100)
-                          : Math.round((processedUsers.filter(u => u.status === 'completed').length / processedUsers.length) * 100)
-                        }%
-                      </div>
-                    </div>
-                  </ProgressCircle>
-                </div>
-              )}
             </div>
-          </div>
+
+          {/* Progress Circle - Outside and to the right */}
+          {assessmentData && !loading && !error && (
+            <div className="flex-shrink-0">
+              <ProgressCircle
+                value={assessmentData.summary
+                  ? (assessmentData.summary.total_users_completed / assessmentData.summary.total_users_assigned) * 100
+                  : (processedUsers.filter(u => u.status === 'completed').length / processedUsers.length) * 100
+                }
+                size={120}
+                strokeWidth={8}
+                className="text-green-500"
+                trackClassName="text-gray-200 dark:text-gray-600"
+              >
+                <div className="text-center">
+                  <div className="text-xl font-bold text-black dark:text-white">
+                    {assessmentData.summary
+                      ? Math.round((assessmentData.summary.total_users_completed / assessmentData.summary.total_users_assigned) * 100)
+                      : Math.round((processedUsers.filter(u => u.status === 'completed').length / processedUsers.length) * 100)
+                    }%
+                  </div>
+                </div>
+              </ProgressCircle>
+            </div>
+          )}
         </div>
 
 
@@ -445,7 +444,19 @@ export default function AssessmentUsers() {
                     const { displayName, initials, avatarUrl } = getUserDisplayInfo(userRecord.user_email);
                     
                     return (
-                      <TableRow key={`${userRecord.user_email}-${index}`}>
+                      <TableRow
+                        key={`${userRecord.user_email}-${index}`}
+                        className="cursor-pointer hover:bg-[#333333] hover:shadow-sm hover:scale-[1.01] transition-all duration-200 ease-in-out border-l-2 hover:border-l-blue-500"
+                        onClick={() => {
+                          if (userRecord.status === 'completed') {
+                            setLocation(`/admin/user-answers/${encodeURIComponent(userRecord.user_email)}/${encodeURIComponent(params?.assessmentId || '')}`);
+                          } else {
+                            toast({
+                              description: "User has not completed the assessment yet",
+                            });
+                          }
+                        }}
+                      >
                         {visibleColumns.includes("User") && (
                           <TableCell className="font-medium whitespace-nowrap">
                             <div className="flex items-center gap-3">

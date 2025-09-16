@@ -36,10 +36,14 @@ interface TestAssessment {
   description: string;
   type: string;
   test_id: string;
+  time_limit: number;
+  no_of_ques: number;
+  status: string;
 }
 
 interface TestAssessmentsResponse {
   test_id: string;
+  user_email: string;
   assessments: TestAssessment[];
   assessment_count: number;
 }
@@ -236,18 +240,26 @@ export default function Dashboard() {
         console.log('🔍 Fetching assessments for test:', selectedTestId);
         
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const response = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
-        
+        const response = await fetch(`${API_BASE_URL}/assessments/test-available/${selectedTestId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_email: user.email
+          })
+        });
+
         if (!response.ok) {
           throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
         }
-        
+
         const data: TestAssessmentsResponse = await response.json();
         console.log('✅ Test assessments fetched:', data);
         
         const dashboardAssessments: DashboardAssessment[] = [];
         
-        // Process each assessment to determine completed and unlocked status
+        // Process each assessment - status comes from API response
         for (const assessment of data.assessments) {
           // Convert TestAssessment to Assessment format
           const assessmentData: Assessment = {
@@ -257,12 +269,36 @@ export default function Dashboard() {
             type: assessment.type,
             order: assessment.order,
           };
-          
-          const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
-          
-          // Custom unlock logic for test-based assessments
-          const unlocked = isTestAssessmentUnlocked(user.email, assessment, data.assessments);
-          
+
+          // Use status from API response instead of manual checking
+          const completed = assessment.status === 'completed';
+
+          // For unlocked status: only unlock the next open assessment with lowest order
+          let unlocked = false;
+
+          // Sort assessments by order to find the next available assessment
+          const sortedAssessments = [...data.assessments].sort((a, b) => a.order - b.order);
+          const completedAssessments = sortedAssessments.filter(a => a.status === 'completed');
+          const openAssessments = sortedAssessments.filter(a => a.status === 'open');
+
+          const maxCompletedOrder = completedAssessments.length > 0
+            ? Math.max(...completedAssessments.map(a => a.order))
+            : 0;
+
+          // Find the next assessment that should be unlocked
+          // It should be the first open assessment after all completed ones
+          if (openAssessments.length > 0) {
+            const nextOpenAssessment = openAssessments[0]; // First open assessment (lowest order)
+            if (assessment.order === nextOpenAssessment.order) {
+              unlocked = true;
+            }
+          }
+
+          // If assessment is completed, mark it as unlocked (so it shows as completed)
+          if (completed) {
+            unlocked = true;
+          }
+
           dashboardAssessments.push({
             ...assessmentData,
             completed,
@@ -303,16 +339,24 @@ export default function Dashboard() {
       console.log('🔄 Refreshing assessment states for test:', selectedTestId);
       
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-      const response = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
-      
+      const response = await fetch(`${API_BASE_URL}/assessments/test-available/${selectedTestId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_email: user.email
+        })
+      });
+
       if (!response.ok) {
         throw new Error(`Failed to refresh test assessments: ${response.status} ${response.statusText}`);
       }
-      
+
       const data: TestAssessmentsResponse = await response.json();
       const dashboardAssessments: DashboardAssessment[] = [];
       
-      // Process each assessment to determine completed and unlocked status
+      // Process each assessment - status comes from API response
       for (const assessment of data.assessments) {
         // Convert TestAssessment to Assessment format
         const assessmentData: Assessment = {
@@ -322,12 +366,36 @@ export default function Dashboard() {
           type: assessment.type,
           order: assessment.order,
         };
-        
-        const completed = S3Service.isAssessmentCompleted(user.email, assessment.assessment_id);
-        
-        // Custom unlock logic for test-based assessments
-        const unlocked = isTestAssessmentUnlocked(user.email, assessment, data.assessments);
-        
+
+        // Use status from API response instead of manual checking
+        const completed = assessment.status === 'completed';
+
+        // For unlocked status: only unlock the next open assessment with lowest order
+        let unlocked = false;
+
+        // Sort assessments by order to find the next available assessment
+        const sortedAssessments = [...data.assessments].sort((a, b) => a.order - b.order);
+        const completedAssessments = sortedAssessments.filter(a => a.status === 'completed');
+        const openAssessments = sortedAssessments.filter(a => a.status === 'open');
+
+        const maxCompletedOrder = completedAssessments.length > 0
+          ? Math.max(...completedAssessments.map(a => a.order))
+          : 0;
+
+        // Find the next assessment that should be unlocked
+        // It should be the first open assessment after all completed ones
+        if (openAssessments.length > 0) {
+          const nextOpenAssessment = openAssessments[0]; // First open assessment (lowest order)
+          if (assessment.order === nextOpenAssessment.order) {
+            unlocked = true;
+          }
+        }
+
+        // If assessment is completed, mark it as unlocked (so it shows as completed)
+        if (completed) {
+          unlocked = true;
+        }
+
         dashboardAssessments.push({
           ...assessmentData,
           completed,
@@ -394,78 +462,26 @@ export default function Dashboard() {
       return;
     }
 
-    // Check unlock status using test-specific logic
+    // Check unlock status (should not happen since we only show unlocked assessments)
     if (!assessment.unlocked) {
       setLoadingAssessment(null); // Clear loading state on error
-      console.log(`🔒 Assessment ${assessment.assessment_name} is locked in test ${selectedTestId}`);
+      console.log(`🔒 Assessment ${assessment.assessment_name} is not accessible in test ${selectedTestId}`);
       toast({
-        title: "Assessment Locked",
-        description: "Please complete the previous assessments in order to unlock this one.",
+        title: "Assessment Not Available",
+        description: "This assessment is not currently available. Please complete the previous assessment first.",
         variant: "destructive",
       });
       return;
     }
 
-    // Check if assessment is already completed
-    try {
-      await S3Service.fetchQuestions({
-        user_email: user.email,
-        assessment_id: assessmentId,
-        type: assessment?.type || 'unknown'
+    // Check if assessment is already completed (using API status)
+    if (assessment?.completed) {
+      toast({
+        title: "Assessment Completed",
+        description: "This assessment has already been completed.",
+        variant: "default",
       });
-    } catch (error: any) {
-      if (error?.message?.includes('ASSESSMENT_COMPLETED')) {
-        // Parse the completion data
-        const completionDataMatch = error.message.match(/ASSESSMENT_COMPLETED:(.+)/);
-        if (completionDataMatch) {
-          const completionData = JSON.parse(completionDataMatch[1]);
-          toast({
-            title: "Assessment Completed",
-            description: `This assessment was already completed on ${new Date(completionData.completed_at).toLocaleDateString()}.`,
-            variant: "default",
-          });
-          
-          // Update the assessment state to reflect completion and recalculate unlock status
-          setAssessments(prevAssessments => {
-            const updatedAssessments = prevAssessments.map(a => 
-              a.assessment_id === assessmentId 
-                ? { ...a, completed: true }
-                : a
-            );
-            
-            // After updating completion status, also update unlock status for all assessments
-            return updatedAssessments.map(assessment => {
-              if (selectedTestId && user?.email) {
-                // Re-calculate unlock status based on updated completion states
-                const testAssessment: TestAssessment = {
-                  assessment_id: assessment.assessment_id,
-                  assessment_name: assessment.assessment_name,
-                  order: assessment.order,
-                  description: assessment.description,
-                  type: assessment.type || 'unknown',
-                  test_id: selectedTestId
-                };
-                
-                const testAssessments: TestAssessment[] = updatedAssessments.map(a => ({
-                  assessment_id: a.assessment_id,
-                  assessment_name: a.assessment_name,
-                  order: a.order,
-                  description: a.description,
-                  type: a.type || 'unknown',
-                  test_id: selectedTestId
-                }));
-                
-                const unlocked = isTestAssessmentUnlocked(user.email, testAssessment, testAssessments);
-                
-                return { ...assessment, unlocked };
-              }
-              return assessment;
-            });
-          });
-          return;
-        }
-      }
-      // If it's not a completion error, still proceed (might be other errors that should be handled in the component)
+      return;
     }
 
     if (assessment?.type === "Conductor") {
@@ -579,26 +595,19 @@ export default function Dashboard() {
     } catch (error) {
       console.error('❌ Error in assessment flow:', error);
       
-      // Handle completion status from fetch-questions
+      // Handle completion status from fetch-questions (legacy fallback)
       if (error instanceof Error && error.message.startsWith('ASSESSMENT_COMPLETED:')) {
         const completionDataStr = error.message.replace('ASSESSMENT_COMPLETED:', '');
         const completionData = JSON.parse(completionDataStr);
-        
-        
-        
-        // CRITICAL: Mark assessment as completed in S3Service cache (this will automatically trigger the event)
-        if (user?.email) {
-          S3Service.markAssessmentCompleted(user.email, assessmentId);
-        }
-        
+
         // IMMEDIATELY update the local state to reflect completion
         setAssessments(prevAssessments => {
-          const updatedAssessments = prevAssessments.map(a => 
-            a.assessment_id === assessmentId 
+          const updatedAssessments = prevAssessments.map(a =>
+            a.assessment_id === assessmentId
               ? { ...a, completed: true }
               : a
           );
-          
+
           // After updating completion status, also update unlock status for all assessments
           return updatedAssessments.map(assessment => {
             if (selectedTestId && user?.email) {
@@ -610,30 +619,39 @@ export default function Dashboard() {
                 description: a.description,
                 type: a.type
               }));
-              
+
               const testAssessment: TestAssessment = {
                 assessment_id: assessment.assessment_id,
                 assessment_name: assessment.assessment_name,
                 order: assessment.order,
                 description: assessment.description,
                 type: assessment.type || 'unknown',
-                test_id: selectedTestId
+                test_id: selectedTestId,
+                time_limit: 0,
+                no_of_ques: 0,
+                status: 'open'
               };
-              
+
               const testAssessments: TestAssessment[] = allAssessments.map(a => ({
-                ...a,
+                assessment_id: a.assessment_id,
+                assessment_name: a.assessment_name,
+                order: a.order,
+                description: a.description,
                 type: a.type || 'unknown',
-                test_id: selectedTestId
+                test_id: selectedTestId,
+                time_limit: 0,
+                no_of_ques: 0,
+                status: 'open'
               }));
-              
+
               const unlocked = isTestAssessmentUnlocked(user.email, testAssessment, testAssessments);
-              
+
               return { ...assessment, unlocked };
             }
             return assessment;
           });
         });
-        
+
         toast({
           title: "Assessment Completed",
           description: completionData.message || "You have already completed this assessment.",
@@ -758,15 +776,15 @@ export default function Dashboard() {
                 }`}
               >
                 <CardContent className="p-8 h-full flex flex-col justify-between relative">
-                   {/* Locked State Overlay */}
+                   {/* Locked State Overlay (should rarely be shown since we only display accessible assessments) */}
                    {!assessment.unlocked && (
-                     <div className="absolute inset-0 bg-white/90 dark:bg-gray-700/90 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
-                       <div className="w-16 h-16 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center mb-4">
-                         <Lock className="w-8 h-8 text-gray-600 dark:text-gray-300" />
+                     <div className="absolute inset-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center z-10">
+                       <div className="w-12 h-12 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center mb-2">
+                         <Lock className="w-6 h-6 text-gray-600 dark:text-gray-300" />
                        </div>
-                       <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-2">Unlock this</h3>
-                       <p className="text-sm text-gray-600 dark:text-gray-300 text-center px-4">
-                         by completing the previous assessment
+                       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">Not Available</h3>
+                       <p className="text-xs text-gray-600 dark:text-gray-300 text-center px-4">
+                         Complete previous assessments first
                        </p>
                      </div>
                    )}
@@ -848,7 +866,7 @@ export default function Dashboard() {
                     ) : (
                       <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm">
                         <Lock className="h-4 w-4" />
-                        Complete previous assessments to unlock
+                        Not available yet
                       </div>
                     )}
                   </div>

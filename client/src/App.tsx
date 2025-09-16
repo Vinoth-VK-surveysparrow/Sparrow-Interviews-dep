@@ -15,6 +15,7 @@ import TestSelection from "@/pages/TestSelection";
 import AdminDashboard from "@/pages/AdminDashboard";
 import AssessmentProgress from "@/pages/AssessmentProgress";
 import AssessmentUsers from "@/pages/AssessmentUsers";
+import UserAnswers from "@/pages/UserAnswers";
 import UserDetails from "@/pages/UserDetails";
 import Rules from "@/pages/Rules";
 import Question from "@/pages/Question";
@@ -149,6 +150,11 @@ function Router() {
         <Route path="/admin/assessment-users/:assessmentId">
           <AdminProtectedRoute>
             <AssessmentUsers />
+          </AdminProtectedRoute>
+        </Route>
+        <Route path="/admin/user-answers/:userEmail/:assessmentId">
+          <AdminProtectedRoute>
+            <UserAnswers />
           </AdminProtectedRoute>
         </Route>
         <Route path="/admin/user/:userEmail">
