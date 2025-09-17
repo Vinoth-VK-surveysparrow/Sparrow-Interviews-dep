@@ -116,21 +116,14 @@ export class AudioStorageApi {
     try {
       console.log('📋 Fetching all sessions for user:', this.userEmail);
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/get-audio-sessions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: this.userEmail
-        }),
+      console.log('🔍 audioStorageApi: Getting audio sessions with Firebase auth');
+      
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.getAudioSessions({
+        user_email: this.userEmail
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      console.log('✅ Audio sessions fetched with auth:', data);
       
       if (data.success && data.sessions) {
         return data.sessions.map((session: any) => ({
@@ -183,22 +176,15 @@ export class AudioStorageApi {
     try {
       console.log('🗑️ Deleting session:', sessionId);
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/delete-audio-session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: this.userEmail,
-          session_id: sessionId
-        }),
+      console.log('🔍 audioStorageApi: Deleting audio session with Firebase auth');
+      
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.deleteAudioSession({
+        user_email: this.userEmail,
+        session_id: sessionId
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      console.log('✅ Audio session deleted with auth:', data);
       
       if (!data.success) {
         throw new Error(data.message || 'Failed to delete session');
@@ -216,18 +202,15 @@ export class AudioStorageApi {
    */
   async verifyUpload(audioFileId: string): Promise<boolean> {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/verify-audio-upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: this.userEmail,
-          audio_file_id: audioFileId
-        }),
+      console.log('🔍 audioStorageApi: Verifying audio upload with Firebase auth');
+      
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.verifyAudioUpload({
+        user_email: this.userEmail,
+        audio_file_id: audioFileId
       });
 
-      const data = await response.json();
+      console.log('✅ Audio upload verified with auth:', data);
       return data.success && data.exists;
     } catch (error) {
       console.error('🚨 Error verifying upload:', error);
@@ -244,19 +227,16 @@ export class AudioStorageApi {
     message?: string;
   }> {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/get-audio-upload-url`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: this.userEmail,
-          audio_file_id: audioFileId,
-          content_type: 'audio/wav'
-        }),
+      console.log('🔍 audioStorageApi: Getting audio upload URL with Firebase auth');
+      
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.getAudioUploadUrl({
+        user_email: this.userEmail,
+        audio_file_id: audioFileId,
+        content_type: 'audio/wav'
       });
 
-      const data = await response.json();
+      console.log('✅ Audio upload URL fetched with auth:', data);
       return data;
     } catch (error) {
       console.error('🚨 Error getting presigned upload URL:', error);
@@ -273,18 +253,15 @@ export class AudioStorageApi {
     message?: string;
   }> {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/get-audio-download-url`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: this.userEmail,
-          audio_file_id: audioFileId
-        }),
+      console.log('🔍 audioStorageApi: Getting audio download URL with Firebase auth');
+      
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.getAudioDownloadUrlFromStorage({
+        user_email: this.userEmail,
+        audio_file_id: audioFileId
       });
 
-      const data = await response.json();
+      console.log('✅ Audio download URL fetched with auth:', data);
       return data;
     } catch (error) {
       console.error('🚨 Error getting presigned download URL:', error);
@@ -353,19 +330,12 @@ export class AudioStorageApi {
     aiRole?: string;
   }): Promise<void> {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/save-audio-metadata`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(metadata),
-      });
+      console.log('🔍 audioStorageApi: Saving audio metadata with Firebase auth');
+      
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.saveAudioMetadata(metadata);
 
-      if (!response.ok) {
-        throw new Error(`Failed to save metadata: ${response.status}`);
-      }
-
-      const data = await response.json();
+      console.log('✅ Audio metadata saved with auth:', data);
       
       if (!data.success) {
         throw new Error(data.message || 'Failed to save metadata');

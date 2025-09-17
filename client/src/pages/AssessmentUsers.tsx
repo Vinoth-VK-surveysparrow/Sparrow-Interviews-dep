@@ -36,6 +36,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
 import { S3Service, AssessmentUsersResponse, AssessmentUser, AssessmentSummary } from '@/lib/s3Service';
+import { AuthenticatedAdminApiService } from '@/lib/authenticatedApiService';
 import { Progress, ProgressCircle } from '@/components/ui/progress-custom';
 
 // SurveySparrow logo component
@@ -102,7 +103,7 @@ export default function AssessmentUsers() {
         setError(null);
         console.log('🔍 Fetching users for assessment:', params.assessmentId);
         
-        const usersData = await S3Service.getAssessmentUsers(params.assessmentId);
+        const usersData = await AuthenticatedAdminApiService.getAssessmentUsers(params.assessmentId);
         setAssessmentData(usersData);
         
       } catch (error) {
@@ -207,7 +208,7 @@ export default function AssessmentUsers() {
       setError(null);
       
       console.log('🔄 Refreshing assessment users data for assessment:', params.assessmentId);
-      const response = await S3Service.getAssessmentUsers(params.assessmentId);
+      const response = await AuthenticatedAdminApiService.getAssessmentUsers(params.assessmentId);
       console.log('✅ Assessment users refreshed:', response);
       
       setAssessmentData(response);

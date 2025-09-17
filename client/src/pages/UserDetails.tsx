@@ -36,6 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useCenteredToast } from '@/hooks/use-centered-toast';
 import { useClarity } from '@/hooks/useClarity';
 import { S3Service, UserDetails as UserDetailsType } from '@/lib/s3Service';
+import { AuthenticatedAdminApiService } from '@/lib/authenticatedApiService';
 import { TablePlaceholder } from '@/components/ui/table-placeholder';
 import {
   AlertDialog,
@@ -109,23 +110,10 @@ export default function UserDetails() {
         variant: "loading",
       });
 
-      const adminApiUrl = import.meta.env.VITE_API_ADMIN_URL ;
-      const response = await fetch(`${adminApiUrl}/delete-test-assessments`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: userEmail,
-          test_id: testId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete test assessments');
-      }
-
-      const result = await response.json();
+      console.log('🔍 UserDetails: Deleting test assessments with Firebase auth');
+      
+      // Use authenticated admin API service
+      const result = await AuthenticatedAdminApiService.deleteTestAssessments(testId, userEmail);
       console.log('Delete test assessments result:', result);
 
       centeredToast({
@@ -226,7 +214,7 @@ export default function UserDetails() {
       setError(null);
       trackUserAction('admin_view_user_details', { user_email: userEmail });
 
-      const data = await S3Service.getUserDetails(userEmail);
+      const data = await AuthenticatedAdminApiService.getUserDetails(userEmail);
       setUserDetails(data);
     } catch (err) {
       console.error('Error fetching user details:', err);
@@ -302,7 +290,7 @@ export default function UserDetails() {
       setError(null);
       
       console.log('🔄 Refreshing user details data for user:', userEmail);
-      const response = await S3Service.getUserDetails(userEmail);
+      const response = await AuthenticatedAdminApiService.getUserDetails(userEmail);
       console.log('✅ User details refreshed:', response);
       
       setUserDetails(response);

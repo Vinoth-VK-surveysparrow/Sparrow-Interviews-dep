@@ -23,6 +23,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
 import { S3Service, AssessmentProgress as AssessmentProgressType } from '@/lib/s3Service';
+import { AuthenticatedAdminApiService } from '@/lib/authenticatedApiService';
 
 // SurveySparrow logo component
 const SparrowIcon = () => (
@@ -84,7 +85,7 @@ export default function AssessmentProgress() {
         setError(null);
         console.log('🔍 Fetching assessment progress for test:', params.testId);
         
-        const progressData = await S3Service.getAssessmentProgress(params.testId);
+        const progressData = await AuthenticatedAdminApiService.getAssessmentProgress(params.testId);
         setAssessments(progressData);
         
         // Try to get test name from localStorage or API

@@ -239,23 +239,15 @@ export default function Dashboard() {
         setError(null);
         console.log('🔍 Fetching assessments for test:', selectedTestId);
         
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const response = await fetch(`${API_BASE_URL}/assessments/test-available/${selectedTestId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            user_email: user.email
-          })
+        console.log('🔍 Dashboard: Checking test availability with Firebase auth');
+        
+        // Import authenticated API service
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const data = await AuthenticatedApiService.checkTestAvailability(selectedTestId, {
+          user_email: user.email
         });
 
-        if (!response.ok) {
-          throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
-        }
-
-        const data: TestAssessmentsResponse = await response.json();
-        console.log('✅ Test assessments fetched:', data);
+        console.log('✅ Test assessments fetched with auth:', data);
         
         const dashboardAssessments: DashboardAssessment[] = [];
         
@@ -338,22 +330,15 @@ export default function Dashboard() {
     try {
       console.log('🔄 Refreshing assessment states for test:', selectedTestId);
       
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-      const response = await fetch(`${API_BASE_URL}/assessments/test-available/${selectedTestId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: user.email
-        })
+      console.log('🔍 Dashboard: Refreshing test availability with Firebase auth');
+      
+      // Import authenticated API service
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.checkTestAvailability(selectedTestId, {
+        user_email: user.email
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to refresh test assessments: ${response.status} ${response.statusText}`);
-      }
-
-      const data: TestAssessmentsResponse = await response.json();
+      console.log('✅ Test assessments refreshed with auth:', data);
       const dashboardAssessments: DashboardAssessment[] = [];
       
       // Process each assessment - status comes from API response
@@ -416,6 +401,9 @@ export default function Dashboard() {
   const handleStartAssessment = async (assessmentId: string) => {
     // IMMEDIATELY set loading state for instant feedback
     setLoadingAssessment(assessmentId);
+    
+    // Flag to track if we should clear loading state in finally block
+    let shouldClearLoading = true;
     
     if (!user?.email) {
       setLoadingAssessment(null); // Clear loading state on error
@@ -487,16 +475,16 @@ export default function Dashboard() {
     if (assessment?.type === "Conductor") {
       // Route directly to conductor assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting conductor assessment (skipping questions fetch):', assessmentId);
+      shouldClearLoading = false; // Keep loading state during navigation
       setLocation(`/conductor/${assessmentId}`);
-      // Keep loading state since we're navigating - will be cleared by route change
       return;
     }
     
     if (assessment?.type === "Triple-Step") {
       // Route directly to triple-step assessment (no need to fetch questions or S3 config)
       console.log('🎯 Starting triple-step assessment (skipping questions fetch):', assessmentId);
+      shouldClearLoading = false; // Keep loading state during navigation
       setLocation(`/triple-step/${assessmentId}`);
-      // Keep loading state since we're navigating - will be cleared by route change
       return;
     }
     
@@ -675,7 +663,10 @@ export default function Dashboard() {
         variant: "destructive",
       });
     } finally {
-      setLoadingAssessment(null);
+      // Only clear loading state if we're not navigating to a special assessment type
+      if (shouldClearLoading) {
+        setLoadingAssessment(null);
+      }
     }
   };
 

@@ -154,7 +154,7 @@ const CustomAudioPlayer = ({
         }
       }
 
-      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const blob = new Blob(chunks as BlobPart[], { type: 'audio/webm' });
       const localUrl = URL.createObjectURL(blob);
 
       setLocalAudioUrl(localUrl);
@@ -384,24 +384,14 @@ export default function UserAnswers() {
       setLoading(true);
       setError(null);
 
-      const apiUrl = import.meta.env.VITE_API_BASE_URL ;
-
-      const response = await fetch(`${apiUrl}/get-answers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: decodeURIComponent(params?.userEmail || ''),
-          assessment_id: decodeURIComponent(params?.assessmentId || ''),
-        }),
+      console.log('🔍 UserAnswers: Fetching user answers with Firebase auth');
+      
+      // Import authenticated API service
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data: AnswerResponse = await AuthenticatedApiService.getUserAnswers({
+        user_email: decodeURIComponent(params?.userEmail || ''),
+        assessment_id: decodeURIComponent(params?.assessmentId || ''),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch answers: ${response.status}`);
-      }
-
-      const data: AnswerResponse = await response.json();
       setAnswers(data);
 
     } catch (err) {

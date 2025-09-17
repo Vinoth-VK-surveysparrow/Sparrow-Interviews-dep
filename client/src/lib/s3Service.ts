@@ -1,6 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const API_ADMIN_URL = import.meta.env.VITE_API_ADMIN_URL || 'https://tqqg7hko9g.execute-api.us-west-2.amazonaws.com/api';
 
+// Import authenticated services
+import { AuthenticatedApiService, AuthenticatedAdminApiService } from './authenticatedApiService';
+
 export interface AssessmentInteraction {
   question: string;
   question_id?: string;
@@ -169,6 +172,15 @@ export interface TripleStepContent {
   [topic: string]: string[];
 }
 
+// New Triple Step response format
+export interface TripleStepNewFormat {
+  questions: Array<{
+    id: string;
+    text: string;
+  }>;
+  words: string[];
+}
+
 export interface FetchTripleStepRequest {
   user_email: string;
   assessment_id: string;
@@ -176,6 +188,8 @@ export interface FetchTripleStepRequest {
 
 export interface FetchTripleStepResponse {
   content?: TripleStepContent;
+  questions?: TripleStepNewFormat['questions'];
+  words?: TripleStepNewFormat['words'];
   status?: string;
   message?: string;
 }
@@ -283,23 +297,8 @@ export class S3Service {
 
   static async initiateAssessment(request: InitiateAssessmentRequest): Promise<InitiateAssessmentResponse> {
     try {
-
-
-      const response = await fetch(`${API_BASE_URL}/assessment-responses/initiate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Initiate assessment error:', errorText);
-        throw new Error(`Failed to initiate assessment: ${response.statusText}`);
-      }
-
-      return await response.json();
+      console.log('🔍 S3Service: Initiating assessment with Firebase auth');
+      return await AuthenticatedApiService.initiateAssessment(request);
     } catch (error) {
       console.error('Error initiating assessment:', error);
       throw error;
@@ -308,19 +307,8 @@ export class S3Service {
 
   static async getAudioDownloadUrl(request: AudioDownloadRequest): Promise<AudioDownloadResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/assessment-responses/audio-download`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to get audio download URL: ${response.statusText}`);
-      }
-
-      return await response.json();
+      console.log('🔍 S3Service: Getting audio download URL with Firebase auth');
+      return await AuthenticatedApiService.getAudioDownloadUrl(request);
     } catch (error) {
       console.error('Error getting audio download URL:', error);
       throw error;
@@ -441,25 +429,8 @@ export class S3Service {
 
   static async uploadLogs(request: LogsUploadRequest): Promise<LogsUploadResponse> {
     try {
-
-
-      const response = await fetch(`${API_BASE_URL}/log-upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Logs upload error:', errorText);
-        throw new Error(`Failed to upload logs: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      return result;
+      console.log('🔍 S3Service: Uploading logs with Firebase auth');
+      return await AuthenticatedApiService.uploadLogs(request);
     } catch (error) {
       console.error('Error uploading logs:', error);
       throw error;
@@ -468,25 +439,8 @@ export class S3Service {
 
   static async verifyAudio(request: AudioVerificationRequest): Promise<AudioVerificationResponse> {
     try {
-
-
-      const response = await fetch(`${API_BASE_URL}/verify-audio`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Audio verification error:', errorText);
-        throw new Error(`Failed to verify audio: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      return result;
+      console.log('🔍 S3Service: Verifying audio with Firebase auth');
+      return await AuthenticatedApiService.verifyAudio(request);
     } catch (error) {
       console.error('Error verifying audio:', error);
       throw error;
@@ -510,45 +464,21 @@ export class S3Service {
 
       // Check if we have valid cache
       if (this.assessmentCache && (now - this.assessmentCache.timestamp) < this.CACHE_DURATION) {
-
+        console.log('🔍 S3Service: Using cached assessments');
         return this.assessmentCache.data;
       }
 
+      console.log('🔍 S3Service: Fetching assessments with Firebase auth');
+      const data: AssessmentsResponse = await AuthenticatedApiService.getAssessments();
 
-
-      const response = await fetch(`${API_BASE_URL}/assessments`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch assessments:', response.status, response.statusText, errorText);
-
-        // If we have cached data and the API fails, return cached data
-        if (this.assessmentCache) {
-
-          return this.assessmentCache.data;
-        }
-
-        throw new Error(`Failed to fetch assessments: ${response.status} ${response.statusText}`);
-      }
-
-      const responseText = await response.text();
-      const responseHash = this.hashString(responseText);
+      const responseHash = this.hashString(JSON.stringify(data));
 
       // Check if response has changed compared to cache
       if (this.assessmentCache && this.assessmentCache.hash === responseHash) {
-
+        console.log('🔍 S3Service: Assessments data unchanged, updating timestamp');
         this.assessmentCache.timestamp = now;
         return this.assessmentCache.data;
       }
-
-      // Parse the response
-      const data: AssessmentsResponse = JSON.parse(responseText);
-
 
       // Sort by order
       const sortedAssessments = data.assessments.sort((a, b) => a.order - b.order);
@@ -560,19 +490,14 @@ export class S3Service {
         hash: responseHash
       };
 
-      if (this.assessmentCache.hash !== responseHash) {
-
-      } else {
-
-      }
-
+      console.log('✅ S3Service: Assessments fetched and cached with auth');
       return sortedAssessments;
     } catch (error) {
       console.error('Error fetching assessments:', error);
 
       // If we have cached data and there's an error, return cached data
       if (this.assessmentCache) {
-
+        console.log('⚠️ S3Service: Using cached assessments due to error');
         return this.assessmentCache.data;
       }
 
@@ -610,21 +535,8 @@ export class S3Service {
 
 
 
-      const response = await fetch(`${API_BASE_URL}/fetch-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch questions:', response.status, response.statusText, errorText);
-        throw new Error(`Failed to fetch questions: ${response.status} ${response.statusText}`);
-      }
-
-      const data: FetchQuestionsResponse = await response.json();
+      console.log('🔍 S3Service: Fetching questions with Firebase auth');
+      const data: FetchQuestionsResponse = await AuthenticatedApiService.fetchQuestions(request);
 
       // Check if assessment is already completed
       if (data.status === 'completed') {
@@ -773,14 +685,9 @@ export class S3Service {
   // Get the next available (unlocked) assessment for a user within a specific test
   static async getNextUnlockedAssessmentInTest(userEmail: string, testId: string): Promise<Assessment | null> {
     try {
-      // Fetch test-specific assessments
-      const response = await fetch(`${API_BASE_URL}/assessments/test/${testId}`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      // Fetch test-specific assessments with authentication
+      console.log('🔍 S3Service: Fetching test assessments with Firebase auth for test:', testId);
+      const data = await AuthenticatedApiService.getTestAssessments(testId);
       const testAssessments = data.assessments || [];
 
       // Sort by order to ensure we check in the correct sequence
@@ -901,26 +808,8 @@ export class S3Service {
   // Admin method to fetch all tests
   static async getAllTests(): Promise<AdminTest[]> {
     try {
-      console.log('🔍 Fetching all tests for admin');
-      
-      // Use the metrics API endpoint mentioned in the web search results
-      const response = await fetch(`${API_ADMIN_URL}/tests`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch all tests:', response.status, response.statusText, errorText);
-        throw new Error(`Failed to fetch all tests: ${response.status} ${response.statusText}`);
-      }
-
-      const data: AllTestsResponse = await response.json();
-      console.log('✅ All tests fetched:', data);
-
-      return data.tests || [];
+      console.log('🔍 S3Service: Fetching all tests for admin with Firebase auth');
+      return await AuthenticatedAdminApiService.getAllTests();
     } catch (error) {
       console.error('Error fetching all tests:', error);
       throw error;
@@ -930,26 +819,8 @@ export class S3Service {
   // Admin method to fetch assessment progress for a specific test
   static async getAssessmentProgress(testId: string): Promise<AssessmentProgress[]> {
     try {
-      console.log('🔍 Fetching assessment progress for test:', testId);
-      
-      // Use the metrics API endpoint for assessment progress
-      const response = await fetch(`${API_ADMIN_URL}/assessment-progress/${testId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch assessment progress:', response.status, response.statusText, errorText);
-        throw new Error(`Failed to fetch assessment progress: ${response.status} ${response.statusText}`);
-      }
-
-      const data: AssessmentProgressResponse = await response.json();
-      console.log('✅ Assessment progress fetched:', data);
-
-      return data.data.assessments || [];
+      console.log('🔍 S3Service: Fetching assessment progress for test with Firebase auth:', testId);
+      return await AuthenticatedAdminApiService.getAssessmentProgress(testId);
     } catch (error) {
       console.error('Error fetching assessment progress:', error);
       throw error;
@@ -959,26 +830,8 @@ export class S3Service {
   // Admin method to fetch users who completed a specific assessment
   static async getAssessmentUsers(assessmentId: string): Promise<AssessmentUsersResponse> {
     try {
-      console.log('🔍 Fetching users for assessment:', assessmentId);
-      
-      // Use the metrics API endpoint for assessment users
-      const response = await fetch(`${API_ADMIN_URL}/assessment-users/${assessmentId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch assessment users:', response.status, response.statusText, errorText);
-        throw new Error(`Failed to fetch assessment users: ${response.status} ${response.statusText}`);
-      }
-
-      const data: AssessmentUsersResponse = await response.json();
-      console.log('✅ Assessment users fetched:', data);
-
-      return data;
+      console.log('🔍 S3Service: Fetching users for assessment with Firebase auth:', assessmentId);
+      return await AuthenticatedAdminApiService.getAssessmentUsers(assessmentId);
     } catch (error) {
       console.error('Error fetching assessment users:', error);
       throw error;
@@ -988,26 +841,8 @@ export class S3Service {
   // Admin method to fetch all users
   static async getAllUsers(): Promise<AllUser[]> {
     try {
-      console.log('🔍 Fetching all users for admin');
-      
-      // Use the metrics API endpoint for all users
-      const response = await fetch(`${API_ADMIN_URL}/all-users`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch all users:', response.status, response.statusText, errorText);
-        throw new Error(`Failed to fetch all users: ${response.status} ${response.statusText}`);
-      }
-
-      const data: AllUsersResponse = await response.json();
-      console.log('✅ All users fetched:', data);
-
-      return data.users || [];
+      console.log('🔍 S3Service: Fetching all users for admin with Firebase auth');
+      return await AuthenticatedAdminApiService.getAllUsers();
     } catch (error) {
       console.error('Error fetching all users:', error);
       throw error;
@@ -1017,25 +852,8 @@ export class S3Service {
   // Get user details by email
   static async getUserDetails(userEmail: string): Promise<UserDetails> {
     try {
-      console.log('🔍 Fetching user details for:', userEmail);
-      
-      const response = await fetch(`${API_ADMIN_URL}/user/${userEmail}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch user details:', response.status, response.statusText, errorText);
-        throw new Error(`Failed to fetch user details: ${response.status} ${response.statusText}`);
-      }
-
-      const data: UserDetails = await response.json();
-      console.log('✅ User details fetched:', data);
-
-      return data;
+      console.log('🔍 S3Service: Fetching user details with Firebase auth for:', userEmail);
+      return await AuthenticatedAdminApiService.getUserDetails(userEmail);
     } catch (error) {
       console.error('Error fetching user details:', error);
       throw error;
@@ -1054,72 +872,113 @@ export class S3Service {
         fetch_full_content: true // Additional flag to ensure we get all content
       };
 
-      const response = await fetch(`${API_BASE_URL}/fetch-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(tripleStepRequest),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Failed to fetch Triple Step content:', response.status, response.statusText, errorText);
-        throw new Error(`Failed to fetch Triple Step content: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      console.log('Raw data received from backend:', data);
+        console.log('🔍 S3Service: Fetching Triple Step questions with Firebase auth');
+        const data = await AuthenticatedApiService.fetchQuestions(tripleStepRequest);
+        console.log('Raw data received from backend:', data);
+        console.log('Data structure analysis:', {
+          hasContent: !!data.content,
+          contentType: typeof data.content,
+          isContentArray: Array.isArray(data.content),
+          contentKeys: data.content ? Object.keys(data.content) : [],
+          hasContentQuestions: !!(data.content && data.content.questions),
+          hasContentWords: !!(data.content && data.content.words),
+          directQuestions: !!data.questions,
+          directWords: !!data.words
+        });
 
       if (data.status === 'completed') {
         throw new Error(`ASSESSMENT_COMPLETED:${JSON.stringify(data)}`);
       }
 
-      // Handle both old format (content) and new format (questions)
-      let content: TripleStepContent;
-      if (data.content) {
-        // Old format
-        content = data.content;
-      } else if (data.questions) {
-        // New format - for TripleStep, questions should contain the full topic-word mapping
-        console.log('Using TripleStep content from questions field');
-        content = data.questions;
-        console.log('Loaded', Object.keys(content).length, 'topics from TripleStep content');
+      // Handle both old format (content) and new format (questions + words)
+      let questions: Question[];
+      
+      if (data.content && data.content.questions && Array.isArray(data.content.questions) && data.content.words && Array.isArray(data.content.words)) {
+        // New format - nested in content: {questions: [...], words: [...]}
+        const newFormat = data.content as TripleStepNewFormat;
+        console.log('Using new TripleStep format (nested content with questions + words arrays)');
+        
+        if (newFormat.questions.length === 0) {
+          throw new Error('No questions found in new TripleStep format');
+        }
+        
+        if (newFormat.words.length === 0) {
+          throw new Error('No words found in new TripleStep format');
+        }
+
+        // Get the number of questions from the backend assessment data
+        let questionsToSelect = newFormat.questions.length; // Default to all questions
+        
+        // Try to get the question count from the backend (from test-available endpoint)
+        try {
+          const selectedTestId = localStorage.getItem('selectedTestId');
+          if (selectedTestId) {
+            const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+            const testData = await AuthenticatedApiService.getTestAssessments(selectedTestId);
+            const assessmentInTest = testData.assessments?.find((a: any) => a.assessment_id === request.assessment_id);
+            if (assessmentInTest && assessmentInTest.no_of_ques) {
+              questionsToSelect = Math.floor(assessmentInTest.no_of_ques);
+              console.log(`📊 Using no_of_ques from backend: ${questionsToSelect} questions`);
+            }
+          }
+        } catch (error) {
+          console.warn('Could not fetch backend question count, using all questions:', error);
+        }
+
+        // Shuffle and select the specified number of questions
+        const shuffledQuestions = [...newFormat.questions].sort(() => Math.random() - 0.5);
+        const selectedQuestions = shuffledQuestions.slice(0, Math.min(questionsToSelect, newFormat.questions.length));
+
+        // Convert to standard Question format
+        questions = selectedQuestions.map((q, index) => ({
+          question_id: q.id || `q${index + 1}`,
+          question_text: q.text,
+          order: index + 1,
+          type: 'triple-step',
+          // For new format, each question gets random words from the shared word pool
+          words: [...newFormat.words].sort(() => Math.random() - 0.5) // Shuffle words for randomness
+        }));
+        
+        console.log(`Loaded ${selectedQuestions.length} questions (from ${newFormat.questions.length} available) and ${newFormat.words.length} words from new TripleStep format`);
+        
+      } else if (data.content && typeof data.content === 'object' && !Array.isArray(data.content)) {
+        // Old format - content is topic-word mapping object
+        const content: TripleStepContent = data.content;
+        console.log('Using old TripleStep format (topic-word mapping)');
+        
+        const topics = Object.keys(content);
+        if (topics.length === 0) {
+          throw new Error('No topics found in TripleStep content');
+        }
+
+        // Select only 3 random topics from the available topics
+        const shuffledTopics = [...topics].sort(() => Math.random() - 0.5);
+        const selectedTopics = shuffledTopics.slice(0, Math.min(3, topics.length));
+
+        // Convert to standard Question format (only 3 questions)
+        questions = selectedTopics.map((topic, index) => ({
+          question_id: `q${index + 1}`,
+          question_text: topic,
+          order: index + 1,
+          type: 'triple-step',
+          words: content[topic] || []
+        }));
+        
+        console.log('Loaded', topics.length, 'topics from old TripleStep format');
+        
       } else {
-        throw new Error('No Triple Step content or questions returned from the API');
+        throw new Error('Invalid TripleStep response format - expected either content (old) or questions+words (new)');
       }
-
-      // Validate that we have the correct TripleStep format
-      if (typeof content !== 'object' || Array.isArray(content)) {
-        throw new Error('Invalid TripleStep content format - expected topic-word mapping object');
-      }
-
-      // Ensure we have at least some topics and words
-      const topics = Object.keys(content);
-      if (topics.length === 0) {
-        throw new Error('No topics found in TripleStep content');
-      }
-
-      // Select only 3 random topics from the available topics
-      const shuffledTopics = [...topics].sort(() => Math.random() - 0.5);
-      const selectedTopics = shuffledTopics.slice(0, Math.min(3, topics.length));
-
-      // Convert to standard Question format (only 3 questions)
-      const questions: Question[] = selectedTopics.map((topic, index) => ({
-        question_id: `q${index + 1}`,
-        question_text: topic,
-        order: index + 1,
-        type: 'triple-step',
-        // Store the words for this topic in a custom field - we'll need this for the game
-        words: content[topic] || []
-      }));
 
       console.log('[S3Service] Triple Step questions converted successfully:', {
-        totalTopicsAvailable: topics.length,
-        selectedTopics: selectedTopics.length,
         questionsGenerated: questions.length,
-        selectedTopicNames: selectedTopics,
-        totalWords: selectedTopics.reduce((sum, topic) => sum + (content[topic]?.length || 0), 0)
+        totalWords: questions.reduce((sum, q) => sum + (q.words?.length || 0), 0),
+        format: (data.content && data.content.questions) ? 'new (questions + words arrays)' : 'old (topic-word mapping)',
+        sampleQuestions: questions.slice(0, 3).map(q => ({
+          id: q.question_id,
+          text: q.question_text,
+          wordsCount: q.words?.length || 0
+        }))
       });
 
       return questions;

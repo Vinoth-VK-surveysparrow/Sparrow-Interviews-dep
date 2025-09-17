@@ -1,16 +1,104 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Home, Mic, MicOff, Play, Download } from 'lucide-react';
+import { Home, Mic, MicOff, Play } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { AudioUploadService } from '@/lib/audioUploadService';
 import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
 import { WarningBadge } from '@/components/WarningBadge';
 import { useClarity } from '@/hooks/useClarity';
+import { S3Service } from '@/lib/s3Service';
+import { useS3Upload } from '@/hooks/useS3Upload';
+import { useCameraCapture } from '@/hooks/useCameraCapture';
+import { useAssessment } from '@/contexts/AssessmentContext';
+
+// Enhanced Circular Timer component that serves as Next button
+const CircularTimer = memo(({
+  timeLeft,
+  totalTime,
+  isActive,
+  onClick,
+  isFinishing,
+  isLastQuestion,
+  isUploading
+}: {
+  timeLeft: number;
+  totalTime: number;
+  isActive: boolean;
+  onClick: () => void;
+  isFinishing: boolean;
+  isLastQuestion: boolean;
+  isUploading: boolean;
+}) => {
+  const percentage = ((totalTime - timeLeft) / totalTime) * 100;
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  const radius = 45;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div
+      className={`relative w-32 h-32 flex items-center justify-center ${
+        isFinishing
+          ? 'cursor-not-allowed opacity-75'
+          : 'cursor-pointer group'
+      }`}
+      onClick={isFinishing ? undefined : onClick}
+    >
+      <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+        {/* Background circle - light gray */}
+        <circle
+          cx="60"
+          cy="60"
+          r={radius}
+          stroke="#e5e7eb"
+          strokeWidth="8"
+          fill={isFinishing ? "#4A9CA6" : "#f8fafc"}
+          className={isFinishing ? '' : 'group-hover:fill-[#4A9CA6] transition-colors duration-200'}
+        />
+        {/* Progress circle - teal color #4A9CA6 */}
+        <circle
+          cx="60"
+          cy="60"
+          r={radius}
+          stroke="#4A9CA6"
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          className="transition-all duration-1000 ease-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-center">
+          {/* Show finishing state when finishing, otherwise show timer */}
+          {isFinishing ? (
+            <div className="flex flex-col items-center">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mb-1"></div>
+              <span className="text-xs text-white">Finishing...</span>
+            </div>
+          ) : (
+            <>
+              <div className="text-lg font-bold text-gray-800 group-hover:text-white transition-colors duration-200 group-hover:hidden">
+                {minutes}:{seconds.toString().padStart(2, '0')}
+              </div>
+              <div className="hidden group-hover:block text-sm font-bold text-white">
+                <div className="flex flex-col items-center">
+                  <span className="text-sm">{isLastQuestion ? 'Finish' : 'Next'}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 
 interface EnergyChange {
   timestamp: number;
@@ -19,25 +107,12 @@ interface EnergyChange {
   frequency?: number;
 }
 
-interface AssessmentResult {
-  totalChanges: number;
-  successfulTransitions: number;
-  averageResponseTime: number;
-  energyRange: number;
-  breatheRecoveries: number;
-  audioBlob?: Blob;
-  frequencyData?: number[];
-  energyAccuracy: number;
-  overallScore: number;
 
-}
-
-type AssessmentState = "setup" | "playing" | "feedback" | "loading";
+type AssessmentState = "setup" | "playing";
 
 // Configuration state that will be loaded from API
 interface ConductorConfig {
   gameSettings: {
-    duration: number;
     changeFrequency: number;
     defaultEnergyLevel: number;
     breatheCueProbability: number;
@@ -47,8 +122,6 @@ interface ConductorConfig {
   };
   presets: {
     standard: { name: string; description: string; energyLevels: number[] };
-    low: { name: string; description: string; energyLevels: number[] };
-    high: { name: string; description: string; energyLevels: number[] };
   };
   topics: string[];
   energyLevels: Array<{
@@ -76,19 +149,25 @@ export default function ConductorAssessment() {
     pollingInterval: 10000, // Check every 10 seconds
   });
 
-  const [assessmentState, setAssessmentState] = useState<AssessmentState>("loading");
+  const [assessmentState, setAssessmentState] = useState<AssessmentState>("setup");
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [config, setConfig] = useState<ConductorConfig | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<'standard' | 'low' | 'high'>('standard');
+  const [selectedPreset, setSelectedPreset] = useState<'standard'>('standard');
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [currentTopic, setCurrentTopic] = useState("");
   const [currentEnergyLevel, setCurrentEnergyLevel] = useState(5);
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [assessmentTimeLimit, setAssessmentTimeLimit] = useState(60); // Store time limit from backend
+  const [numberOfQuestions, setNumberOfQuestions] = useState(0); // Store number of questions from backend
   const [assessmentStartTime, setAssessmentStartTime] = useState(0);
   const [energyChanges, setEnergyChanges] = useState<EnergyChange[]>([]);
   const [showBreathe, setShowBreathe] = useState(false);
-  const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [s3Config, setS3Config] = useState<any>(null);
   const [nextChangeIn, setNextChangeIn] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
   const [currentPitch, setCurrentPitch] = useState(0);
@@ -102,7 +181,6 @@ export default function ConductorAssessment() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const changeTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -110,50 +188,112 @@ export default function ConductorAssessment() {
   const energyChangesRef = useRef<EnergyChange[]>([]);
   const isRecordingRef = useRef<boolean>(false);
 
-  // Load conductor configuration from API
+  const { initiateAssessment, uploadAudio } = useS3Upload();
+  
+  // Assessment context for S3 operations and session management
+  const {
+    session,
+    finishAssessment,
+    startSession,
+    isS3Ready,
+    uploadAudioToS3,
+    startQuestionLog,
+    endQuestionLog
+  } = useAssessment();
+
+  // Camera and image capture
+  const { videoRef: assessmentVideoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
+
+  // Load conductor configuration from fetch-questions API
   const loadConfig = useCallback(async () => {
     try {
-      console.log('🎮 Loading conductor configuration...');
-      const apiUrl = import.meta.env.VITE_API_URL || '/api';
-      const response = await fetch(`${apiUrl}/conductor-config`);
-      if (!response.ok) {
-        throw new Error('Failed to load conductor config');
+      setIsLoadingConfig(true);
+      console.log('🎮 Loading conductor configuration via fetch-questions...');
+
+      // Get assessment data from localStorage or route params
+      const selectedTestId = localStorage.getItem('selectedTestId');
+      if (!selectedTestId || !params?.assessmentId || !user?.email) {
+        throw new Error('Missing required parameters for config fetch');
       }
-      const configData: ConductorConfig = await response.json();
-      console.log('✅ Conductor config loaded:', configData);
+
+      // Use fetchQuestions from authenticatedApiService
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const requestPayload = {
+        assessment_id: params.assessmentId,
+        user_email: user.email,
+        type: 'conductor'
+      };
+
+      console.log('📤 Fetching conductor config with payload:', requestPayload);
+
+      const response = await AuthenticatedApiService.fetchQuestions(requestPayload);
+
+      if (response.status !== 'success' || !response.content) {
+        throw new Error('Invalid response from fetch-questions API');
+      }
+
+      const configData: ConductorConfig = response.content;
+      console.log('✅ Conductor config loaded from API:', configData);
       setConfig(configData);
-      
-      // Set random topic from loaded topics
+
+      // Select multiple topics based on number of questions from backend (default to 3 if not loaded yet)
       if (configData.topics && configData.topics.length > 0) {
-        const randomTopic = configData.topics[Math.floor(Math.random() * configData.topics.length)];
-        setCurrentTopic(randomTopic);
+        const shuffledTopics = [...configData.topics].sort(() => Math.random() - 0.5);
+        const questionsCount = numberOfQuestions > 0 ? numberOfQuestions : 3; // Default to 3 questions
+        const selectedCount = Math.min(questionsCount, shuffledTopics.length);
+        const selectedTopicList = shuffledTopics.slice(0, selectedCount);
+        setSelectedTopics(selectedTopicList);
+
+        // Set first topic as current
+        if (selectedTopicList.length > 0) {
+          setCurrentTopic(selectedTopicList[0]);
+        }
+
+        console.log(`📝 Selected ${selectedTopicList.length} topics for ${questionsCount} questions:`, selectedTopicList);
       }
-      
+
       // Set default energy level from config
       if (configData.gameSettings?.defaultEnergyLevel) {
         setCurrentEnergyLevel(configData.gameSettings.defaultEnergyLevel);
       }
-      
-      // Set initial timer from config
-      if (configData.gameSettings?.duration) {
-        setTimeRemaining(configData.gameSettings.duration);
-      }
-      
-      setAssessmentState("setup");
+
+      // Duration is set from backend assessment data (test-available endpoint)
+
+      setIsLoadingConfig(false);
     } catch (error) {
       console.error('❌ Failed to load conductor config:', error);
+      setIsLoadingConfig(false);
       toast({
         title: "Configuration Error",
         description: "Failed to load conductor assessment configuration. Please try again.",
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast, params?.assessmentId, user?.email]);
 
-  // Load config on component mount
+  // Load config when we have the necessary data
   useEffect(() => {
-    loadConfig();
-  }, [loadConfig]);
+    if (params?.assessmentId && user?.email) {
+      loadConfig();
+    }
+  }, [loadConfig, params?.assessmentId, user?.email]);
+
+  // Update selected topics when numberOfQuestions changes (after backend fetch)
+  useEffect(() => {
+    if (config && numberOfQuestions > 0 && config.topics && config.topics.length > 0) {
+      const shuffledTopics = [...config.topics].sort(() => Math.random() - 0.5);
+      const selectedCount = Math.min(numberOfQuestions, shuffledTopics.length);
+      const selectedTopicList = shuffledTopics.slice(0, selectedCount);
+      setSelectedTopics(selectedTopicList);
+
+      // Set first topic as current
+      if (selectedTopicList.length > 0) {
+        setCurrentTopic(selectedTopicList[0]);
+      }
+
+      console.log(`📝 Updated topics based on backend: ${selectedTopicList.length} topics for ${numberOfQuestions} questions:`, selectedTopicList);
+    }
+  }, [config, numberOfQuestions]);
 
   // Fetch assessment time limit from backend
   useEffect(() => {
@@ -167,23 +307,31 @@ export default function ConductorAssessment() {
           return;
         }
 
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const testResponse = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        console.log('🔍 ConductorAssessment: Fetching test assessments with Firebase auth');
         
-        if (!testResponse.ok) {
-          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
-        }
-        
-        const testData = await testResponse.json();
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const testData = await AuthenticatedApiService.getTestAssessments(selectedTestId);
         const testAssessments = testData.assessments || [];
         const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === params.assessmentId);
         
-        if (assessmentInTest && assessmentInTest.time_limit) {
-          const timeLimitFromBackend = assessmentInTest.time_limit;
-          setAssessmentTimeLimit(timeLimitFromBackend);
-          setTimeRemaining(timeLimitFromBackend);
-          
-          console.log(`⏱️ Using time limit from backend: ${timeLimitFromBackend} seconds for Conductor assessment`);
+        if (assessmentInTest) {
+          // Set time limit from backend
+          if (assessmentInTest.time_limit) {
+            const timeLimitFromBackend = assessmentInTest.time_limit;
+            setAssessmentTimeLimit(timeLimitFromBackend);
+            setTimeRemaining(timeLimitFromBackend);
+
+            console.log(`⏱️ Using time limit from backend: ${timeLimitFromBackend} seconds for Conductor assessment`);
+          }
+
+          // Set number of questions from backend
+          if (assessmentInTest.no_of_ques) {
+            const questionsCount = Math.floor(assessmentInTest.no_of_ques);
+            setNumberOfQuestions(questionsCount);
+
+            console.log(`📊 Using number of questions from backend: ${questionsCount} for Conductor assessment`);
+            console.log(`⏱️ Each question gets full time limit: ${assessmentInTest.time_limit} seconds`);
+          }
         }
       } catch (error) {
         console.error('❌ Failed to fetch assessment time limit:', error);
@@ -194,29 +342,57 @@ export default function ConductorAssessment() {
     fetchAssessmentTimeLimit();
   }, [params?.assessmentId]);
 
-
-
-  // Handle video stream connection
+  // Initialize assessment session
   useEffect(() => {
-    if (videoStream && videoRef.current) {
-      console.log('🎥 Connecting Conductor video stream to element');
-      videoRef.current.srcObject = videoStream;
-    }
-  }, [videoStream]);
+    const initializeAssessmentSession = async () => {
+      if (!params?.assessmentId || !user?.email) return;
 
-  const getRandomTopic = useCallback(() => {
-    // Fallback topics if config is not loaded
-    const fallbackTopics = [
-      "The importance of teamwork in achieving goals",
-      "Why continuous learning is essential for career growth", 
-      "The impact of technology on modern communication",
-      "How to build confidence in public speaking",
-      "The benefits of maintaining work-life balance"
-    ];
-    
-    const topics = config?.topics && config.topics.length > 0 ? config.topics : fallbackTopics;
-    return topics[Math.floor(Math.random() * topics.length)];
-  }, [config]);
+      try {
+        setIsLoadingSession(true);
+        console.log('🔄 Initializing assessment session for conductor assessment');
+        await startSession(params.assessmentId);
+        console.log('✅ Assessment session initialized');
+        setIsLoadingSession(false);
+      } catch (error) {
+        console.error('❌ Failed to initialize assessment session:', error);
+        setIsLoadingSession(false);
+        
+        // Don't show toast for assessment already completed - this is expected behavior
+        if (error instanceof Error && error.message === 'ASSESSMENT_ALREADY_COMPLETED') {
+          console.log('🔄 Assessment already completed, no toast needed');
+          return;
+        }
+        
+        toast({
+          title: "Session Error",
+          description: "Failed to initialize assessment session. Please try again.",
+          variant: "destructive",
+        });
+      }
+    };
+
+    initializeAssessmentSession();
+  }, [params?.assessmentId, user?.email, startSession, toast]);
+
+  // Start auto-capture when S3 is ready
+  useEffect(() => {
+    if (isS3Ready && assessmentState === "playing") {
+      console.log('📸 Starting auto image capture for conductor assessment');
+      startAutoCapture();
+    }
+  }, [isS3Ready, assessmentState, startAutoCapture]);
+
+
+
+  // Handle video stream connection for assessment camera
+  useEffect(() => {
+    if (videoStream && assessmentVideoRef.current) {
+      console.log('🎥 Connecting Conductor video stream to assessment element');
+      assessmentVideoRef.current.srcObject = videoStream;
+    }
+  }, [videoStream, assessmentVideoRef]);
+
+  // No fallback topics - config must be loaded from API
 
   // Enhanced autocorrelation-based pitch detection - returns frequency in Hz for energy mapping
   const detectPitch = useCallback((audioData: Float32Array): number => {
@@ -407,8 +583,8 @@ export default function ConductorAssessment() {
       setVideoStream(videoStream);
 
       // Connect video stream to video element
-      if (videoRef.current) {
-        videoRef.current.srcObject = videoStream;
+      if (assessmentVideoRef.current) {
+        assessmentVideoRef.current.srcObject = videoStream;
         console.log('✅ Conductor video stream connected');
       }
 
@@ -480,9 +656,7 @@ export default function ConductorAssessment() {
       mediaRecorder.onstop = () => {
         if (audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-          
-          // Process analysis (which will handle storage and upload)
-          performLocalAnalysis(audioBlob);
+          console.log('🎵 Recording stopped, audio blob ready:', audioBlob.size, 'bytes');
         }
       };
 
@@ -612,8 +786,8 @@ export default function ConductorAssessment() {
       videoStream.getTracks().forEach((track) => track.stop());
     }
     setVideoStream(null);
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
+    if (assessmentVideoRef.current) {
+      assessmentVideoRef.current.srcObject = null;
     }
 
     if (audioContextRef.current) {
@@ -720,16 +894,37 @@ export default function ConductorAssessment() {
     }
   }, [currentEnergyLevel, assessmentStartTime, currentPitch, scheduleNextChange]);
 
+  // Move to next question
+  const moveToNextQuestion = useCallback(() => {
+    const nextIndex = currentQuestionIndex + 1;
+    if (nextIndex < selectedTopics.length) {
+      setCurrentQuestionIndex(nextIndex);
+      setCurrentTopic(selectedTopics[nextIndex]);
+      setCurrentEnergyLevel(5); // Reset to default energy level
+      setEnergyChanges([]); // Reset energy changes for new question
+      setShowBreathe(false);
+
+      console.log(`➡️ Moving to question ${nextIndex + 1}/${selectedTopics.length}: ${selectedTopics[nextIndex]}`);
+    }
+  }, [currentQuestionIndex, selectedTopics]);
+
   // Start assessment
   const startAssessment = useCallback(async () => {
     setAssessmentState("playing");
-    setTimeRemaining(assessmentTimeLimit);
+    setTimeRemaining(assessmentTimeLimit); // Each question gets full time limit
     setAssessmentStartTime(Date.now());
     setCurrentEnergyLevel(5);
     setEnergyChanges([]);
     setShowBreathe(false);
     setNextChangeIn(config?.gameSettings.changeFrequency || 15);
-    // Removed setFrequencyHistory([]); because setFrequencyHistory is not defined
+
+    // Start camera for video display and image capture
+    startCamera();
+    
+    // Start logging for the first question
+    if (selectedTopics.length > 0) {
+      startQuestionLog(selectedTopics[0], selectedTopics[0], 0);
+    }
 
     await startRecording();
     
@@ -737,15 +932,55 @@ export default function ConductorAssessment() {
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          endAssessment();
-          return 0;
+          // Move to next question or end assessment
+          if (currentQuestionIndex < selectedTopics.length - 1) {
+            moveToNextQuestion();
+            return assessmentTimeLimit; // Reset to full time limit for next question
+          } else {
+            endAssessment();
+            return 0;
+          }
         }
         return prev - 1;
       });
     }, 1000);
 
     scheduleNextChange();
-  }, [config, startRecording, scheduleNextChange, assessmentTimeLimit]);
+  }, [config, startRecording, scheduleNextChange, assessmentTimeLimit, currentQuestionIndex, selectedTopics, startCamera, startQuestionLog]);
+
+  // Audio verification with retry mechanism
+  const verifyAudioWithRetry = async (maxRetries: number = 5, delayMs: number = 2000): Promise<boolean> => {
+    if (!user?.email || !params?.assessmentId) {
+      console.error('❌ Missing user email or assessment ID for audio verification');
+      return false;
+    }
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const verification = await S3Service.verifyAudio({
+          user_email: user.email,
+          assessment_id: params.assessmentId
+        });
+
+        if (verification.data.presence) {
+          return true;
+        } else {
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Audio verification failed on attempt ${attempt}:`, error);
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    console.error(`❌ Audio verification failed after ${maxRetries} attempts`);
+    return false;
+  };
 
   // End assessment
   const endAssessment = useCallback(async () => {
@@ -765,8 +1000,107 @@ export default function ConductorAssessment() {
     }
 
     setIsAnalyzing(true);
-    stopRecording();
-  }, [stopRecording]);
+    
+    try {
+      // Stop all recording activities
+      stopAutoCapture();
+      
+      // Stop camera/video stream
+      if (videoStream) {
+        console.log('📹 Stopping video stream...');
+        videoStream.getTracks().forEach((track) => {
+          track.stop();
+          console.log(`🔴 Stopped ${track.kind} track`);
+        });
+        setVideoStream(null);
+        
+        // Clear video element
+        if (assessmentVideoRef.current) {
+          assessmentVideoRef.current.srcObject = null;
+        }
+      }
+      
+      // Stop recording and get audio blob
+      const finalAudio = await new Promise<Blob | null>((resolve) => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.onstop = () => {
+            if (audioChunksRef.current.length > 0) {
+              const mimeType = "audio/webm";
+              const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+              resolve(audioBlob);
+            } else {
+              resolve(null);
+            }
+          };
+          mediaRecorderRef.current.stop();
+        } else {
+          resolve(null);
+        }
+      });
+
+      stopRecording();
+
+      if (finalAudio && isS3Ready) {
+        console.log('🎵 Uploading audio to S3...');
+        setIsUploading(true);
+
+        try {
+          // Upload audio using assessment context
+          await uploadAudioToS3(finalAudio);
+          console.log('✅ Audio uploaded successfully');
+
+          // Verify audio was uploaded
+          const audioVerified = await verifyAudioWithRetry();
+          
+          if (audioVerified) {
+            console.log('✅ Audio verification successful');
+            // Send logs after successful audio verification
+            await finishAssessment();
+            
+            toast({
+              title: "Assessment Complete",
+              description: "Your assessment has been submitted successfully.",
+              variant: "default",
+            });
+          } else {
+            console.warn('⚠️ Audio verification failed but continuing...');
+            // Continue with logs even if audio verification fails
+            await finishAssessment();
+          }
+
+        } catch (uploadError) {
+          console.error('❌ Audio upload failed:', uploadError);
+          // Still try to send logs even if audio upload fails
+          await finishAssessment();
+          
+          toast({
+            title: "Upload Warning",
+            description: "Audio upload failed, but assessment will continue.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsUploading(false);
+        }
+      } else {
+        console.warn('⚠️ S3 not ready or no audio, skipping audio upload');
+        // Send logs even without audio upload
+        await finishAssessment();
+      }
+
+      // Redirect to results page like other assessments
+      setTimeout(() => {
+        setLocation(`/results/${params?.assessmentId}`);
+      }, 1000);
+
+    } catch (error) {
+      console.error('❌ Error in endAssessment:', error);
+      setIsAnalyzing(false);
+      // Redirect to results page even on error
+      setTimeout(() => {
+        setLocation(`/results/${params?.assessmentId}`);
+      }, 1000);
+    }
+  }, [stopRecording, stopAutoCapture, isS3Ready, uploadAudioToS3, verifyAudioWithRetry, finishAssessment, user?.email, params?.assessmentId, toast]);
 
 
 
@@ -805,192 +1139,26 @@ export default function ConductorAssessment() {
     return summary;
   }, []);
 
-  // Local analysis of performance
-  const performLocalAnalysis = useCallback(async (audioBlob: Blob) => {
-    console.log('🔍 Performing local analysis...');
-    
-    const currentEnergyChanges = energyChangesRef.current;
-    const energyOnlyChanges = currentEnergyChanges.filter(change => change.type === "energy");
-    const breatheChanges = currentEnergyChanges.filter(change => change.type === "breathe");
-
-    let totalAccuracy = 0;
-    let accuracyCount = 0;
-
-    energyOnlyChanges.forEach(change => {
-      if (change.frequency && change.frequency > 0) {
-        const expectedEnergyLevel = config?.energyLevels.find(level => level.level === change.level);
-        if (expectedEnergyLevel) {
-          // Calculate accuracy based on how close the frequency is to the target
-          const targetFreq = expectedEnergyLevel.targetFreq;
-          const freqDifference = Math.abs(change.frequency - targetFreq);
-          
-          // Within 15Hz of target is considered perfect (100%)
-          // Accuracy decreases linearly with distance
-          const accuracy = Math.max(0, 100 - (freqDifference / 15) * 100);
-          
-          totalAccuracy += accuracy;
-          accuracyCount++;
-        }
-      }
-    });
-
-    const energyAccuracy = accuracyCount > 0 ? totalAccuracy / accuracyCount : 50;
-    
-    const energyLevels = energyOnlyChanges.map(change => change.level);
-    const minEnergy = Math.min(...energyLevels, 5);
-    const maxEnergy = Math.max(...energyLevels, 5);
-    const energyRange = maxEnergy - minEnergy;
-
-    const successfulTransitions = Math.floor(energyOnlyChanges.length * (energyAccuracy / 100));
-    const averageResponseTime = 1.0 + Math.random() * 2.0;
-
-    const overallScore = Math.round(
-      (energyAccuracy * 0.4) + 
-      (Math.min(energyRange / 8 * 100, 100) * 0.3) + 
-      (Math.min(energyOnlyChanges.length / 4 * 100, 100) * 0.2) +
-      (breatheChanges.length * 10)
-    );
-
-
-
-    const result: AssessmentResult = {
-      totalChanges: energyOnlyChanges.length,
-      successfulTransitions,
-      averageResponseTime,
-      energyRange,
-      breatheRecoveries: breatheChanges.length,
-      audioBlob,
-      frequencyData: pitchHistory.map(entry => entry.pitch),
-      energyAccuracy: Math.round(energyAccuracy),
-      overallScore: Math.min(overallScore, 100),
-
-    };
-
-    // Store audio locally if small enough, otherwise just upload to cloud
-    const maxLocalStorageSize = 4 * 1024 * 1024; // 4MB limit for localStorage
-    
-    if (audioBlob.size <= maxLocalStorageSize) {
-      try {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          try {
-            const base64Audio = reader.result as string;
-            localStorage.setItem(`conductor_audio_${params?.assessmentId}`, base64Audio);
-            console.log('[CONDUCTOR] 💾 Audio stored locally');
-          } catch (storageError) {
-            console.warn('[CONDUCTOR] Failed to store audio in localStorage:', storageError);
-          }
-        };
-        reader.readAsDataURL(audioBlob);
-      } catch (error) {
-        console.warn('[CONDUCTOR] Failed to store audio in localStorage (file too large):', error);
-      }
-    } else {
-      console.log('[CONDUCTOR] ⚠️ Audio file too large for localStorage, uploading to cloud only');
-    }
-
-    // Always attempt cloud upload
-    if (user?.email) {
-      AudioUploadService.uploadRecording(
-        audioBlob,
-        user.email,
-        'conductor',
-        params?.assessmentId || 'unknown'
-      ).then((result) => {
-        console.log('[CONDUCTOR] ☁️ Audio uploaded to cloud:', result.audio_id);
-        toast({
-          title: "Audio Saved",
-          description: "Your recording has been saved to cloud storage.",
-          variant: "default",
-        });
-      }).catch((error) => {
-        console.error('[CONDUCTOR] Cloud upload failed:', error);
-        
-        // Only show upload failure if localStorage also failed
-        const hasLocalStorage = localStorage.getItem(`conductor_audio_${params?.assessmentId}`);
-        if (!hasLocalStorage) {
-          toast({
-            title: "Upload Failed",
-            description: "Failed to save recording. Please try again.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Upload Warning",
-            description: "Recording saved locally but cloud upload failed.",
-            variant: "destructive",
-          });
-        }
-      });
-    } else {
-      console.warn('[CONDUCTOR] No user email available for cloud upload');
-    }
-
-    setAssessmentResult(result);
-    setAssessmentState("feedback");
-    setIsAnalyzing(false);
-    
-    console.log('✅ Local analysis completed:', result);
-  }, [pitchHistory, params?.assessmentId]);
-
-  // Reset assessment
-  const resetAssessment = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    if (changeTimerRef.current) {
-      clearTimeout(changeTimerRef.current);
-      changeTimerRef.current = null;
-    }
-    if (breatheTimeoutRef.current) {
-      clearTimeout(breatheTimeoutRef.current);
-      breatheTimeoutRef.current = null;
-    }
-
-    stopRecording();
-    energyChangesRef.current = [];
-
-    setAssessmentState("setup");
-    setCurrentEnergyLevel(5);
-    setTimeRemaining(0);
-    setAssessmentStartTime(0);
-    setEnergyChanges([]);
-    setShowBreathe(false);
-    setAssessmentResult(null);
-    setIsAnalyzing(false);
-    setNextChangeIn(0);
-    setAudioLevel(0);
-          setCurrentPitch(0);
-    setPitchHistory([]);
-    setEnergyLevelFrames([{
-      level: config?.gameSettings.defaultEnergyLevel || 5,
-      startTime: 0,
-      pitches: []
-    }]);
-    setCurrentTopic(getRandomTopic());
-  }, [stopRecording, getRandomTopic]);
-
-  // Download audio
-  const downloadAudio = useCallback(() => {
-    if (assessmentResult?.audioBlob) {
-      const url = URL.createObjectURL(assessmentResult.audioBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `conductor_assessment_${params?.assessmentId || 'recording'}.webm`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-  }, [assessmentResult?.audioBlob, params?.assessmentId]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      resetAssessment();
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      if (changeTimerRef.current) {
+        clearTimeout(changeTimerRef.current);
+        changeTimerRef.current = null;
+      }
+      if (breatheTimeoutRef.current) {
+        clearTimeout(breatheTimeoutRef.current);
+        breatheTimeoutRef.current = null;
+      }
+      stopRecording();
+      stopAutoCapture();
     };
-  }, [resetAssessment]);
+  }, [stopRecording, stopAutoCapture]);
 
   const getCurrentEnergyInfo = () => {
     if (!config?.energyLevels) return null;
@@ -1058,15 +1226,32 @@ export default function ConductorAssessment() {
         </div>
 
         {/* Start button positioned at bottom right */}
-        <div className="fixed bottom-8 right-8">
+        <div className="fixed bottom-8 right-8 text-center">
           <Button 
             onClick={startAssessment}
+            disabled={isLoadingConfig || isLoadingSession}
             size="lg"
-            className="bg-primary hover:bg-primary/90 px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+            className="bg-primary hover:bg-primary/90 px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <Play className="h-6 w-6 mr-3" />
-            Start Assessment
+            {isLoadingConfig || isLoadingSession ? (
+              <>
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
+                Loading...
+              </>
+            ) : (
+              <>
+                <Play className="h-6 w-6 mr-3" />
+                Start Assessment
+              </>
+            )}
           </Button>
+          {(isLoadingConfig || isLoadingSession) && (
+            <div className="mt-2 text-sm text-muted-foreground">
+              {isLoadingConfig && isLoadingSession ? 'Preparing assessment...' :
+               isLoadingConfig ? 'Loading configuration...' :
+               'Initializing session...'}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1095,7 +1280,12 @@ export default function ConductorAssessment() {
           {/* Topic Header with proper spacing */}
           <div className="relative mb-12">
             {/* Topic Centered */}
-            <h2 className="text-3xl font-bold text-foreground mb-6 leading-relaxed 
+            <div className="text-center mb-4">
+              <div className="text-lg text-muted-foreground mb-2">
+                Question {currentQuestionIndex + 1} of {selectedTopics.length}
+              </div>
+            </div>
+            <h2 className="text-3xl font-bold text-foreground mb-6 leading-relaxed
                           max-w-5xl mx-auto text-center">
               {currentTopic}
             </h2>
@@ -1110,37 +1300,23 @@ export default function ConductorAssessment() {
               />
             </div>
 
-            {/* Timer Aligned Right */}
+            {/* Enhanced Timer as Next Button */}
             <div className="absolute right-0 top-1/2 -translate-y-1/2">
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 120 120">
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="40"
-                    stroke="#e5e7eb"
-                    strokeWidth="8"
-                    fill="transparent"
-                  />
-                  <circle
-                    cx="60"
-                    cy="60"
-                    r="40"
-                    stroke="#4A9CA6"
-                    strokeWidth="8"
-                    fill="transparent"
-                    strokeLinecap="round"
-                    strokeDasharray={`${2 * Math.PI * 40}`}
-                    strokeDashoffset={`${2 * Math.PI * 40 * (1 - progress / 100)}`}
-                    className="transition-all duration-1000 ease-out"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-xs font-bold text-foreground">
-                    {formatTime(timeRemaining)}
-                  </div>
-                </div>
-              </div>
+              <CircularTimer
+                timeLeft={timeRemaining}
+                totalTime={assessmentTimeLimit}
+                isActive={assessmentState === "playing"}
+                onClick={() => {
+                  if (currentQuestionIndex < selectedTopics.length - 1) {
+                    moveToNextQuestion();
+                  } else {
+                    endAssessment();
+                  }
+                }}
+                 isFinishing={isUploading}
+                 isLastQuestion={currentQuestionIndex >= selectedTopics.length - 1}
+                 isUploading={isUploading}
+              />
             </div>
           </div>
 
@@ -1156,17 +1332,13 @@ export default function ConductorAssessment() {
 
           {/* Main Assessment Layout - Video Left, Energy Bars Right */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-6">
-            {/* Left Side - Video Recording Area */}
+            {/* Left Side - Video Display Area */}
             <div className="space-y-4">
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold mb-4 text-center">Video Recording</h3>
-                  
-                  {/* Video Recording Display */}
+              {/* Video Display */}
                   <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '4/3' }}>
                     {videoStream ? (
                       <video
-                        ref={videoRef}
+                        ref={assessmentVideoRef}
                         className="w-full h-full object-cover"
                         autoPlay
                         muted
@@ -1179,7 +1351,7 @@ export default function ConductorAssessment() {
                             <MicOff className="w-8 h-8 text-muted-foreground" />
                           </div>
                           <div className="text-muted-foreground text-lg font-medium">Camera Off</div>
-                          <div className="text-muted-foreground text-sm">Start assessment to begin video recording</div>
+                          <div className="text-muted-foreground text-sm">Start assessment to begin recording</div>
                         </div>
                       </div>
                     )}
@@ -1192,8 +1364,6 @@ export default function ConductorAssessment() {
                       </div>
                     )}
                   </div>
-                </CardContent>
-              </Card>
             </div>
 
             {/* Right Side - Energy Level Bars */}
@@ -1317,123 +1487,7 @@ export default function ConductorAssessment() {
     );
   }
 
-  if (assessmentState === "feedback") {
-    return (
-      <div className="min-h-screen bg-background relative">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-                     <div className="text-center mb-8">
-             <h1 className="text-4xl font-bold text-foreground mb-4">
-               Assessment Complete!
-             </h1>
-             <p className="text-xl text-muted-foreground">
-               Great work on the Energy Conductor assessment
-             </p>
-             
 
-           </div>
-
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Performance Metrics</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>Overall Score:</span>
-                    <Badge variant="secondary" className="text-lg font-bold">
-                      {assessmentResult?.overallScore || 0}/100
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Energy Accuracy:</span>
-                    <Badge variant="secondary">{assessmentResult?.energyAccuracy || 0}%</Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Energy Changes:</span>
-                    <Badge variant="secondary">{assessmentResult?.totalChanges || 0}</Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Successful Transitions:</span>
-                    <Badge variant="secondary">{assessmentResult?.successfulTransitions || 0}</Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Energy Range:</span>
-                    <Badge variant="secondary">{assessmentResult?.energyRange || 0} levels</Badge>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Breathe Recoveries:</span>
-                    <Badge variant="secondary">{assessmentResult?.breatheRecoveries || 0}</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Recording & Analysis</h3>
-                {(() => {
-                  // Try to get audio from localStorage first, then from assessmentResult
-                  const storedAudio = localStorage.getItem(`conductor_audio_${params?.assessmentId}`);
-                  const audioBlob = assessmentResult?.audioBlob;
-                  
-                  if (storedAudio || audioBlob) {
-                    return (
-                      <div className="space-y-4">
-                        <div>
-                          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Your Recording:
-                          </label>
-                          <audio 
-                            controls 
-                            className="w-full mt-2"
-                            src={storedAudio || (audioBlob ? URL.createObjectURL(audioBlob) : '')}
-                          />
-                        </div>
-                        <Button 
-                          onClick={downloadAudio}
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download Recording
-                        </Button>
-                      </div>
-                    );
-                  } else {
-                    return (
-                      <div className="text-center py-4">
-                        <p className="text-muted-foreground">No recording available</p>
-                      </div>
-                    );
-                  }
-                })()}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="text-center space-x-4">
-            <Button 
-              onClick={resetAssessment}
-              variant="outline"
-              size="lg"
-            >
-              Try Again
-            </Button>
-            <Button 
-
-              onClick={() => setLocation('/test-selection')}
-
-              size="lg"
-              className="bg-primary hover:bg-primary/90"
-            >
-              <Home className="h-5 w-5 mr-2" />
-              Return to Dashboard
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return null;
 } 

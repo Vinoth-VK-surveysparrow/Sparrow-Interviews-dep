@@ -149,14 +149,10 @@ export default function Rules() {
         }
         
         // Fetch test-specific assessments
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const response = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        console.log('🔍 Rules: Fetching test assessments with Firebase auth');
         
-        if (!response.ok) {
-          throw new Error(`Failed to fetch test assessments: ${response.status} ${response.statusText}`);
-        }
-        
-        const data = await response.json();
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const data = await AuthenticatedApiService.getTestAssessments(selectedTestId);
         console.log('📋 Rules page fetched test assessments:', data);
         
         // Find the current assessment within this test

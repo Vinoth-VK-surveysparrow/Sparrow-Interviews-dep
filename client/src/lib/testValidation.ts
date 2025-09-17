@@ -1,6 +1,7 @@
 /**
  * Test validation utilities to ensure users only access assessments within their selected test
  */
+import React from 'react';
 
 export interface TestValidationResult {
   isValid: boolean;
@@ -27,19 +28,10 @@ export async function validateAssessmentInCurrentTest(assessmentId: string): Pro
     }
 
     // Fetch test-specific assessments
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-    const response = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+    console.log('🔍 testValidation: Fetching test assessments with Firebase auth');
     
-    if (!response.ok) {
-      return {
-        isValid: false,
-        testId: selectedTestId,
-        assessment: null,
-        error: `Failed to fetch test assessments: ${response.status} ${response.statusText}`
-      };
-    }
-    
-    const data = await response.json();
+    const { AuthenticatedApiService } = await import('./authenticatedApiService');
+    const data = await AuthenticatedApiService.getTestAssessments(selectedTestId);
     const testAssessments = data.assessments || [];
     
     // Find the assessment within this test
@@ -79,11 +71,11 @@ export async function validateAssessmentInCurrentTest(assessmentId: string): Pro
 export function withAssessmentValidation<T extends object>(
   WrappedComponent: React.ComponentType<T>,
   assessmentIdParam: string = 'assessmentId'
-) {
+): React.ComponentType<T & { params?: { [key: string]: string } }> {
   return function ValidatedComponent(props: T & { params?: { [key: string]: string } }) {
     // This would be used like:
     // const ValidatedRules = withAssessmentValidation(Rules);
     // But for now, we'll implement validation directly in components
-    return <WrappedComponent {...props} />;
+    return React.createElement(WrappedComponent, props);
   };
 }

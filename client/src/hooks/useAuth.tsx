@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth, signInWithGoogle, signOutUser, isAuthorizedEmail } from '@/lib/firebase';
 import { fetchGeminiApiKey } from '@/services/geminiApiService';
+import { storeFirebaseToken, clearStoredFirebaseToken, startTokenRefresh, stopTokenRefresh, initializeVisibilityListener, removeVisibilityListener } from '@/lib/authenticatedApiService';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -19,9 +20,24 @@ export const useAuth = () => {
             await signOutUser();
             setUser(null);
             setError('User not authorized.');
+            clearStoredFirebaseToken();
+            stopTokenRefresh();
           } else {
             setUser(user);
             setError(null); // Clear any previous errors for authorized users
+            
+            // Store Firebase ID token for authenticated API calls
+            try {
+              const idToken = await user.getIdToken();
+              storeFirebaseToken(idToken);
+              console.log('✅ Firebase token stored for authenticated API calls');
+              
+              // Start background token refresh and visibility listener
+              startTokenRefresh();
+              initializeVisibilityListener();
+            } catch (tokenError) {
+              console.error('❌ Failed to get/store Firebase token:', tokenError);
+            }
           }
         } catch (error) {
           console.error('Error checking user authorization:', error);
@@ -29,15 +45,24 @@ export const useAuth = () => {
           await signOutUser();
           setUser(null);
           setError('Authorization check failed. Please try again.');
+          clearStoredFirebaseToken();
+          stopTokenRefresh();
         }
       } else {
         setUser(null);
         setError(null);
+        clearStoredFirebaseToken();
+        stopTokenRefresh();
       }
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      // Cleanup token refresh and visibility listener on unmount
+      stopTokenRefresh();
+      removeVisibilityListener();
+    };
   }, []);
 
   const signIn = async () => {
@@ -61,6 +86,9 @@ export const useAuth = () => {
       setError(null);
       await signOutUser();
       setUser(null);
+      clearStoredFirebaseToken();
+      stopTokenRefresh();
+      console.log('🚪 User signed out and token cleared');
     } catch (error: any) {
       setError(error.message || 'An error occurred during sign out');
     } finally {

@@ -17,24 +17,11 @@ interface UserRole {
 // Function to fetch user role from API
 const fetchUserRole = async (userEmail: string): Promise<string> => {
   try {
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ;
-    const url = `${API_BASE_URL}/users/${userEmail}/tests`;
-    console.log('🔍 AdminProtectedRoute checking role for:', userEmail, 'URL:', url);
+    console.log('🔍 AdminProtectedRoute: Checking role with Firebase auth for:', userEmail);
     
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      console.error('❌ Role check failed:', response.status, response.statusText);
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('✅ Role check result:', data);
+    const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+    const data = await AuthenticatedApiService.getUserTests(userEmail);
+    console.log('✅ Role check result with auth:', data);
     return data.role || 'user';
   } catch (error) {
     console.error('Error fetching user role:', error);

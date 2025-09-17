@@ -36,13 +36,14 @@ export default defineConfig({
     },
   },
   server: {
+    port: 5000,
     fs: {
       strict: true,
       deny: ["**/.*"],
     },
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
+        target: "http://localhost:5001",
         changeOrigin: true,
         secure: false,
       },

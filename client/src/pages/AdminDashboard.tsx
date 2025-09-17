@@ -22,6 +22,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
 import { S3Service, AdminTest, AllUser } from '@/lib/s3Service';
+import { AuthenticatedAdminApiService } from '@/lib/authenticatedApiService';
 import { TestsListPlaceholder, UsersTablePlaceholder } from '@/components/ui/table-placeholder';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs-custom';
 import { Badge } from '@/components/ui/badge-advanced';
@@ -115,17 +116,17 @@ export default function AdminDashboard() {
         setLoading(true);
         
         if (activeTab === 'Tests') {
-          console.log('🔍 Admin fetching all tests');
-          const allTests = await S3Service.getAllTests();
-          console.log('✅ All tests fetched for admin:', allTests);
+          console.log('🔍 Admin fetching all tests with Firebase auth');
+          const allTests = await AuthenticatedAdminApiService.getAllTests();
+          console.log('✅ All tests fetched for admin with auth:', allTests);
           
           // Cache tests in localStorage for other pages to use
           localStorage.setItem('admin_tests', JSON.stringify(allTests));
           setTests(allTests);
         } else if (activeTab === 'Users') {
-          console.log('🔍 Admin fetching all users');
-          const users = await S3Service.getAllUsers();
-          console.log('✅ All users fetched for admin:', users);
+          console.log('🔍 Admin fetching all users with Firebase auth');
+          const users = await AuthenticatedAdminApiService.getAllUsers();
+          console.log('✅ All users fetched for admin with auth:', users);
           setAllUsers(users);
         }
       } catch (error) {
@@ -233,9 +234,9 @@ export default function AdminDashboard() {
       setError(null);
       
       if (activeTab === 'Tests') {
-        console.log('🔄 Refreshing tests data');
-        const allTests = await S3Service.getAllTests();
-        console.log('✅ Tests refreshed:', allTests);
+        console.log('🔄 Refreshing tests data with Firebase auth');
+        const allTests = await AuthenticatedAdminApiService.getAllTests();
+        console.log('✅ Tests refreshed with auth:', allTests);
         
         // Update cache
         localStorage.setItem('admin_tests', JSON.stringify(allTests));
@@ -246,9 +247,9 @@ export default function AdminDashboard() {
           description: "Tests data refreshed successfully",
         });
       } else if (activeTab === 'Users') {
-        console.log('🔄 Refreshing users data');
-        const users = await S3Service.getAllUsers();
-        console.log('✅ Users refreshed:', users);
+        console.log('🔄 Refreshing users data with Firebase auth');
+        const users = await AuthenticatedAdminApiService.getAllUsers();
+        console.log('✅ Users refreshed with auth:', users);
         setAllUsers(users);
         
         toast({

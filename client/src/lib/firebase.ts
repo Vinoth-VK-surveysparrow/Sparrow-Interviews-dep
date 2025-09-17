@@ -4,12 +4,12 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, User } from "fir
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyCTtWOFgT2EbdrofG54HPBKyWdx6pthbVo",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "sparrow-interviews.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "sparrow-interviews",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "sparrow-interviews.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "793112581997",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:793112581997:web:212218f06871ef1ad26c64"
 };
 
 // Initialize Firebase
@@ -46,19 +46,11 @@ const checkEmailAuthorization = async (email: string): Promise<boolean> => {
   }
 
   try {
-    // Send email directly without URL encoding the @ symbol
-    const response = await fetch(`${API_BASE_URL}/check-authorization/${email}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Authorization check failed: ${response.status}`);
-    }
-
-    const data = await response.json();
+    // Import and use authenticated API service
+    const { AuthenticatedApiService } = await import('./authenticatedApiService');
+    
+    console.log('🔍 Firebase: Checking email authorization with Firebase auth for:', email);
+    const data = await AuthenticatedApiService.checkAuthorization(email);
     const authorized = data.authorized === true;
     
     // Cache the result
@@ -89,22 +81,33 @@ export const isAuthorizedEmail = async (email: string | null): Promise<boolean> 
 export const signInWithGoogle = async () => {
   try {
     // Always use popup flow for better user experience and reliability
+    console.log('🚀 Starting Google sign-in with popup');
     
     const result = await signInWithPopup(auth, googleProvider);
-    
+    console.log('✅ Google sign-in successful for:', result.user.email);
     
     // Check authorization immediately for popup flow
     const authorized = await isAuthorizedEmail(result.user.email);
     if (!authorized) {
-      
+      console.log('❌ User not authorized:', result.user.email);
       await signOut(auth);
       throw new Error('User not authorized.');
     }
     
+    // Get the ID token for API calls
+    try {
+      const idToken = await result.user.getIdToken();
+      console.log('✅ Firebase ID token obtained for API authentication');
+      // Token will be stored by useAuth hook
+    } catch (tokenError) {
+      console.error('❌ Failed to get ID token:', tokenError);
+      // Continue with sign-in even if token fails initially
+    }
     
+    console.log('✅ User authorized and signed in successfully');
     return result.user;
   } catch (error: any) {
-    console.error("Error starting Google sign-in:", error);
+    console.error("❌ Error during Google sign-in:", error);
     
     // Provide more helpful error messages
     if (error.code === 'auth/popup-closed-by-user') {

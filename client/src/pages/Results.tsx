@@ -112,29 +112,16 @@ export default function Results() {
         test_id: selectedTestId
       });
 
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-      const response = await fetch(`${API_BASE_URL}/next-assessment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: user.email,
-          test_id: selectedTestId
-        })
+      console.log('🔍 Results: Getting next assessment with Firebase auth');
+      
+      // Import authenticated API service
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data = await AuthenticatedApiService.getNextAssessment({
+        user_email: user.email,
+        test_id: selectedTestId
       });
 
-      console.log('📡 Response status:', response.status);
-
-      if (!response.ok) {
-        console.error('❌ Failed to fetch next assessment - Status:', response.status);
-        const errorText = await response.text();
-        console.error('❌ Error response:', errorText);
-        return null;
-      }
-
-      const data = await response.json();
-      console.log('✅ Next assessment response:', data);
+      console.log('✅ Next assessment response with auth:', data);
 
       setNextAssessmentData(data);
       return data;

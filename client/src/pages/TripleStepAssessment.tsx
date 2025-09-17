@@ -113,12 +113,13 @@ interface WordDrop {
 
 type GameState = "rules" | "playing";
 
-const DIFFICULTY_SETTINGS = {
-  totalWords: 6,
-  dropFrequency: 30, // seconds
-  integrationTime: 8, // seconds per word
-  difficulty: "intermediate"
-};
+// Timing settings interface for TypeScript
+interface DifficultySettings {
+  dropFrequencyMin: number;
+  dropFrequencyMax: number;
+  integrationTime: number;
+  initialDelay: number;
+}
 
 export default function TripleStepAssessment() {
   const [, params] = useRoute('/triple-step/:assessmentId');
@@ -147,9 +148,7 @@ export default function TripleStepAssessment() {
   
   // Behavior monitoring
   const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
-    enabled: true,
-    delayBeforeStart: 25000, // Start monitoring after 15 seconds (when first image is captured)
-    pollingInterval: 20000, // Check every 10 seconds
+    enabled: true
   });
   
   // Assessment state
@@ -163,6 +162,14 @@ export default function TripleStepAssessment() {
   const [isFinishing, setIsFinishing] = useState(false);
   const [assessmentStarted, setAssessmentStarted] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Dynamic difficulty settings from backend (required)
+  const [difficultySettings, setDifficultySettings] = useState<DifficultySettings | null>(null);
+  const difficultySettingsRef = useRef<DifficultySettings | null>(null);
+  
+  // Refs for current state values (to avoid stale closures)
+  const isTimerActiveRef = useRef(false);
+  const isFinishingRef = useRef(false);
 
   // Triple Step game state
   const [activeWords, setActiveWords] = useState<WordDrop[]>([]);
@@ -243,14 +250,10 @@ export default function TripleStepAssessment() {
         }
 
         // Validate assessment exists in current test and get time limit
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const testResponse = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        console.log('🔍 TripleStepAssessment: Fetching test assessments with Firebase auth');
         
-        if (!testResponse.ok) {
-          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
-        }
-        
-        const testData = await testResponse.json();
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const testData = await AuthenticatedApiService.getTestAssessments(selectedTestId);
         const testAssessments = testData.assessments || [];
         const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === params.assessmentId);
         
@@ -266,6 +269,46 @@ export default function TripleStepAssessment() {
         setTimeLeft(timeLimitFromBackend);
         
         console.log(`⏱️ Using time limit from backend: ${timeLimitFromBackend} seconds per question for Triple Step assessment`);
+
+        // Parse timing settings for Triple-Step assessments (required)
+        if (assessmentInTest.type === 'Triple-Step') {
+          if (!assessmentInTest.time_interval) {
+            console.error('❌ TripleStepAssessment: Missing time_interval in backend response');
+            toast({
+              title: "Configuration Error",
+              description: "Assessment timing configuration is missing from the backend.",
+              variant: "destructive",
+            });
+            setLocation('/dashboard');
+            return;
+          }
+
+          const timeInterval = assessmentInTest.time_interval;
+          
+          // Validate required timing properties
+          if (!timeInterval.dropFrequencyMin || !timeInterval.dropFrequencyMax || 
+              !timeInterval.integrationTime || !timeInterval.start_delay) {
+            console.error('❌ TripleStepAssessment: Incomplete time_interval configuration:', timeInterval);
+            toast({
+              title: "Configuration Error", 
+              description: "Assessment timing configuration is incomplete.",
+              variant: "destructive",
+            });
+            setLocation('/dashboard');
+            return;
+          }
+
+          const backendSettings: DifficultySettings = {
+            dropFrequencyMin: timeInterval.dropFrequencyMin,
+            dropFrequencyMax: timeInterval.dropFrequencyMax,
+            integrationTime: timeInterval.integrationTime,
+            initialDelay: timeInterval.start_delay
+          };
+          
+          setDifficultySettings(backendSettings);
+          difficultySettingsRef.current = backendSettings;
+          console.log('🎯 TripleStepAssessment: Updated timing settings from backend:', backendSettings);
+        }
         
         // Use the standard fetchQuestions but with Triple-Step type
         const fetchedQuestions = await S3Service.fetchQuestions({
@@ -288,10 +331,16 @@ export default function TripleStepAssessment() {
     fetchTripleStepQuestions();
   }, [params?.assessmentId, authLoading, user?.email, setLocation]);
 
-  // Initialize assessment once questions are loaded
+  // Initialize assessment once questions are loaded AND difficulty settings are available
   useEffect(() => {
     const initializeAssessment = async () => {
       if (loadingQuestions || questions.length === 0 || gameState !== "playing") return;
+      
+      // Wait for difficulty settings to be loaded
+      if (!difficultySettingsRef.current) {
+        console.log('⏳ [TRIPLE-STEP] Waiting for difficulty settings to be loaded...');
+        return;
+      }
       
       // Start assessment session if not already started
       if (params?.assessmentId && !session.assessmentId) {
@@ -340,10 +389,13 @@ export default function TripleStepAssessment() {
         setAssessmentStarted(true);
         setGameStartTime(Date.now());
         
-        // Start word dropping after 60 seconds prep time
+        // Start word dropping after initial delay
+        const initialDelay = difficultySettingsRef.current?.initialDelay || 60;
+        console.log(`🚀 [TRIPLE-STEP] Scheduling word dropping to start in ${initialDelay} seconds`);
         setTimeout(() => {
+          console.log('🚀 [TRIPLE-STEP] Initial delay completed, starting word dropping system');
           startWordDropSystem();
-        }, 60000);
+        }, initialDelay * 1000);
       }
     };
 
@@ -354,7 +406,7 @@ export default function TripleStepAssessment() {
         stopListening();
       }
     };
-  }, [loadingQuestions, questions.length, gameState, params?.assessmentId]);
+  }, [loadingQuestions, questions.length, gameState, params?.assessmentId, difficultySettings]);
 
   // Removed auto-capture - images not needed for TripleStep
 
@@ -470,15 +522,15 @@ export default function TripleStepAssessment() {
   }, [availableWords]);
 
   const dropNextWord = useCallback(() => {
+    const settings = difficultySettingsRef.current;
+    if (!settings) {
+      console.error('🚨 [TRIPLE-STEP] dropNextWord: difficultySettings is null! Word dropping stopped.');
+      return;
+    }
+    
+    console.log(`💧 [TRIPLE-STEP] dropNextWord called with settings:`, settings);
+    
     setWordsDropped((currentCount) => {
-      if (currentCount >= DIFFICULTY_SETTINGS.totalWords) {
-        if (wordDropIntervalRef.current) {
-          clearInterval(wordDropIntervalRef.current);
-          wordDropIntervalRef.current = null;
-        }
-        return currentCount;
-      }
-
       const newWord = getRandomWord();
       if (!newWord) return currentCount;
 
@@ -486,7 +538,7 @@ export default function TripleStepAssessment() {
         word: newWord,
         timestamp: Date.now(),
         integrated: false,
-        timeRemaining: DIFFICULTY_SETTINGS.integrationTime,
+        timeRemaining: settings.integrationTime,
       };
 
       setActiveWords((prev) => [...prev, wordDrop]);
@@ -513,6 +565,8 @@ export default function TripleStepAssessment() {
   }, [getRandomWord, currentQuestion]);
 
   const startWordIntegrationTimer = useCallback((wordDrop: WordDrop) => {
+    const settings = difficultySettingsRef.current;
+    if (!settings) return;
     const timer = setInterval(() => {
       setActiveWords((prev) =>
         prev.map((word) => {
@@ -527,14 +581,14 @@ export default function TripleStepAssessment() {
               }
               
               // Mark word as expired in logger with precise expiration time
-              const expirationTime = new Date(wordDrop.timestamp + (DIFFICULTY_SETTINGS.integrationTime * 1000));
+              const expirationTime = new Date(wordDrop.timestamp + (settings.integrationTime * 1000));
               assessmentLogger.markWordExpired(word.word, expirationTime);
               
               // Track word expiration in Clarity
               trackAssessmentEvent('word_expired', {
                 word: word.word,
                 question_index: currentQuestionIndex,
-                time_available_seconds: DIFFICULTY_SETTINGS.integrationTime
+                time_available_seconds: settings.integrationTime
               });
               
               setTimeout(() => {
@@ -559,30 +613,78 @@ export default function TripleStepAssessment() {
         clearInterval(timer);
         wordIntegrationTimersRef.current.delete(`${wordDrop.word}-${wordDrop.timestamp}`);
       },
-      DIFFICULTY_SETTINGS.integrationTime * 1000 + 100,
+      settings.integrationTime * 1000 + 100,
     );
   }, []);
 
   const startWordDropSystem = useCallback(() => {
-    console.log('[TRIPLE-STEP] Starting word drop system...');
+    const settings = difficultySettingsRef.current;
+    if (!settings) {
+      console.error('🚨 [TRIPLE-STEP] startWordDropSystem: difficultySettings is null! Cannot start word dropping.');
+      return;
+    }
+    
+    console.log('[TRIPLE-STEP] Starting word drop system with settings:', settings);
     
     // Drop first word immediately
     if (dropNextWordRef.current) {
       dropNextWordRef.current();
     }
     
-    // Start interval for subsequent words
-    wordDropIntervalRef.current = setInterval(() => {
-      if (dropNextWordRef.current) {
-        dropNextWordRef.current();
+    // Schedule subsequent words with random intervals (calculated from word expiry, not appearance)
+    const scheduleNextWord = () => {
+      // Get current state values instead of relying on closure
+      const currentTimerActive = isTimerActiveRef.current;
+      const currentFinishing = isFinishingRef.current;
+      
+      // Stop scheduling if timer is not active or assessment is finishing
+      if (!currentTimerActive || currentFinishing) {
+        console.log('[TRIPLE-STEP] Stopping word scheduling - timer inactive or finishing');
+        return;
       }
-    }, DIFFICULTY_SETTINGS.dropFrequency * 1000);
-  }, []);
+      
+      const currentSettings = difficultySettingsRef.current;
+      if (!currentSettings) {
+        console.error('🚨 [TRIPLE-STEP] scheduleNextWord: difficultySettings is null! Cannot schedule next word.');
+        return;
+      }
+      
+      const randomInterval = Math.floor(
+        Math.random() * (currentSettings.dropFrequencyMax - currentSettings.dropFrequencyMin + 1) + 
+        currentSettings.dropFrequencyMin
+      );
+      
+      // Total delay = integrationTime (word duration) + randomInterval (gap after expiry)
+      const totalDelay = currentSettings.integrationTime + randomInterval;
+      
+      console.log(`[TRIPLE-STEP] Next word scheduled in ${totalDelay}s (${currentSettings.integrationTime}s word duration + ${randomInterval}s random gap)`);
+      
+      wordDropIntervalRef.current = setTimeout(() => {
+        // Check current state again before dropping
+        if (dropNextWordRef.current && isTimerActiveRef.current && !isFinishingRef.current) {
+          dropNextWordRef.current();
+          scheduleNextWord(); // Schedule the next word after dropping current one
+        }
+      }, totalDelay * 1000);
+    };
+    
+    // Start scheduling
+    scheduleNextWord();
+  }, []); // No dependencies - use refs for current state
 
   // Update function refs
   useEffect(() => {
     dropNextWordRef.current = dropNextWord;
   }, [dropNextWord]);
+
+  // Keep refs synchronized with state
+  useEffect(() => {
+    isTimerActiveRef.current = isTimerActive;
+  }, [isTimerActive]);
+
+  useEffect(() => {
+    isFinishingRef.current = isFinishing;
+  }, [isFinishing]);
 
   // Handle next question or finish assessment
   const handleNextQuestion = useCallback(async () => {
@@ -610,7 +712,7 @@ export default function TripleStepAssessment() {
         
         // Clear word drop timers
         if (wordDropIntervalRef.current) {
-          clearInterval(wordDropIntervalRef.current);
+          clearTimeout(wordDropIntervalRef.current);
           wordDropIntervalRef.current = null;
         }
         wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
@@ -665,7 +767,7 @@ export default function TripleStepAssessment() {
         
         // Clear timers
         if (wordDropIntervalRef.current) {
-          clearInterval(wordDropIntervalRef.current);
+          clearTimeout(wordDropIntervalRef.current);
           wordDropIntervalRef.current = null;
         }
         wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
@@ -699,10 +801,10 @@ export default function TripleStepAssessment() {
         // Reset transcript
     resetTranscript();
         
-        // Start word dropping after 60 seconds
+        // Start word dropping after initial delay
         setTimeout(() => {
           startWordDropSystem();
-        }, 60000);
+        }, (difficultySettingsRef.current?.initialDelay || 60) * 1000);
       }
     } catch (error) {
       console.error('❌ Error in handleNextQuestion:', error);
@@ -733,7 +835,7 @@ export default function TripleStepAssessment() {
   useEffect(() => {
     return () => {
       if (wordDropIntervalRef.current) {
-        clearInterval(wordDropIntervalRef.current);
+        clearTimeout(wordDropIntervalRef.current);
       }
       wordIntegrationTimersRef.current.forEach((timer) => clearInterval(timer));
       wordIntegrationTimersRef.current.clear();
@@ -783,7 +885,6 @@ export default function TripleStepAssessment() {
                   <WarningBadge
                     isVisible={showWarning}
                     message={warningMessage}
-                    duration={5000}
                     className="mt-4"
                   />
                   

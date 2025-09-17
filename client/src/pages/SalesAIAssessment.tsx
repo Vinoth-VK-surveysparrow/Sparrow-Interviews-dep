@@ -379,13 +379,10 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         }
 
         // Validate assessment exists in current test and is Games-arena type
-        const testResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL}/assessments/test/${selectedTestId}`);
+        console.log('🔍 SalesAIAssessment: Fetching test assessments with Firebase auth');
         
-        if (!testResponse.ok) {
-          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
-        }
-        
-        const testData = await testResponse.json();
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const testData = await AuthenticatedApiService.getTestAssessments(selectedTestId);
         const testAssessments = testData.assessments || [];
         const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === assessmentId);
         

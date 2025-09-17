@@ -219,14 +219,10 @@ export default function Assessment() {
         setLoadingQuestions(true);
         
         // Validate assessment exists in current test
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const testResponse = await fetch(`${API_BASE_URL}/assessments/test/${selectedTestId}`);
+        console.log('🔍 Assessment: Fetching test assessments with Firebase auth');
         
-        if (!testResponse.ok) {
-          throw new Error(`Failed to fetch test assessments: ${testResponse.status} ${testResponse.statusText}`);
-        }
-        
-        const testData = await testResponse.json();
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const testData = await AuthenticatedApiService.getTestAssessments(selectedTestId);
         const testAssessments = testData.assessments || [];
         const assessmentInTest = testAssessments.find((a: any) => a.assessment_id === params.assessmentId);
         

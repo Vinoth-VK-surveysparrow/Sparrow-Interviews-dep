@@ -79,18 +79,12 @@ export default function TestSelection() {
         setError(null);
         console.log('🔍 Fetching tests for user:', user.email);
         
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-        const url = `${API_BASE_URL}/users/${user.email}/tests`;
-        console.log('🔍 Full API URL:', url);
+        console.log('🔍 TestSelection: Fetching user tests with Firebase auth for:', user.email);
         
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch user tests: ${response.status} ${response.statusText}`);
-        }
-        
-        const data: UserTestsResponse = await response.json();
-        console.log('✅ User tests fetched:', data);
+        // Import authenticated API service
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const data: UserTestsResponse = await AuthenticatedApiService.getUserTests(user.email);
+        console.log('✅ User tests fetched with auth:', data);
         
         // Set user role
         setUserRole(data.role || '');
