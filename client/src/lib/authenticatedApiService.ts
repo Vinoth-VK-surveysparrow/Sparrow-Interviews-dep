@@ -540,7 +540,7 @@ export class AuthenticatedApiService {
 
 // Admin API service class with Firebase authentication
 export class AuthenticatedAdminApiService {
-  private static readonly API_ADMIN_URL = import.meta.env.VITE_API_ADMIN_URL;
+  private static readonly API_ADMIN_URL = import.meta.env.VITE_API_ADMIN_URL || 'https://tqqg7hko9g.execute-api.us-west-2.amazonaws.com/api';
 
   // GET all tests
   static async getAllTests(): Promise<any> {
