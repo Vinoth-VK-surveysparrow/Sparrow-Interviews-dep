@@ -976,7 +976,7 @@ export default function ConductorAssessment() {
       setTimeout(() => {
         console.log('🐛 [DEBUG] Checking if breathe event was added...');
         // Access the assessmentLogger directly for debugging
-        import('/Users/vinothkumar/Sparrow-Interviews/client/src/lib/assessmentLogger').then(({ assessmentLogger }) => {
+        import('@/lib/assessmentLogger').then(({ assessmentLogger }) => {
           assessmentLogger.debugCurrentState();
         });
       }, 100);
@@ -1029,7 +1029,7 @@ export default function ConductorAssessment() {
       setTimeout(() => {
         console.log('🐛 [DEBUG] Checking if energy change event was added...');
         // Access the assessmentLogger directly for debugging
-        import('/Users/vinothkumar/Sparrow-Interviews/client/src/lib/assessmentLogger').then(({ assessmentLogger }) => {
+        import('@/lib/assessmentLogger').then(({ assessmentLogger }) => {
           assessmentLogger.debugCurrentState();
         });
       }, 100);
