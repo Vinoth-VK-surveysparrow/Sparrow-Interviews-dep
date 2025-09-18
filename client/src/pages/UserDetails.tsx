@@ -102,7 +102,22 @@ export default function UserDetails() {
   }, [match, userEmail]);
 
   const deleteTestAssessments = async (testId: string) => {
+    // Store the original test data for potential rollback
+    const originalTests = [...userDetails?.tests || []];
+    const testToDelete = originalTests.find(test => test.test_id === testId);
+
     try {
+
+      // Optimistic update: Remove the test from the UI immediately
+      setUserDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tests: prev.tests.filter(test => test.test_id !== testId),
+          total_tests: prev.total_tests - 1
+        };
+      });
+
       // Show loading toast
       centeredToast({
         title: "Deleting...",
@@ -111,24 +126,36 @@ export default function UserDetails() {
       });
 
       console.log('🔍 UserDetails: Deleting test assessments with Firebase auth');
-      
+
       // Use authenticated admin API service
       const result = await AuthenticatedAdminApiService.deleteTestAssessments(testId, userEmail);
       console.log('Delete test assessments result:', result);
 
       centeredToast({
         title: "Test Data Deleted Successfully",
-        description: `Removed all assessments and files for test ${testId}`,
+        description: `Removed all assessments and files for test ${testToDelete?.test_id || testId}`,
         variant: "success",
       });
 
-      // Refresh the page after successful deletion
-      setTimeout(() => window.location.reload(), 2000);
+      // Close the dialog
+      setDeleteTestDialog(null);
+
     } catch (error) {
       console.error('Error deleting test assessments:', error);
+
+      // Rollback: Restore the original test data on failure
+      setUserDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tests: originalTests,
+          total_tests: originalTests.length
+        };
+      });
+
       centeredToast({
         title: "Deletion Failed",
-        description: "Failed to delete test assessments. Please try again.",
+        description: "Failed to delete test assessments. Data has been restored.",
         variant: "destructive",
       });
     } finally {
@@ -137,7 +164,37 @@ export default function UserDetails() {
   };
 
   const deleteAssessment = async (assessmentId: string) => {
+    // Store the original data for potential rollback
+    const originalTests = [...userDetails?.tests || []];
+
+    // Find the test containing this assessment and the assessment itself
+    let assessmentToDelete: any = null;
+    let testContainingAssessment: any = null;
+
+    for (const test of originalTests) {
+      const assessment = test.completed_assessments?.find((ass: any) => ass.assessment_id === assessmentId);
+      if (assessment) {
+        assessmentToDelete = assessment;
+        testContainingAssessment = test;
+        break;
+      }
+    }
+
     try {
+
+      // Optimistic update: Remove the assessment from the UI immediately
+      setUserDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tests: prev.tests.map(test => ({
+            ...test,
+            completed_assessments: test.completed_assessments?.filter((ass: any) => ass.assessment_id !== assessmentId) || [],
+            total_assessments_completed: test.total_assessments_completed - (test.completed_assessments?.find((ass: any) => ass.assessment_id === assessmentId) ? 1 : 0)
+          }))
+        };
+      });
+
       // Show loading toast
       centeredToast({
         title: "Deleting...",
@@ -166,17 +223,28 @@ export default function UserDetails() {
 
       centeredToast({
         title: "Assessment Deleted Successfully",
-        description: `Removed assessment ${assessmentId} and associated files`,
+        description: `Removed assessment ${assessmentToDelete?.assessment_name || assessmentId} and associated files`,
         variant: "success",
       });
 
-      // Refresh the page after successful deletion
-      setTimeout(() => window.location.reload(), 2000);
+      // Close the dialog
+      setDeleteAssessmentDialog(null);
+
     } catch (error) {
       console.error('Error deleting assessment:', error);
+
+      // Rollback: Restore the original data on failure
+      setUserDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tests: originalTests
+        };
+      });
+
       centeredToast({
         title: "Deletion Failed",
-        description: "Failed to delete assessment. Please try again.",
+        description: "Failed to delete assessment. Data has been restored.",
         variant: "destructive",
       });
     } finally {

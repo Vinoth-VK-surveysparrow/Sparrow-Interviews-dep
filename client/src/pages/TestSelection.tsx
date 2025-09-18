@@ -311,7 +311,7 @@ export default function TestSelection() {
           </div>
           
           {/* Right arrow indicator */}
-          {tests.length > 2 && (
+          {tests.length > 4 && (
             <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10">
               <Button
                 variant="outline"

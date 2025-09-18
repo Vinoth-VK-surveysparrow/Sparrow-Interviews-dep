@@ -579,6 +579,27 @@ export class S3Service {
           user_email: request.user_email,
           assessment_id: request.assessment_id
         });
+      } else if (request.type === 'Conductor') {
+        // Handle Conductor assessments - convert topics to questions format
+        const content = (data as any).content;
+        if (!content || !content.topics || !Array.isArray(content.topics) || content.topics.length === 0) {
+          throw new Error(`No topics returned for Conductor assessment type`);
+        }
+
+        // Store the raw config data in localStorage for ConductorAssessment component to use
+        localStorage.setItem(`conductor-config-${request.assessment_id}`, JSON.stringify(content));
+        console.log('💾 Stored Conductor config data in localStorage');
+
+        // Convert topics array to questions format
+        const conductorQuestions = content.topics.map((topic: string, index: number) => ({
+          question_id: `conductor-${request.assessment_id}-${index + 1}`,
+          question_text: topic,
+          order: index + 1,
+          type: 'Conductor'
+        }));
+
+        console.log('✅ Converted Conductor topics to questions:', conductorQuestions.length, 'questions');
+        return conductorQuestions;
       } else {
         // Handle all other assessment types (QA, etc.) - they return questions array
         if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {

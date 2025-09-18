@@ -473,18 +473,222 @@ export default function Dashboard() {
     }
 
     if (assessment?.type === "Conductor") {
-      // Route directly to conductor assessment (no need to fetch questions or S3 config)
-      console.log('🎯 Starting conductor assessment (skipping questions fetch):', assessmentId);
-      shouldClearLoading = false; // Keep loading state during navigation
-      setLocation(`/conductor/${assessmentId}`);
+      // Fetch questions and setup S3 config before routing to rules page
+      console.log('🎯 Starting conductor assessment (fetching questions first):', assessmentId);
+
+      try {
+        // Step 1: Fetch questions first (this will check completion status)
+        console.log('📋 Fetching questions for Conductor assessment type');
+        const questions = await fetchQuestions(assessmentId, assessment?.type);
+
+        // Step 2: Then initiate assessment for S3 configuration
+        const response = await initiateAssessment(assessmentId, 3600);
+
+        if (response?.audio && response?.images_upload) {
+          // Both API calls successful - proceed to rules page
+          console.log('✅ Conductor assessment setup complete, routing to rules');
+          shouldClearLoading = false; // Keep loading state during navigation
+          setLocation(`/rules/${assessmentId}`);
+        } else {
+          throw new Error('Invalid response from initiate assessment');
+        }
+      } catch (error) {
+        console.error('❌ Error setting up Conductor assessment:', error);
+
+        // Handle completion status from fetch-questions (legacy fallback)
+        if (error instanceof Error && error.message.startsWith('ASSESSMENT_COMPLETED:')) {
+          const completionDataStr = error.message.replace('ASSESSMENT_COMPLETED:', '');
+          const completionData = JSON.parse(completionDataStr);
+
+          // IMMEDIATELY update the local state to reflect completion
+          setAssessments(prevAssessments => {
+            const updatedAssessments = prevAssessments.map(a =>
+              a.assessment_id === assessmentId
+                ? { ...a, completed: true }
+                : a
+            );
+
+            // After updating completion status, also update unlock status for all assessments
+            return updatedAssessments.map(assessment => {
+              if (selectedTestId && user?.email) {
+                // Re-calculate unlock status based on updated completion states
+                const allAssessments = updatedAssessments.map(a => ({
+                  assessment_id: a.assessment_id,
+                  assessment_name: a.assessment_name,
+                  order: a.order,
+                  description: a.description,
+                  type: a.type
+                }));
+
+                const testAssessment: TestAssessment = {
+                  assessment_id: assessment.assessment_id,
+                  assessment_name: assessment.assessment_name,
+                  order: assessment.order,
+                  description: assessment.description,
+                  type: assessment.type || 'unknown',
+                  test_id: selectedTestId,
+                  time_limit: 0,
+                  no_of_ques: 0,
+                  status: 'open'
+                };
+
+                const testAssessments: TestAssessment[] = allAssessments.map(a => ({
+                  assessment_id: a.assessment_id,
+                  assessment_name: a.assessment_name,
+                  order: a.order,
+                  description: a.description,
+                  type: a.type || 'unknown',
+                  test_id: selectedTestId,
+                  time_limit: 0,
+                  no_of_ques: 0,
+                  status: 'open'
+                }));
+
+                const unlocked = isTestAssessmentUnlocked(user.email, testAssessment, testAssessments);
+
+                return { ...assessment, unlocked };
+              }
+              return assessment;
+            });
+          });
+
+          toast({
+            title: "Assessment Completed",
+            description: completionData.message || "You have already completed this assessment.",
+          });
+          return;
+        }
+
+        // Handle other errors
+        let errorMessage = "Failed to start Conductor assessment. Please try again.";
+        if (error instanceof Error) {
+          if (error.message.includes('fetch questions')) {
+            errorMessage = "Failed to load assessment questions. Please try again.";
+          } else if (error.message.includes('initiate assessment')) {
+            errorMessage = "Failed to configure assessment. Please try again.";
+          }
+        }
+
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
       return;
     }
-    
+
     if (assessment?.type === "Triple-Step") {
-      // Route directly to triple-step assessment (no need to fetch questions or S3 config)
-      console.log('🎯 Starting triple-step assessment (skipping questions fetch):', assessmentId);
+      // Fetch questions and setup S3 config before routing to rules page
+      console.log('🎯 Starting triple-step assessment (fetching questions first):', assessmentId);
+
+      try {
+        // Step 1: Fetch questions first (this will check completion status)
+        console.log('📋 Fetching questions for Triple-Step assessment type');
+        const questions = await fetchQuestions(assessmentId, assessment?.type);
+
+        // Step 2: Then initiate assessment for S3 configuration
+        const response = await initiateAssessment(assessmentId, 3600);
+
+        if (response?.audio && response?.images_upload) {
+          // Both API calls successful - proceed to rules page
+          console.log('✅ Triple-Step assessment setup complete, routing to rules');
+          shouldClearLoading = false; // Keep loading state during navigation
+          setLocation(`/rules/${assessmentId}`);
+        } else {
+          throw new Error('Invalid response from initiate assessment');
+        }
+      } catch (error) {
+        console.error('❌ Error setting up Triple-Step assessment:', error);
+
+        // Handle completion status from fetch-questions (legacy fallback)
+        if (error instanceof Error && error.message.startsWith('ASSESSMENT_COMPLETED:')) {
+          const completionDataStr = error.message.replace('ASSESSMENT_COMPLETED:', '');
+          const completionData = JSON.parse(completionDataStr);
+
+          // IMMEDIATELY update the local state to reflect completion
+          setAssessments(prevAssessments => {
+            const updatedAssessments = prevAssessments.map(a =>
+              a.assessment_id === assessmentId
+                ? { ...a, completed: true }
+                : a
+            );
+
+            // After updating completion status, also update unlock status for all assessments
+            return updatedAssessments.map(assessment => {
+              if (selectedTestId && user?.email) {
+                // Re-calculate unlock status based on updated completion states
+                const allAssessments = updatedAssessments.map(a => ({
+                  assessment_id: a.assessment_id,
+                  assessment_name: a.assessment_name,
+                  order: a.order,
+                  description: a.description,
+                  type: a.type
+                }));
+
+                const testAssessment: TestAssessment = {
+                  assessment_id: assessment.assessment_id,
+                  assessment_name: assessment.assessment_name,
+                  order: assessment.order,
+                  description: assessment.description,
+                  type: assessment.type || 'unknown',
+                  test_id: selectedTestId,
+                  time_limit: 0,
+                  no_of_ques: 0,
+                  status: 'open'
+                };
+
+                const testAssessments: TestAssessment[] = allAssessments.map(a => ({
+                  assessment_id: a.assessment_id,
+                  assessment_name: a.assessment_name,
+                  order: a.order,
+                  description: a.description,
+                  type: a.type || 'unknown',
+                  test_id: selectedTestId,
+                  time_limit: 0,
+                  no_of_ques: 0,
+                  status: 'open'
+                }));
+
+                const unlocked = isTestAssessmentUnlocked(user.email, testAssessment, testAssessments);
+
+                return { ...assessment, unlocked };
+              }
+              return assessment;
+            });
+          });
+
+          toast({
+            title: "Assessment Completed",
+            description: completionData.message || "You have already completed this assessment.",
+          });
+          return;
+        }
+
+        // Handle other errors
+        let errorMessage = "Failed to start Triple-Step assessment. Please try again.";
+        if (error instanceof Error) {
+          if (error.message.includes('fetch questions')) {
+            errorMessage = "Failed to load assessment questions. Please try again.";
+          } else if (error.message.includes('initiate assessment')) {
+            errorMessage = "Failed to configure assessment. Please try again.";
+          }
+        }
+
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    if (assessment?.type === "rapid-fire") {
+      // Route directly to rapid-fire assessment (no need to fetch questions or S3 config)
+      console.log('🎯 Starting rapid-fire assessment (skipping questions fetch):', assessmentId);
       shouldClearLoading = false; // Keep loading state during navigation
-      setLocation(`/triple-step/${assessmentId}`);
+      setLocation(`/rapid-fire/${assessmentId}`);
       return;
     }
     
@@ -683,7 +887,7 @@ export default function Dashboard() {
               className="flex items-center gap-2"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to Tests
+              Back
             </Button>
           </div>
           
@@ -736,7 +940,7 @@ export default function Dashboard() {
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Tests
+            Back
           </Button>
         </div>
         
@@ -867,15 +1071,15 @@ export default function Dashboard() {
           </div>
           
           {/* Right arrow indicator */}
-          {assessments.length > 2 && (
+          {assessments.length > 4 && (
             <div className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10">
               <Button
                 variant="outline"
                 size="sm"
                 disabled={assessments.filter(a => a.completed).length >= 4}
                 className={`bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm shadow-lg border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 ${
-                  assessments.filter(a => a.completed).length >= 4 
-                    ? 'opacity-50 cursor-not-allowed' 
+                  assessments.filter(a => a.completed).length >= 4
+                    ? 'opacity-50 cursor-not-allowed'
                     : 'hover:bg-white/95 dark:hover:bg-gray-700/95'
                 }`}
                 onClick={() => {

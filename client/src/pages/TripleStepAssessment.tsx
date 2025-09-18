@@ -11,7 +11,6 @@ import { useS3Upload } from '@/hooks/useS3Upload';
 import { useAssessment } from '@/contexts/AssessmentContext';
 import { S3Service, Question } from '@/lib/s3Service';
 import { assessmentLogger } from '@/lib/assessmentLogger';
-import TripleStepRules from '@/components/TripleStepRules';
 
 import { useBehaviorMonitoring } from '@/hooks/useBehaviorMonitoring';
 import { WarningBadge } from '@/components/WarningBadge';
@@ -111,7 +110,6 @@ interface WordDrop {
   timeRemaining: number;
 }
 
-type GameState = "rules" | "playing";
 
 // Timing settings interface for TypeScript
 interface DifficultySettings {
@@ -141,7 +139,7 @@ export default function TripleStepAssessment() {
     isS3Ready, 
     uploadAudioToS3
   } = useAssessment();
-  const { videoRef, startCamera } = useCameraCapture(); // Only video display, no image capture
+  const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
   const { startContinuousRecording, stopContinuousRecording, isRecording, forceCleanup } = useContinuousAudioRecording();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true);
   const { fetchQuestions } = useS3Upload();
@@ -151,8 +149,7 @@ export default function TripleStepAssessment() {
     enabled: true
   });
   
-  // Assessment state
-  const [gameState, setGameState] = useState<GameState>("rules");
+  // Assessment state - now always starts in playing state since rules are handled by common Rules component
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -334,7 +331,7 @@ export default function TripleStepAssessment() {
   // Initialize assessment once questions are loaded AND difficulty settings are available
   useEffect(() => {
     const initializeAssessment = async () => {
-      if (loadingQuestions || questions.length === 0 || gameState !== "playing") return;
+      if (loadingQuestions || questions.length === 0) return;
       
       // Wait for difficulty settings to be loaded
       if (!difficultySettingsRef.current) {
@@ -406,9 +403,15 @@ export default function TripleStepAssessment() {
         stopListening();
       }
     };
-  }, [loadingQuestions, questions.length, gameState, params?.assessmentId, difficultySettings]);
+  }, [loadingQuestions, questions.length, params?.assessmentId, difficultySettings]);
 
-  // Removed auto-capture - images not needed for TripleStep
+  // Start auto-capture only when S3 is ready
+  useEffect(() => {
+    if (isS3Ready) {
+      console.log('📸 Starting auto image capture for triple-step assessment');
+      startAutoCapture();
+    }
+  }, [isS3Ready, startAutoCapture]);
 
   // Timer logic
   useEffect(() => {
@@ -508,10 +511,10 @@ export default function TripleStepAssessment() {
 
   // Monitor transcript for word detection
   useEffect(() => {
-    if (gameState === "playing" && transcript) {
+    if (transcript) {
       detectWordsInTranscript(transcript);
     }
-  }, [transcript, gameState]); // Removed detectWordsInTranscript dependency to prevent infinite loop
+  }, [transcript]); // Removed detectWordsInTranscript dependency to prevent infinite loop
 
   // Word dropping system
   const getRandomWord = useCallback(() => {
@@ -709,6 +712,7 @@ export default function TripleStepAssessment() {
         
         // Stop all activities
         stopListening();
+        stopAutoCapture();
         
         // Clear word drop timers
         if (wordDropIntervalRef.current) {
@@ -811,26 +815,6 @@ export default function TripleStepAssessment() {
     }
   }, [currentQuestion, isLastQuestion, currentQuestionIndex, questions, stopListening, stopContinuousRecording, isS3Ready, uploadAudioToS3, verifyAudioWithRetry, finishAssessment, forceCleanup, setLocation, params?.assessmentId, resetTranscript, startWordDropSystem]);
 
-  // Handle start from rules
-  const handleStartFromRules = useCallback(() => {
-    if (questions.length === 0) {
-      toast({
-        title: "Questions Not Ready",
-        description: "Please wait for questions to load.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Track rules completion and assessment start
-    trackUserAction('start_assessment_from_rules', {
-      assessment_id: params?.assessmentId,
-      questions_ready: questions.length > 0
-    });
-    
-    setGameState("playing");
-  }, [questions.length, toast, trackUserAction, params?.assessmentId]);
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -842,16 +826,6 @@ export default function TripleStepAssessment() {
       forceCleanup();
     };
   }, []);
-
-  // Show rules page
-  if (gameState === "rules") {
-    return (
-      <TripleStepRules 
-        onStartAssessment={handleStartFromRules}
-        isLoading={loadingQuestions || questions.length === 0}
-      />
-    );
-  }
 
   // Show loading if questions not ready
   if (loadingQuestions || questions.length === 0) {

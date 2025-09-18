@@ -6,7 +6,7 @@ import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useAssessment } from '@/contexts/AssessmentContext';
 import { S3Service, Assessment } from '@/lib/s3Service';
-import { Home, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { useClarity } from '@/hooks/useClarity';
 import { fetchGeminiApiKey, validateGeminiApiKey } from '@/services/geminiApiService';
 import { useAuth } from '@/hooks/useAuth';
@@ -124,6 +124,12 @@ export default function Rules() {
       } else if (assessment?.type === 'Triple-Step') {
         // For Triple-Step, go to the triple-step assessment page
         setLocation(`/triple-step/${params.assessmentId}`);
+      } else if (assessment?.type === 'Conductor') {
+        // For Conductor, go to the conductor assessment page
+        setLocation(`/conductor/${params.assessmentId}`);
+      } else if (assessment?.type === 'rapid-fire') {
+        // For rapid-fire, go to the rapid-fire assessment page
+        setLocation(`/rapid-fire/${params.assessmentId}`);
       } else {
         // For all other types, use standard assessment flow
         setLocation(`/assessment/${params.assessmentId}`);
@@ -209,6 +215,24 @@ export default function Rules() {
         'Do not close the browser window during the assessment',
         'Your conversation will be analyzed for competitive handling skills'
       ];
+    } else if (assessment?.type === 'Triple-Step') {
+      return [
+        'Speak continuously about your topic',
+        'Integrate cue cards naturally as they appear',
+        'Maintain topic coherence',
+        'Your camera and microphone will be recorded throughout the assessment',
+        'Do not close the browser window during the assessment',
+        'Your responses will be analyzed for topic integration skills'
+      ];
+    } else if (assessment?.type === 'Conductor') {
+      return [
+        'Speak about your assigned topic for the allotted time',
+        'Energy level indicators will appear periodically',
+        'Adapt your speaking energy to match the level shown',
+        'Watch for "BREATHE" cues for natural pauses',
+        'Your frequency and energy will be analyzed in real-time',
+        'Your camera and microphone will be recorded throughout the assessment'
+      ];
     } else {
       return [
         'Answer questions clearly and concisely',
@@ -224,16 +248,16 @@ export default function Rules() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-8">
-        {/* Home Button */}
+        {/* Back Button */}
         <div className="flex justify-start">
           <Button
-            onClick={() => setLocation('/test-selection')}
+            onClick={() => setLocation('/dashboard')}
             variant="outline"
             size="sm"
             className="flex items-center gap-2"
           >
-            <Home className="h-4 w-4" />
-            Home
+            <ArrowLeft className="h-4 w-4" />
+            Back
           </Button>
         </div>
 

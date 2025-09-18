@@ -35,6 +35,15 @@ interface AssessmentContextType {
   startQuestionLog: (questionText: string, questionId?: string, questionIndex?: number) => void;
   endQuestionLog: () => void;
   handleQuestionTransition: (newQuestionText: string, newQuestionId?: string, newQuestionIndex?: number) => void;
+  // Energy event logging for conductor assessment
+  addEnergyEvent: (eventData: {
+    event_type: "energy_level_change" | "breathe_cue" | "question_started" | "assessment_started";
+    timestamp: string;
+    relative_time_ms: number;
+    energy_level?: number;
+    previous_energy_level?: number;
+    frequency?: number;
+  }) => void;
   // Presigned URL management
   clearAllPresignedUrls: () => void;
 }
@@ -265,6 +274,9 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const finishAssessment = useCallback(async () => {
     
     
+    // Debug current state before ending assessment
+    assessmentLogger.debugCurrentState();
+    
     // End logging session and get final logs
     const finalLogs = assessmentLogger.endAssessment();
     
@@ -273,6 +285,9 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         // Get properly formatted logs for API submission
         const formattedLogs = assessmentLogger.getFormattedLogs();
+        
+        // Debug formatted logs to see if energy events are included
+        console.log('🐛 [DEBUG] Formatted logs being sent to API:', JSON.stringify(formattedLogs, null, 2));
         
         
         
@@ -349,6 +364,17 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     assessmentLogger.handleQuestionTransition(newQuestionText, newQuestionId, newQuestionIndex);
   }, []);
 
+  const addEnergyEvent = useCallback((eventData: {
+    event_type: "energy_level_change" | "breathe_cue" | "question_started" | "assessment_started";
+    timestamp: string;
+    relative_time_ms: number;
+    energy_level?: number;
+    previous_energy_level?: number;
+    frequency?: number;
+  }) => {
+    assessmentLogger.addEnergyEvent(eventData);
+  }, []);
+
   return (
     <AssessmentContext.Provider
       value={{
@@ -364,6 +390,7 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         startQuestionLog,
         endQuestionLog,
         handleQuestionTransition,
+        addEnergyEvent,
         // Presigned URL management
         clearAllPresignedUrls,
       }}

@@ -108,7 +108,7 @@ interface EnergyChange {
 }
 
 
-type AssessmentState = "setup" | "playing";
+type AssessmentState = "playing";
 
 // Configuration state that will be loaded from API
 interface ConductorConfig {
@@ -149,7 +149,7 @@ export default function ConductorAssessment() {
     pollingInterval: 10000, // Check every 10 seconds
   });
 
-  const [assessmentState, setAssessmentState] = useState<AssessmentState>("setup");
+  const [assessmentState, setAssessmentState] = useState<AssessmentState>("playing");
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [config, setConfig] = useState<ConductorConfig | null>(null);
@@ -167,6 +167,10 @@ export default function ConductorAssessment() {
   const [isRecording, setIsRecording] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false); // Track if assessment has been started
+  const [outdoorMode, setOutdoorMode] = useState(false); // Outdoor mode for noise reduction
+  const [recentPitches, setRecentPitches] = useState<number[]>([]); // Track recent pitch readings for stability
+  const [lastVoiceTime, setLastVoiceTime] = useState(0); // Track when voice was last detected
   const [s3Config, setS3Config] = useState<any>(null);
   const [nextChangeIn, setNextChangeIn] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -198,42 +202,63 @@ export default function ConductorAssessment() {
     isS3Ready,
     uploadAudioToS3,
     startQuestionLog,
-    endQuestionLog
+    endQuestionLog,
+    addEnergyEvent
   } = useAssessment();
 
   // Camera and image capture
   const { videoRef: assessmentVideoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
 
-  // Load conductor configuration from fetch-questions API
+  // Load conductor configuration from localStorage (set by Dashboard)
   const loadConfig = useCallback(async () => {
     try {
       setIsLoadingConfig(true);
-      console.log('🎮 Loading conductor configuration via fetch-questions...');
+      console.log('🎮 Loading conductor configuration from localStorage...');
 
-      // Get assessment data from localStorage or route params
-      const selectedTestId = localStorage.getItem('selectedTestId');
-      if (!selectedTestId || !params?.assessmentId || !user?.email) {
-        throw new Error('Missing required parameters for config fetch');
+      if (!params?.assessmentId) {
+        throw new Error('Missing assessment ID for config load');
       }
 
-      // Use fetchQuestions from authenticatedApiService
-      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
-      const requestPayload = {
-        assessment_id: params.assessmentId,
-        user_email: user.email,
-        type: 'conductor'
-      };
+      // Try to get config data from localStorage (set by Dashboard fetchQuestions)
+      const configKey = `conductor-config-${params.assessmentId}`;
+      const storedConfig = localStorage.getItem(configKey);
 
-      console.log('📤 Fetching conductor config with payload:', requestPayload);
+      let configData: ConductorConfig;
 
-      const response = await AuthenticatedApiService.fetchQuestions(requestPayload);
+      if (!storedConfig) {
+        console.log('⚠️ No config data found in localStorage, trying direct API call...');
 
-      if (response.status !== 'success' || !response.content) {
-        throw new Error('Invalid response from fetch-questions API');
+        // Fallback: Try to fetch directly if localStorage doesn't have it
+        const selectedTestId = localStorage.getItem('selectedTestId');
+        if (!selectedTestId || !user?.email) {
+          throw new Error('Missing required parameters for config fetch');
+        }
+
+        const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+        const requestPayload = {
+          assessment_id: params.assessmentId,
+          user_email: user.email,
+          type: 'conductor'
+        };
+
+        console.log('📤 Fetching conductor config with payload:', requestPayload);
+        const response = await AuthenticatedApiService.fetchQuestions(requestPayload);
+
+        if (response.status !== 'success' || !response.content) {
+          throw new Error('Invalid response from fetch-questions API');
+        }
+
+        configData = response.content;
+        console.log('✅ Conductor config loaded from API:', configData);
+
+        // Store in localStorage for future use
+        localStorage.setItem(configKey, JSON.stringify(configData));
+      } else {
+        // Use stored config data
+        configData = JSON.parse(storedConfig);
+        console.log('✅ Conductor config loaded from localStorage:', configData);
       }
 
-      const configData: ConductorConfig = response.content;
-      console.log('✅ Conductor config loaded from API:', configData);
       setConfig(configData);
 
       // Select multiple topics based on number of questions from backend (default to 3 if not loaded yet)
@@ -269,7 +294,7 @@ export default function ConductorAssessment() {
         variant: "destructive",
       });
     }
-  }, [toast, params?.assessmentId, user?.email]);
+  }, [toast, params?.assessmentId, user?.email, numberOfQuestions]);
 
   // Load config when we have the necessary data
   useEffect(() => {
@@ -374,13 +399,13 @@ export default function ConductorAssessment() {
     initializeAssessmentSession();
   }, [params?.assessmentId, user?.email, startSession, toast]);
 
-  // Start auto-capture when S3 is ready
+  // Start auto-capture when S3 is ready and assessment has started
   useEffect(() => {
-    if (isS3Ready && assessmentState === "playing") {
+    if (isS3Ready && hasStarted) {
       console.log('📸 Starting auto image capture for conductor assessment');
       startAutoCapture();
     }
-  }, [isS3Ready, assessmentState, startAutoCapture]);
+  }, [isS3Ready, hasStarted, startAutoCapture]);
 
 
 
@@ -411,9 +436,12 @@ export default function ConductorAssessment() {
     }
     rms = Math.sqrt(rms / audioData.length);
     
-    // Much more sensitive noise gate - allow quieter sounds
-    if (rms < 0.001 && peak < 0.01) {
-      console.log(`🔇 Audio too quiet - RMS: ${rms.toFixed(6)}, Peak: ${peak.toFixed(6)}`);
+    // Noise gate with outdoor mode adjustment - much more restrictive
+    const noiseThreshold = outdoorMode ? 0.01 : 0.001;  // 10x higher threshold in outdoor mode
+    const peakThreshold = outdoorMode ? 0.08 : 0.01;    // 8x higher peak threshold in outdoor mode
+    
+    if (rms < noiseThreshold && peak < peakThreshold) {
+      console.log(`🔇 Audio too quiet ${outdoorMode ? '(Outdoor Mode)' : '(Indoor Mode)'} - RMS: ${rms.toFixed(6)}, Peak: ${peak.toFixed(6)}`);
       return 0;
     }
     
@@ -550,16 +578,31 @@ export default function ConductorAssessment() {
     9. Explosive: 280 Hz
     */
     
-    if (frequency <= 55) return 1;       // Whisper (40Hz target, range up to 55)
-    else if (frequency <= 85) return 2;  // Calm (70Hz target, range 55-85)
-    else if (frequency <= 115) return 3; // Relaxed (100Hz target, range 85-115)
-    else if (frequency <= 145) return 4; // Normal (130Hz target, range 115-145)
-    else if (frequency <= 175) return 5; // Engaged (160Hz target, range 145-175)
-    else if (frequency <= 205) return 6; // Animated (190Hz target, range 175-205)
-    else if (frequency <= 235) return 7; // Energetic (220Hz target, range 205-235)
-    else if (frequency <= 265) return 8; // Dynamic (250Hz target, range 235-265)
-    else return 9;                       // Explosive (280Hz+, range 265+)
-  }, []);
+    // In outdoor mode, use wider ranges and higher thresholds for noise immunity
+    if (outdoorMode) {
+      // Outdoor mode: Less sensitive with wider ranges and higher minimum threshold
+      if (frequency <= 45) return 1;       // Whisper (wider range, higher threshold)
+      else if (frequency <= 80) return 2;  // Calm (wider range)
+      else if (frequency <= 120) return 3; // Relaxed (wider range)
+      else if (frequency <= 155) return 4; // Normal (wider range)
+      else if (frequency <= 185) return 5; // Engaged (wider range)
+      else if (frequency <= 215) return 6; // Animated (wider range)
+      else if (frequency <= 245) return 7; // Energetic (wider range)
+      else if (frequency <= 275) return 8; // Dynamic (wider range)
+      else return 9;                       // Explosive (wider range)
+    } else {
+      // Indoor mode: Standard sensitivity
+      if (frequency <= 55) return 1;       // Whisper (40Hz target, range up to 55)
+      else if (frequency <= 85) return 2;  // Calm (70Hz target, range 55-85)
+      else if (frequency <= 115) return 3; // Relaxed (100Hz target, range 85-115)
+      else if (frequency <= 145) return 4; // Normal (130Hz target, range 115-145)
+      else if (frequency <= 175) return 5; // Engaged (160Hz target, range 145-175)
+      else if (frequency <= 205) return 6; // Animated (190Hz target, range 175-205)
+      else if (frequency <= 235) return 7; // Energetic (220Hz target, range 205-235)
+      else if (frequency <= 265) return 8; // Dynamic (250Hz target, range 235-265)
+      else return 9;                       // Explosive (280Hz+, range 265+)
+    }
+  }, [outdoorMode]);
 
   // Start recording with separate video and audio streams
   const startRecording = useCallback(async () => {
@@ -684,17 +727,63 @@ export default function ConductorAssessment() {
         }
         rms = Math.sqrt(rms / timeDataArray.length);
         
-        // Combine RMS and peak for better sensitivity
-        const normalizedLevel = Math.min((rms * 8 + peak * 2) / 10, 1);
+        // Apply outdoor mode noise reduction with voice activity detection
+        let normalizedLevel;
+        let detectionThreshold;
+        let isVoiceDetected = false;
+        
+        if (outdoorMode) {
+          // Outdoor mode: Much more restrictive with voice activity detection
+          normalizedLevel = Math.min((rms * 4 + peak * 1) / 5, 1); // Much less sensitive
+          detectionThreshold = 0.05; // Much higher threshold (10x higher)
+          
+          // Voice Activity Detection for outdoor mode
+          // Check for voice-like characteristics: sustained energy + frequency content
+          const voiceFrequencyBins = [];
+          const voiceRangeStart = Math.floor(80 / (44100 / 2) * dataArray.length); // 80Hz
+          const voiceRangeEnd = Math.floor(3000 / (44100 / 2) * dataArray.length); // 3000Hz
+          
+          for (let i = voiceRangeStart; i < Math.min(voiceRangeEnd, dataArray.length); i++) {
+            voiceFrequencyBins.push(dataArray[i]);
+          }
+          
+          const voiceEnergy = voiceFrequencyBins.reduce((sum, val) => sum + val, 0) / voiceFrequencyBins.length;
+          const backgroundEnergy = dataArray.slice(0, voiceRangeStart).reduce((sum, val) => sum + val, 0) / voiceRangeStart;
+          
+          // Voice detected if: high voice energy, low background noise, and strong peak
+          isVoiceDetected = voiceEnergy > 50 && voiceEnergy > backgroundEnergy * 2 && peak > 0.05;
+          
+          console.log(`🌳 Outdoor Mode VAD - Voice Energy: ${voiceEnergy.toFixed(1)}, Background: ${backgroundEnergy.toFixed(1)}, Peak: ${peak.toFixed(4)}, Voice Detected: ${isVoiceDetected}`);
+        } else {
+          // Indoor mode: Standard sensitivity
+          normalizedLevel = Math.min((rms * 8 + peak * 2) / 10, 1);
+          detectionThreshold = 0.005; // Lower threshold for better sensitivity
+          isVoiceDetected = true; // Always process in indoor mode
+        }
+        
         setAudioLevel(normalizedLevel);
 
         // Debug audio levels
         if (normalizedLevel > 0.001) {
-          console.log(`🎤 Audio detected - RMS: ${rms.toFixed(4)}, Peak: ${peak.toFixed(4)}, Level: ${normalizedLevel.toFixed(4)}`);
+          console.log(`🎤 Audio detected ${outdoorMode ? '(Outdoor Mode)' : '(Indoor Mode)'} - RMS: ${rms.toFixed(4)}, Peak: ${peak.toFixed(4)}, Level: ${normalizedLevel.toFixed(4)}, Voice: ${isVoiceDetected}`);
         }
 
-        // Run pitch detection with lower threshold for better sensitivity
-        if (normalizedLevel > 0.005) {
+        // In outdoor mode, reset pitch if no voice detected for too long
+        if (outdoorMode) {
+          const currentTime = Date.now();
+          if (isVoiceDetected) {
+            setLastVoiceTime(currentTime);
+          } else if (currentTime - lastVoiceTime > 2000) { // 2 seconds of no voice
+            if (currentPitch > 0) {
+              console.log(`🌳 Outdoor Mode - Resetting pitch due to no voice for 2 seconds`);
+              setCurrentPitch(0);
+              setRecentPitches([]);
+            }
+          }
+        }
+
+        // Run pitch detection only if voice is detected and above threshold
+        if (normalizedLevel > detectionThreshold && isVoiceDetected) {
           // Try autocorrelation method first
           let frequency = detectPitch(timeDataArray);
           
@@ -711,13 +800,41 @@ export default function ConductorAssessment() {
           const currentTime = Date.now() - assessmentStartTime;
           
           if (frequency > 0) {
-            setCurrentPitch(frequency);
+            // In outdoor mode, apply stability filtering
+            let finalFrequency = frequency;
+            
+            if (outdoorMode) {
+              // Update recent pitches history
+              setRecentPitches(prev => {
+                const newPitches = [...prev, frequency].slice(-5); // Keep last 5 readings
+                
+                // Only update if we have consistent readings or significant change
+                if (newPitches.length >= 3) {
+                  const avgRecent = newPitches.reduce((sum, p) => sum + p, 0) / newPitches.length;
+                  const variance = newPitches.reduce((sum, p) => sum + Math.pow(p - avgRecent, 2), 0) / newPitches.length;
+                  const stdDev = Math.sqrt(variance);
+                  
+                  // Only accept stable readings (low variance) or strong signals
+                  if (stdDev < 15 || peak > 0.1) { // Low variance or strong signal
+                    finalFrequency = avgRecent;
+                    console.log(`🌳 Outdoor Mode - Stable frequency: ${finalFrequency.toFixed(1)}Hz (StdDev: ${stdDev.toFixed(1)}, Peak: ${peak.toFixed(3)})`);
+                  } else {
+                    console.log(`🌳 Outdoor Mode - Unstable frequency rejected: ${frequency.toFixed(1)}Hz (StdDev: ${stdDev.toFixed(1)}, Peak: ${peak.toFixed(3)})`);
+                    return prev; // Don't update if unstable
+                  }
+                }
+                
+                return newPitches;
+              });
+            }
+            
+            setCurrentPitch(finalFrequency);
             
             // Convert frequency to energy level based on provided frequency ranges
-            const energyLevel = getEnergyLevelFromFrequency(frequency);
+            const energyLevel = getEnergyLevelFromFrequency(finalFrequency);
             setLastPitchLevel(energyLevel);
             
-            console.log(`🎵 Frequency conversion - Frequency: ${frequency.toFixed(1)}Hz → Energy Level: ${energyLevel}`);
+            console.log(`🎵 Frequency conversion - Frequency: ${finalFrequency.toFixed(1)}Hz → Energy Level: ${energyLevel}`);
             
             // Add frequency data with timestamp and current energy level
             setPitchHistory(prev => {
@@ -834,12 +951,35 @@ export default function ConductorAssessment() {
 
     if (shouldBreathe) {
       setShowBreathe(true);
+      const timestamp = Date.now();
+      const relativeTimestamp = timestamp - assessmentStartTime;
       const newChange = { 
-        timestamp: Date.now() - assessmentStartTime, 
+        timestamp: relativeTimestamp, 
         level: currentEnergyLevel, 
         type: "breathe" as const,
         frequency: currentPitch
       };
+
+      // Log breathe event with detailed timestamp information
+      const breatheEventData = {
+        event_type: "breathe_cue" as const,
+        timestamp: new Date(timestamp).toISOString(),
+        relative_time_ms: relativeTimestamp,
+        energy_level: currentEnergyLevel,
+        frequency: currentPitch
+      };
+      
+      addEnergyEvent(breatheEventData);
+      console.log('🫁 Breathe cue triggered and logged:', breatheEventData);
+      
+      // Debug: Check if event was added
+      setTimeout(() => {
+        console.log('🐛 [DEBUG] Checking if breathe event was added...');
+        // Access the assessmentLogger directly for debugging
+        import('/Users/vinothkumar/Sparrow-Interviews/client/src/lib/assessmentLogger').then(({ assessmentLogger }) => {
+          assessmentLogger.debugCurrentState();
+        });
+      }, 100);
 
       setEnergyChanges((prev) => {
         const updated = [...prev, newChange];
@@ -862,23 +1002,48 @@ export default function ConductorAssessment() {
       }
 
       setCurrentEnergyLevel(newLevel);
+      
+      const timestamp = Date.now();
+      const relativeTimestamp = timestamp - assessmentStartTime;
       const newChange = { 
-        timestamp: Date.now() - assessmentStartTime, 
+        timestamp: relativeTimestamp, 
         level: newLevel, 
         type: "energy" as const,
         frequency: currentPitch
       };
 
+      // Log energy level change with detailed timestamp information
+      const energyEventData = {
+        event_type: "energy_level_change" as const,
+        timestamp: new Date(timestamp).toISOString(),
+        relative_time_ms: relativeTimestamp,
+        previous_energy_level: currentEnergyLevel,
+        energy_level: newLevel,
+        frequency: currentPitch
+      };
+      
+      addEnergyEvent(energyEventData);
+      console.log(`🔥 Energy level changed from ${currentEnergyLevel} to ${newLevel} and logged:`, energyEventData);
+      
+      // Debug: Check if event was added
+      setTimeout(() => {
+        console.log('🐛 [DEBUG] Checking if energy change event was added...');
+        // Access the assessmentLogger directly for debugging
+        import('/Users/vinothkumar/Sparrow-Interviews/client/src/lib/assessmentLogger').then(({ assessmentLogger }) => {
+          assessmentLogger.debugCurrentState();
+        });
+      }, 100);
+
       // End current energy level frame and start new one
       setEnergyLevelFrames(prev => {
         const updated = [...prev];
         if (updated.length > 0 && !updated[updated.length - 1].endTime) {
-          updated[updated.length - 1].endTime = Date.now() - assessmentStartTime;
+          updated[updated.length - 1].endTime = relativeTimestamp;
         }
         // Start new energy level frame
         updated.push({
           level: newLevel,
-          startTime: Date.now() - assessmentStartTime,
+          startTime: relativeTimestamp,
           pitches: []
         });
         return updated;
@@ -892,24 +1057,49 @@ export default function ConductorAssessment() {
 
       scheduleNextChange();
     }
-  }, [currentEnergyLevel, assessmentStartTime, currentPitch, scheduleNextChange]);
+  }, [currentEnergyLevel, assessmentStartTime, currentPitch, scheduleNextChange, currentQuestionIndex, addEnergyEvent, selectedPreset, config]);
 
   // Move to next question
   const moveToNextQuestion = useCallback(() => {
     const nextIndex = currentQuestionIndex + 1;
     if (nextIndex < selectedTopics.length) {
+      // End current question log
+      endQuestionLog();
+      
       setCurrentQuestionIndex(nextIndex);
       setCurrentTopic(selectedTopics[nextIndex]);
       setCurrentEnergyLevel(5); // Reset to default energy level
       setEnergyChanges([]); // Reset energy changes for new question
       setShowBreathe(false);
+      
+      // Reset timer to full time for new question
+      setTimeRemaining(assessmentTimeLimit);
 
-      console.log(`➡️ Moving to question ${nextIndex + 1}/${selectedTopics.length}: ${selectedTopics[nextIndex]}`);
+      // Start new question log
+      startQuestionLog(selectedTopics[nextIndex], selectedTopics[nextIndex], nextIndex);
+
+      // Log initial energy level for new question
+      const questionStartEventData = {
+        event_type: "question_started" as const,
+        timestamp: new Date().toISOString(),
+        relative_time_ms: Date.now() - assessmentStartTime,
+        energy_level: 5 // Reset energy level
+      };
+      
+      addEnergyEvent(questionStartEventData);
+      console.log(`➡️ Moving to question ${nextIndex + 1}/${selectedTopics.length}: ${selectedTopics[nextIndex]}`, questionStartEventData);
     }
-  }, [currentQuestionIndex, selectedTopics]);
+  }, [currentQuestionIndex, selectedTopics, endQuestionLog, startQuestionLog, assessmentTimeLimit, addEnergyEvent, assessmentStartTime]);
 
   // Start assessment
   const startAssessment = useCallback(async () => {
+    if (hasStarted) {
+      console.log('⚠️ Assessment already started, skipping...');
+      return;
+    }
+
+    console.log('🎬 Starting Conductor assessment...');
+    setHasStarted(true);
     setAssessmentState("playing");
     setTimeRemaining(assessmentTimeLimit); // Each question gets full time limit
     setAssessmentStartTime(Date.now());
@@ -924,11 +1114,28 @@ export default function ConductorAssessment() {
     // Start logging for the first question
     if (selectedTopics.length > 0) {
       startQuestionLog(selectedTopics[0], selectedTopics[0], 0);
+      
+      // Log initial question start with energy level
+      const assessmentStartEventData = {
+        event_type: "assessment_started" as const,
+        timestamp: new Date().toISOString(),
+        relative_time_ms: 0,
+        energy_level: 5
+      };
+      
+      addEnergyEvent(assessmentStartEventData);
+      console.log('🎬 Assessment started:', assessmentStartEventData);
     }
 
     await startRecording();
     
-    if (timerRef.current) clearInterval(timerRef.current);
+    // Clear any existing timer before starting new one
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    console.log('⏰ Starting assessment timer...');
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
@@ -946,7 +1153,34 @@ export default function ConductorAssessment() {
     }, 1000);
 
     scheduleNextChange();
-  }, [config, startRecording, scheduleNextChange, assessmentTimeLimit, currentQuestionIndex, selectedTopics, startCamera, startQuestionLog]);
+  }, [config, startRecording, scheduleNextChange, assessmentTimeLimit, currentQuestionIndex, selectedTopics, startCamera, startQuestionLog, addEnergyEvent, hasStarted]);
+
+  // Auto-start assessment when all required data is ready
+  useEffect(() => {
+    if (config && selectedTopics.length > 0 && assessmentState === "playing" && !isLoadingConfig && numberOfQuestions > 0 && !hasStarted) {
+      console.log('🚀 Auto-starting Conductor assessment with config and topics ready');
+      startAssessment();
+    }
+  }, [config, selectedTopics.length, assessmentState, isLoadingConfig, numberOfQuestions, hasStarted, startAssessment]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      console.log('🧹 Cleaning up conductor assessment...');
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      if (changeTimerRef.current) {
+        clearTimeout(changeTimerRef.current);
+        changeTimerRef.current = null;
+      }
+      if (breatheTimeoutRef.current) {
+        clearTimeout(breatheTimeoutRef.current);
+        breatheTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Audio verification with retry mechanism
   const verifyAudioWithRetry = async (maxRetries: number = 5, delayMs: number = 2000): Promise<boolean> => {
@@ -986,6 +1220,9 @@ export default function ConductorAssessment() {
   const endAssessment = useCallback(async () => {
     console.log('🏁 Ending conductor assessment...');
 
+    // End current question log
+    endQuestionLog();
+
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -1000,6 +1237,7 @@ export default function ConductorAssessment() {
     }
 
     setIsAnalyzing(true);
+    setHasStarted(false); // Reset started state for potential restart
     
     try {
       // Stop all recording activities
@@ -1100,7 +1338,7 @@ export default function ConductorAssessment() {
         setLocation(`/results/${params?.assessmentId}`);
       }, 1000);
     }
-  }, [stopRecording, stopAutoCapture, isS3Ready, uploadAudioToS3, verifyAudioWithRetry, finishAssessment, user?.email, params?.assessmentId, toast]);
+  }, [stopRecording, stopAutoCapture, isS3Ready, uploadAudioToS3, verifyAudioWithRetry, finishAssessment, user?.email, params?.assessmentId, toast, endQuestionLog]);
 
 
 
@@ -1171,109 +1409,39 @@ export default function ConductorAssessment() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (assessmentState === "setup") {
+  // Show loading if config is still loading or we don't have required data
+  if (isLoadingConfig || !config || selectedTopics.length === 0 || numberOfQuestions === 0) {
     return (
-      <div className="min-h-screen bg-background relative">
-        <div className="max-w-4xl mx-auto px-6 py-8">
-          <div className="mb-6">
-            <Button
-              onClick={() => setLocation('/test-selection')}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <Home className="h-4 w-4" />
-              Home
-            </Button>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto mb-4"></div>
+          <div className="text-lg text-muted-foreground">
+            {isLoadingConfig ? 'Loading assessment configuration...' :
+             !config ? 'Initializing assessment...' :
+             selectedTopics.length === 0 ? 'Preparing questions...' :
+             'Starting assessment...'}
           </div>
-
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-foreground mb-4">
-              Energy Conductor Assessment
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Challenge your ability to adapt your speaking energy in real-time
-            </p>
-          </div>
-
-          <div className="text-center space-y-8 mb-20">
-            <div>
-              <h2 className="text-2xl font-semibold mb-6">How It Works</h2>
-              <ul className="space-y-4 text-muted-foreground max-w-2xl mx-auto text-left">
-                <li className="flex items-start gap-3">
-                  <span className="text-primary font-bold">1.</span>
-                  <span>Speak about your assigned topic for 1 minute</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-primary font-bold">2.</span>
-                  <span>Energy level indicators will appear every ~15 seconds</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-primary font-bold">3.</span>
-                  <span>Adapt your speaking energy to match the level shown</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-primary font-bold">4.</span>
-                  <span>Watch for "BREATHE" cues for natural pauses</span>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-primary font-bold">5.</span>
-                  <span>Your frequency and energy will be analyzed in real-time</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Start button positioned at bottom right */}
-        <div className="fixed bottom-8 right-8 text-center">
-          <Button 
-            onClick={startAssessment}
-            disabled={isLoadingConfig || isLoadingSession}
-            size="lg"
-            className="bg-primary hover:bg-primary/90 px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isLoadingConfig || isLoadingSession ? (
-              <>
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3"></div>
-                Loading...
-              </>
-            ) : (
-              <>
-                <Play className="h-6 w-6 mr-3" />
-                Start Assessment
-              </>
-            )}
-          </Button>
-          {(isLoadingConfig || isLoadingSession) && (
-            <div className="mt-2 text-sm text-muted-foreground">
-              {isLoadingConfig && isLoadingSession ? 'Preparing assessment...' :
-               isLoadingConfig ? 'Loading configuration...' :
-               'Initializing session...'}
-            </div>
-          )}
         </div>
       </div>
     );
   }
 
-  if (assessmentState === "playing") {
-    const energyInfo = getCurrentEnergyInfo();
-    const duration = assessmentTimeLimit;
-    const progress = ((duration - timeRemaining) / duration) * 100;
+  const energyInfo = getCurrentEnergyInfo();
+  const duration = assessmentTimeLimit;
+  const progress = ((duration - timeRemaining) / duration) * 100;
 
-    // Show loading if energy info is not available
-    if (!energyInfo) {
-      return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-lg text-muted-foreground">Loading energy levels...</div>
-          </div>
-        </div>
-      );
-    }
-
+  // Show loading if energy info is not available
+  if (!energyInfo) {
     return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg text-muted-foreground">Loading energy levels...</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
       <div className="min-h-screen bg-background">
         <div className="max-w-6xl mx-auto px-6 py-8">
           
@@ -1480,14 +1648,31 @@ export default function ConductorAssessment() {
                   </div>
                 </CardContent>
               </Card>
+              
+              {/* Outdoor Mode Toggle */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <h4 className="text-sm font-medium text-foreground">Outdoor Mode</h4>
+                      <p className="text-xs text-muted-foreground">Reduces background noise sensitivity</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={outdoorMode}
+                        onChange={(e) => setOutdoorMode(e.target.checked)}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 dark:peer-focus:ring-teal-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-teal-600"></div>
+                    </label>
+                  </div>
+                  
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
       </div>
     );
   }
-
-
-
-  return null;
-} 

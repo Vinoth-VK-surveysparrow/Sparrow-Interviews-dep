@@ -24,6 +24,7 @@ import Results from "@/pages/Results";
 import ConductorAssessment from "@/pages/ConductorAssessment";
 import TripleStepAssessment from "@/pages/TripleStepAssessment";
 import SalesAIAssessment from "@/pages/SalesAIAssessment";
+import RapidFireAssessment from "@/pages/RapidFireAssessment";
 import Login from "@/pages/Login";
 import NotFoundPage from "@/pages/NotFoundPage";
 import { NavigationBlocker } from "@/components/NavigationBlocker";
@@ -185,6 +186,11 @@ function Router() {
         <Route path="/sales-ai/:assessmentId">
           <ProtectedRoute>
             <SalesAIAssessment />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/rapid-fire/:assessmentId">
+          <ProtectedRoute>
+            <RapidFireAssessment />
           </ProtectedRoute>
         </Route>
         <Route path="/question/:assessmentId/:questionNumber">

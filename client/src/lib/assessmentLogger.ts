@@ -4,6 +4,15 @@ interface AssessmentLog {
   start_time: string;
   end_time?: string;
   duration_seconds?: number;
+  // Additional fields for conductor assessment energy tracking
+  energy_events?: Array<{
+    event_type: "energy_level_change" | "breathe_cue" | "question_started" | "assessment_started";
+    timestamp: string;
+    relative_time_ms: number;
+    energy_level?: number;
+    previous_energy_level?: number;
+    frequency?: number;
+  }>;
 }
 
 interface AssessmentSession {
@@ -171,6 +180,14 @@ export class AssessmentLogger {
       start_time: string;
       end_time: string;
       duration_seconds: number;
+      energy_events?: Array<{
+        event_type: "energy_level_change" | "breathe_cue" | "question_started" | "assessment_started";
+        timestamp: string;
+        relative_time_ms: number;
+        energy_level?: number;
+        previous_energy_level?: number;
+        frequency?: number;
+      }>;
     }>;
     performance_metrics?: {
       loading_time?: number;
@@ -184,7 +201,9 @@ export class AssessmentLogger {
         question_id: log.question_id,
         start_time: log.start_time,
         end_time: log.end_time!,
-        duration_seconds: log.duration_seconds || 0
+        duration_seconds: log.duration_seconds || 0,
+        // Include energy events if they exist
+        ...(log.energy_events && log.energy_events.length > 0 && { energy_events: log.energy_events })
       }));
 
     // Calculate total recording duration
@@ -335,9 +354,64 @@ export class AssessmentLogger {
     });
   }
 
+  // Add energy event to the current question's log
+  addEnergyEvent(eventData: {
+    event_type: "energy_level_change" | "breathe_cue" | "question_started" | "assessment_started";
+    timestamp: string;
+    relative_time_ms: number;
+    energy_level?: number;
+    previous_energy_level?: number;
+    frequency?: number;
+  }): void {
+    if (!this.session) {
+      console.error('❌ No active session to add energy event');
+      return;
+    }
+
+    // Find the current active question log (most recent one without end_time)
+    const currentQuestionLog = [...this.session.logs]
+      .reverse()
+      .find(log => !log.end_time && !log.question.includes('<word>'));
+
+    if (currentQuestionLog) {
+      // Initialize energy_events array if it doesn't exist
+      if (!currentQuestionLog.energy_events) {
+        currentQuestionLog.energy_events = [];
+      }
+      
+      // Add the energy event
+      currentQuestionLog.energy_events.push(eventData);
+      
+      console.log(`[LOGGER] Energy event added: ${eventData.event_type} for question "${currentQuestionLog.question.substring(0, 30)}..."`);
+    } else {
+      console.warn('⚠️ No active question found to add energy event to');
+    }
+  }
+
   // Debug method to log current state (memory only)
   debugCurrentState(): void {
-    
+    if (this.session) {
+      console.log('🐛 [DEBUG] Current Assessment Session:', {
+        assessment_id: this.session.assessment_id,
+        user_email: this.session.user_email,
+        total_logs: this.session.logs.length,
+        logs_with_energy_events: this.session.logs.filter(log => log.energy_events && log.energy_events.length > 0).length,
+        current_question_index: this.session.current_question_index
+      });
+      
+      // Debug each log entry
+      this.session.logs.forEach((log, index) => {
+        console.log(`🐛 [DEBUG] Log ${index}:`, {
+          question: log.question.substring(0, 50) + '...',
+          start_time: log.start_time,
+          end_time: log.end_time,
+          energy_events_count: log.energy_events?.length || 0,
+          energy_events: log.energy_events
+        });
+      });
+    } else {
+      console.log('🐛 [DEBUG] No active session');
+    }
   }
 }
 
