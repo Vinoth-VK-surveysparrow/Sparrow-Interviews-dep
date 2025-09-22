@@ -13,6 +13,8 @@ import { S3Service } from '@/lib/s3Service';
 import { useS3Upload } from '@/hooks/useS3Upload';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useAssessment } from '@/contexts/AssessmentContext';
+import pitchWorker, { PitchDetectorType } from '@/workers/pitchDetectionWorker';
+import type { PitchResult } from '@/workers/types';
 
 // Enhanced Circular Timer component that serves as Next button
 const CircularTimer = memo(({
@@ -168,9 +170,11 @@ export default function ConductorAssessment() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [hasStarted, setHasStarted] = useState(false); // Track if assessment has been started
-  const [outdoorMode, setOutdoorMode] = useState(false); // Outdoor mode for noise reduction
   const [recentPitches, setRecentPitches] = useState<number[]>([]); // Track recent pitch readings for stability
+  const [energyLevelHistory, setEnergyLevelHistory] = useState<Array<{level: number, timestamp: number}>>([]); // Track recent energy levels for 5-second moving average
   const [lastVoiceTime, setLastVoiceTime] = useState(0); // Track when voice was last detected
+  const [pitchDetectorType, setPitchDetectorType] = useState<PitchDetectorType>('mcleod'); // Use McLeod detector (YIN algorithm) for best accuracy
+  const [pitchWorkerInitialized, setPitchWorkerInitialized] = useState(false);
   const [s3Config, setS3Config] = useState<any>(null);
   const [nextChangeIn, setNextChangeIn] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
@@ -295,6 +299,28 @@ export default function ConductorAssessment() {
       });
     }
   }, [toast, params?.assessmentId, user?.email, numberOfQuestions]);
+
+  // Initialize pitch detection worker
+  useEffect(() => {
+    const initializePitchWorker = async () => {
+      try {
+        await pitchWorker.initialize();
+        pitchWorker.createDetector(pitchDetectorType, 8192); // Use larger window for better accuracy
+        setPitchWorkerInitialized(true);
+        console.log('✅ Pitch detection worker initialized successfully');
+      } catch (error) {
+        console.error('❌ Failed to initialize pitch detection worker:', error);
+        setPitchWorkerInitialized(false);
+      }
+    };
+
+    initializePitchWorker();
+
+    // Cleanup on unmount
+    return () => {
+      pitchWorker.cleanup();
+    };
+  }, [pitchDetectorType]);
 
   // Load config when we have the necessary data
   useEffect(() => {
@@ -436,12 +462,12 @@ export default function ConductorAssessment() {
     }
     rms = Math.sqrt(rms / audioData.length);
     
-    // Noise gate with outdoor mode adjustment - much more restrictive
-    const noiseThreshold = outdoorMode ? 0.01 : 0.001;  // 10x higher threshold in outdoor mode
-    const peakThreshold = outdoorMode ? 0.08 : 0.01;    // 8x higher peak threshold in outdoor mode
+    // Noise gate - standard sensitivity
+    const noiseThreshold = 0.001;
+    const peakThreshold = 0.01;
     
     if (rms < noiseThreshold && peak < peakThreshold) {
-      console.log(`🔇 Audio too quiet ${outdoorMode ? '(Outdoor Mode)' : '(Indoor Mode)'} - RMS: ${rms.toFixed(6)}, Peak: ${peak.toFixed(6)}`);
+      console.log(`🔇 Audio too quiet - RMS: ${rms.toFixed(6)}, Peak: ${peak.toFixed(6)}`);
       return 0;
     }
     
@@ -566,43 +592,52 @@ export default function ConductorAssessment() {
   // Convert frequency (Hz) to energy level (1-9) based on single frequency values
   const getEnergyLevelFromFrequency = useCallback((frequency: number): number => {
     /*
-    Energy Level Target Frequencies:
+    Updated Energy Level Target Frequencies (More Sensitive):
     1. Whisper: 40 Hz
-    2. Calm: 70 Hz  
-    3. Relaxed: 100 Hz
-    4. Normal: 130 Hz
-    5. Engaged: 160 Hz
-    6. Animated: 190 Hz
-    7. Energetic: 220 Hz
-    8. Dynamic: 250 Hz
-    9. Explosive: 280 Hz
+    2. Calm: 60 Hz
+    3. Relaxed: 80 Hz
+    4. Normal: 100 Hz
+    5. Engaged: 120 Hz
+    6. Animated: 140 Hz
+    7. Energetic: 160 Hz
+    8. Dynamic: 180 Hz
+    9. Explosive: 200 Hz
     */
-    
-    // In outdoor mode, use wider ranges and higher thresholds for noise immunity
-    if (outdoorMode) {
-      // Outdoor mode: Less sensitive with wider ranges and higher minimum threshold
-      if (frequency <= 45) return 1;       // Whisper (wider range, higher threshold)
-      else if (frequency <= 80) return 2;  // Calm (wider range)
-      else if (frequency <= 120) return 3; // Relaxed (wider range)
-      else if (frequency <= 155) return 4; // Normal (wider range)
-      else if (frequency <= 185) return 5; // Engaged (wider range)
-      else if (frequency <= 215) return 6; // Animated (wider range)
-      else if (frequency <= 245) return 7; // Energetic (wider range)
-      else if (frequency <= 275) return 8; // Dynamic (wider range)
-      else return 9;                       // Explosive (wider range)
-    } else {
-      // Indoor mode: Standard sensitivity
-      if (frequency <= 55) return 1;       // Whisper (40Hz target, range up to 55)
-      else if (frequency <= 85) return 2;  // Calm (70Hz target, range 55-85)
-      else if (frequency <= 115) return 3; // Relaxed (100Hz target, range 85-115)
-      else if (frequency <= 145) return 4; // Normal (130Hz target, range 115-145)
-      else if (frequency <= 175) return 5; // Engaged (160Hz target, range 145-175)
-      else if (frequency <= 205) return 6; // Animated (190Hz target, range 175-205)
-      else if (frequency <= 235) return 7; // Energetic (220Hz target, range 205-235)
-      else if (frequency <= 265) return 8; // Dynamic (250Hz target, range 235-265)
-      else return 9;                       // Explosive (280Hz+, range 265+)
-    }
-  }, [outdoorMode]);
+
+    // More sensitive mapping - users can reach high energy levels with lower voice
+    if (frequency <= 50) return 1;       // Whisper (40Hz target, range up to 50)
+    else if (frequency <= 70) return 2;  // Calm (60Hz target, range 50-70)
+    else if (frequency <= 90) return 3;  // Relaxed (80Hz target, range 70-90)
+    else if (frequency <= 110) return 4; // Normal (100Hz target, range 90-110)
+    else if (frequency <= 130) return 5; // Engaged (120Hz target, range 110-130)
+    else if (frequency <= 150) return 6; // Animated (140Hz target, range 130-150)
+    else if (frequency <= 170) return 7; // Energetic (160Hz target, range 150-170)
+    else if (frequency <= 190) return 8; // Dynamic (180Hz target, range 170-190)
+    else return 9;                       // Explosive (200Hz+, range 190+)
+  }, []);
+
+  // 5-second moving average for stable energy level display
+  const getSmoothedEnergyLevel = useCallback((): number => {
+    if (energyLevelHistory.length === 0) return 0;
+
+    const currentTime = Date.now();
+    const fiveSecondsAgo = currentTime - 5000; // 5 seconds in milliseconds
+
+    // Filter out readings older than 5 seconds
+    const recentReadings = energyLevelHistory.filter(reading => reading.timestamp >= fiveSecondsAgo);
+
+    if (recentReadings.length === 0) return 0;
+
+    // Simple moving average - no weighting, just average all values
+    const total = recentReadings.reduce((sum, reading) => sum + reading.level, 0);
+    const average = total / recentReadings.length;
+
+    // Round to nearest integer and clamp to valid range
+    const smoothedLevel = Math.round(average);
+    const clampedLevel = Math.max(1, Math.min(9, smoothedLevel));
+
+    return clampedLevel;
+  }, [energyLevelHistory]);
 
   // Start recording with separate video and audio streams
   const startRecording = useCallback(async () => {
@@ -727,114 +762,81 @@ export default function ConductorAssessment() {
         }
         rms = Math.sqrt(rms / timeDataArray.length);
         
-        // Apply outdoor mode noise reduction with voice activity detection
-        let normalizedLevel;
-        let detectionThreshold;
-        let isVoiceDetected = false;
-        
-        if (outdoorMode) {
-          // Outdoor mode: Much more restrictive with voice activity detection
-          normalizedLevel = Math.min((rms * 4 + peak * 1) / 5, 1); // Much less sensitive
-          detectionThreshold = 0.05; // Much higher threshold (10x higher)
-          
-          // Voice Activity Detection for outdoor mode
-          // Check for voice-like characteristics: sustained energy + frequency content
-          const voiceFrequencyBins = [];
-          const voiceRangeStart = Math.floor(80 / (44100 / 2) * dataArray.length); // 80Hz
-          const voiceRangeEnd = Math.floor(3000 / (44100 / 2) * dataArray.length); // 3000Hz
-          
-          for (let i = voiceRangeStart; i < Math.min(voiceRangeEnd, dataArray.length); i++) {
-            voiceFrequencyBins.push(dataArray[i]);
-          }
-          
-          const voiceEnergy = voiceFrequencyBins.reduce((sum, val) => sum + val, 0) / voiceFrequencyBins.length;
-          const backgroundEnergy = dataArray.slice(0, voiceRangeStart).reduce((sum, val) => sum + val, 0) / voiceRangeStart;
-          
-          // Voice detected if: high voice energy, low background noise, and strong peak
-          isVoiceDetected = voiceEnergy > 50 && voiceEnergy > backgroundEnergy * 2 && peak > 0.05;
-          
-          console.log(`🌳 Outdoor Mode VAD - Voice Energy: ${voiceEnergy.toFixed(1)}, Background: ${backgroundEnergy.toFixed(1)}, Peak: ${peak.toFixed(4)}, Voice Detected: ${isVoiceDetected}`);
-        } else {
-          // Indoor mode: Standard sensitivity
-          normalizedLevel = Math.min((rms * 8 + peak * 2) / 10, 1);
-          detectionThreshold = 0.005; // Lower threshold for better sensitivity
-          isVoiceDetected = true; // Always process in indoor mode
-        }
+        // Standard audio level calculation
+        const normalizedLevel = Math.min((rms * 8 + peak * 2) / 10, 1);
+        const detectionThreshold = 0.005; // Lower threshold for better sensitivity
+        const isVoiceDetected = true; // Always process audio
         
         setAudioLevel(normalizedLevel);
 
         // Debug audio levels
         if (normalizedLevel > 0.001) {
-          console.log(`🎤 Audio detected ${outdoorMode ? '(Outdoor Mode)' : '(Indoor Mode)'} - RMS: ${rms.toFixed(4)}, Peak: ${peak.toFixed(4)}, Level: ${normalizedLevel.toFixed(4)}, Voice: ${isVoiceDetected}`);
+          console.log(`🎤 Audio detected - RMS: ${rms.toFixed(4)}, Peak: ${peak.toFixed(4)}, Level: ${normalizedLevel.toFixed(4)}`);
         }
 
-        // In outdoor mode, reset pitch if no voice detected for too long
-        if (outdoorMode) {
-          const currentTime = Date.now();
-          if (isVoiceDetected) {
-            setLastVoiceTime(currentTime);
-          } else if (currentTime - lastVoiceTime > 2000) { // 2 seconds of no voice
-            if (currentPitch > 0) {
-              console.log(`🌳 Outdoor Mode - Resetting pitch due to no voice for 2 seconds`);
-              setCurrentPitch(0);
-              setRecentPitches([]);
-            }
-          }
-        }
 
         // Run pitch detection only if voice is detected and above threshold
         if (normalizedLevel > detectionThreshold && isVoiceDetected) {
-          // Try autocorrelation method first
-          let frequency = detectPitch(timeDataArray);
-          
-          // If autocorrelation fails, try FFT method as backup
-          if (frequency === 0) {
-            frequency = detectPitchFFT(dataArray);
-            if (frequency > 0) {
-              console.log(`🎵 FFT backup detected frequency: ${frequency.toFixed(1)}Hz`);
+          let frequency = 0;
+
+          // Use WebAssembly pitch detection if available (much more accurate)
+          if (pitchWorkerInitialized) {
+            try {
+              const pitchResult = pitchWorker.getPitch(
+                timeDataArray,
+                audioContextRef.current?.sampleRate || 44100,
+                0.001, // powerThreshold - more sensitive than original
+                0.2    // clarityThreshold - balanced clarity requirement
+              );
+
+              if (pitchResult) {
+                frequency = pitchResult.frequency;
+                console.log(`🎵 WebAssembly ${pitchDetectorType} detected: ${frequency.toFixed(1)}Hz (clarity: ${pitchResult.clarity.toFixed(3)})`);
+              } else {
+                console.log(`🎵 WebAssembly ${pitchDetectorType}: No pitch detected`);
+              }
+            } catch (error) {
+              console.warn('⚠️ Advanced pitch detection failed, falling back to JS method:', error);
+              setPitchWorkerInitialized(false); // Disable for this session
             }
-          } else {
-            console.log(`🎵 Autocorrelation detected frequency: ${frequency.toFixed(1)}Hz`);
+          }
+
+          // Fallback to original JavaScript method if WebAssembly fails
+          if (!pitchWorkerInitialized || frequency === 0) {
+            // Try autocorrelation method first
+            frequency = detectPitch(timeDataArray);
+
+            // If autocorrelation fails, try FFT method as backup
+            if (frequency === 0) {
+              frequency = detectPitchFFT(dataArray);
+              if (frequency > 0) {
+                console.log(`🎵 JS FFT backup detected frequency: ${frequency.toFixed(1)}Hz`);
+              }
+            } else {
+              console.log(`🎵 JS Autocorrelation detected frequency: ${frequency.toFixed(1)}Hz`);
+            }
           }
           
           const currentTime = Date.now() - assessmentStartTime;
           
           if (frequency > 0) {
-            // In outdoor mode, apply stability filtering
-            let finalFrequency = frequency;
-            
-            if (outdoorMode) {
-              // Update recent pitches history
-              setRecentPitches(prev => {
-                const newPitches = [...prev, frequency].slice(-5); // Keep last 5 readings
-                
-                // Only update if we have consistent readings or significant change
-                if (newPitches.length >= 3) {
-                  const avgRecent = newPitches.reduce((sum, p) => sum + p, 0) / newPitches.length;
-                  const variance = newPitches.reduce((sum, p) => sum + Math.pow(p - avgRecent, 2), 0) / newPitches.length;
-                  const stdDev = Math.sqrt(variance);
-                  
-                  // Only accept stable readings (low variance) or strong signals
-                  if (stdDev < 15 || peak > 0.1) { // Low variance or strong signal
-                    finalFrequency = avgRecent;
-                    console.log(`🌳 Outdoor Mode - Stable frequency: ${finalFrequency.toFixed(1)}Hz (StdDev: ${stdDev.toFixed(1)}, Peak: ${peak.toFixed(3)})`);
-                  } else {
-                    console.log(`🌳 Outdoor Mode - Unstable frequency rejected: ${frequency.toFixed(1)}Hz (StdDev: ${stdDev.toFixed(1)}, Peak: ${peak.toFixed(3)})`);
-                    return prev; // Don't update if unstable
-                  }
-                }
-                
-                return newPitches;
-              });
-            }
-            
-            setCurrentPitch(finalFrequency);
+            setCurrentPitch(frequency);
             
             // Convert frequency to energy level based on provided frequency ranges
-            const energyLevel = getEnergyLevelFromFrequency(finalFrequency);
+            const energyLevel = getEnergyLevelFromFrequency(frequency);
             setLastPitchLevel(energyLevel);
-            
-            console.log(`🎵 Frequency conversion - Frequency: ${finalFrequency.toFixed(1)}Hz → Energy Level: ${energyLevel}`);
+
+            // Add energy level to history for 5-second moving average
+            const currentTime = Date.now();
+            setEnergyLevelHistory(prev => {
+              const newHistory = [...prev, { level: energyLevel, timestamp: currentTime }];
+              // Keep only last 5 seconds of data (with some buffer for performance)
+              const fiveSecondsAgo = currentTime - 5000;
+              const filteredHistory = newHistory.filter(reading => reading.timestamp >= fiveSecondsAgo);
+              return filteredHistory;
+            });
+
+            console.log(`🎵 Frequency conversion - Frequency: ${frequency.toFixed(1)}Hz → Energy Level: ${energyLevel}`);
             
             // Add frequency data with timestamp and current energy level
             setPitchHistory(prev => {
@@ -951,11 +953,15 @@ export default function ConductorAssessment() {
 
     if (shouldBreathe) {
       setShowBreathe(true);
+      // Reset 5-second moving average when breathe cue appears
+      setEnergyLevelHistory([]);
+      console.log('🫁 BREATHE CUE: Reset 5-second moving average history');
+
       const timestamp = Date.now();
       const relativeTimestamp = timestamp - assessmentStartTime;
-      const newChange = { 
-        timestamp: relativeTimestamp, 
-        level: currentEnergyLevel, 
+      const newChange = {
+        timestamp: relativeTimestamp,
+        level: currentEnergyLevel,
         type: "breathe" as const,
         frequency: currentPitch
       };
@@ -1002,12 +1008,16 @@ export default function ConductorAssessment() {
       }
 
       setCurrentEnergyLevel(newLevel);
-      
+
+      // Reset 5-second moving average when energy level changes
+      setEnergyLevelHistory([]);
+      console.log(`🔥 ENERGY LEVEL CHANGE: ${currentEnergyLevel} → ${newLevel}, Reset 5-second moving average history`);
+
       const timestamp = Date.now();
       const relativeTimestamp = timestamp - assessmentStartTime;
-      const newChange = { 
-        timestamp: relativeTimestamp, 
-        level: newLevel, 
+      const newChange = {
+        timestamp: relativeTimestamp,
+        level: newLevel,
         type: "energy" as const,
         frequency: currentPitch
       };
@@ -1070,6 +1080,7 @@ export default function ConductorAssessment() {
       setCurrentTopic(selectedTopics[nextIndex]);
       setCurrentEnergyLevel(5); // Reset to default energy level
       setEnergyChanges([]); // Reset energy changes for new question
+      setEnergyLevelHistory([]); // Reset energy level history for new question
       setShowBreathe(false);
       
       // Reset timer to full time for new question
@@ -1105,6 +1116,7 @@ export default function ConductorAssessment() {
     setAssessmentStartTime(Date.now());
     setCurrentEnergyLevel(5);
     setEnergyChanges([]);
+    setEnergyLevelHistory([]); // Reset energy level history for new assessment
     setShowBreathe(false);
     setNextChangeIn(config?.gameSettings.changeFrequency || 15);
 
@@ -1553,20 +1565,11 @@ export default function ConductorAssessment() {
                   <div className="flex justify-center mb-4">
                     <div className="flex items-end space-x-2 h-48">
                       {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((level) => {
-                        // Convert current frequency to energy level (1-9 scale) using frequency ranges
-                        let currentEnergyFromFrequency = 0;
-                        if (currentPitch > 0) {
-                          // currentPitch now contains frequency in Hz, not MIDI pitch
-                          currentEnergyFromFrequency = getEnergyLevelFromFrequency(currentPitch);
-                          
-                          // Debug logging with frequency mapping info
-                          if (level === 1) { // Only log once per render cycle
-                            console.log(`🎵 Frequency mapping - Frequency: ${currentPitch.toFixed(1)}Hz → Energy Level: ${currentEnergyFromFrequency}`);
-                          }
-                        }
-                        
-                        // Determine the effective current position (live frequency or last held position)
-                        const effectiveCurrentPosition = currentPitch > 0 ? currentEnergyFromFrequency : lastPitchLevel;
+                        // Get smoothed energy level for stable display
+                        const smoothedEnergyLevel = getSmoothedEnergyLevel();
+
+                        // Use smoothed energy level when available, otherwise fall back to last pitch level
+                        const effectiveCurrentPosition = smoothedEnergyLevel > 0 ? smoothedEnergyLevel : lastPitchLevel;
                         
                         // Initialize bar color and state
                         let barColor = "bg-muted"; // Default gray
@@ -1575,8 +1578,8 @@ export default function ConductorAssessment() {
                         
                         // Color bars up to the target energy level (currentEnergyLevel)
                         if (level <= currentEnergyLevel) {
-                          // Target range - teal colors with gradient intensity
-                          barColor = level <= 3 ? "bg-teal-300" : level <= 6 ? "bg-teal-500" : "bg-teal-700";
+                          // Target range - consistent custom green color for all levels
+                          barColor = "";
                         }
                         
                                                   // Highlight the current detected frequency position
@@ -1598,7 +1601,8 @@ export default function ConductorAssessment() {
                             className={`w-6 rounded-t transition-all duration-150 ease-out relative ${barColor}`}
                             style={{
                               height: `${(level / 9) * 100}%`,
-                              minHeight: '16px'
+                              minHeight: '16px',
+                              ...(level <= currentEnergyLevel && !isCurrentPitch ? { backgroundColor: '#4A9CA6' } : {})
                             }}
                           >
                             {/* No overlay indicators needed */}
@@ -1630,46 +1634,10 @@ export default function ConductorAssessment() {
                       </div>
                     </div>
                     
-                    {/* Status Text */}
-                    <div className="mt-4">
-                      {currentPitch > 0 ? (
-                        (() => {
-                          const currentEnergyFromFrequency = getEnergyLevelFromFrequency(currentPitch);
-                          if (currentEnergyFromFrequency <= currentEnergyLevel) {
-                            return <span className="text-green-500 dark:text-green-400 font-medium">✓ Perfect! You're in the target energy range</span>;
-                          } else {
-                            return <span className="text-red-500 dark:text-red-400 font-medium">⚠ Lower your energy - you're above the target level</span>;
-                          }
-                        })()
-                      ) : (
-                        <span className="text-muted-foreground">Listening for your voice...</span>
-                      )}
-                    </div>
                   </div>
                 </CardContent>
               </Card>
               
-              {/* Outdoor Mode Toggle */}
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <h4 className="text-sm font-medium text-foreground">Outdoor Mode</h4>
-                      <p className="text-xs text-muted-foreground">Reduces background noise sensitivity</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={outdoorMode}
-                        onChange={(e) => setOutdoorMode(e.target.checked)}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 dark:peer-focus:ring-teal-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-teal-600"></div>
-                    </label>
-                  </div>
-                  
-                </CardContent>
-              </Card>
             </div>
           </div>
         </div>
