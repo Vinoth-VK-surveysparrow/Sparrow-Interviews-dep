@@ -135,18 +135,20 @@ function SecurityWrapper() {
 function Router() {
   const [location] = useLocation();
   
-  // Check if user is in active assessment (adjust layout when sidebar is hidden)
+  // Check if user is in active assessment or login page (adjust layout when sidebar is hidden)
   const isInActiveAssessment = location.startsWith('/assessment/') || 
                               location.startsWith('/question/') ||
                               location.startsWith('/conductor/') ||
                               location.startsWith('/triple-step/') ||
                               location.startsWith('/sales-ai/') ||
                               location.startsWith('/rapid-fire/');
+  
+  const shouldHideSidebar = isInActiveAssessment || location === '/login';
 
   return (
     <SidebarProvider>
       <AppSidebar />
-      <div className={`flex-1 flex flex-col ${isInActiveAssessment ? 'ml-0' : 'ml-12'}`}>
+      <div className={`flex-1 flex flex-col ${shouldHideSidebar ? 'ml-0' : 'ml-12'}`}>
         <Header />
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
           <SecurityWrapper />

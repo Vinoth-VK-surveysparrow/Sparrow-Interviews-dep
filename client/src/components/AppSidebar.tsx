@@ -16,13 +16,15 @@ export function AppSidebar() {
   // Check if user is admin
   const isAdmin = userRole === 'admin';
 
-  // Check if user is in active assessment (hide sidebar during assessments)
+  // Check if user is in active assessment or login page (hide sidebar during assessments and login)
   const isInActiveAssessment = location.startsWith('/assessment/') || 
                               location.startsWith('/question/') ||
                               location.startsWith('/conductor/') ||
                               location.startsWith('/triple-step/') ||
                               location.startsWith('/sales-ai/') ||
                               location.startsWith('/rapid-fire/');
+  
+  const shouldHideSidebar = isInActiveAssessment || location === '/login';
 
   // Fetch user role
   useEffect(() => {
@@ -49,8 +51,8 @@ export function AppSidebar() {
     fetchUserRole();
   }, [user?.email]);
 
-  // Don't render sidebar during active assessments
-  if (isInActiveAssessment) {
+  // Don't render sidebar during active assessments or login page
+  if (shouldHideSidebar) {
     return null;
   }
 
