@@ -4,18 +4,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { ChevronRight, Loader2, AlertCircle, Settings } from 'lucide-react';
+import { ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
 import CardPlaceholder from '@/components/CardPlaceholder';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 // Test interface based on your API response
 interface Test {
   test_name: string;
   description: string;
   test_id: string;
+  time_status: "allowed" | "not_started_yet" | "expired";
+  time_slot?: string[];
 }
 
 interface UserTestsResponse {
@@ -44,7 +45,6 @@ export default function TestSelection() {
   const [loadingTests, setLoadingTests] = useState(true);
   const [loadingTest, setLoadingTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -123,10 +123,92 @@ export default function TestSelection() {
       return;
     }
 
+    // Check if test is locked
+    const selectedTest = tests.find(test => test.test_id === testId);
+    if (selectedTest?.time_status !== "allowed") {
+      // Format time slot for display
+      const formatTimeSlot = (timeSlot: string[]) => {
+        if (!timeSlot || timeSlot.length === 0) return "";
+        
+        const formatDateTime = (dateTimeStr: string) => {
+          try {
+            // Parse the date string (e.g., "2025-09-23 03:00 PM")
+            const parts = dateTimeStr.split(' ');
+            if (parts.length !== 3) {
+              return dateTimeStr; // Fallback if format is unexpected
+            }
+            
+            const [datePart, timePart, period] = parts;
+            const [year, month, day] = datePart.split('-');
+            const [hours, minutes] = timePart.split(':');
+            
+            // Convert to 24-hour format for Date object
+            let hour24 = parseInt(hours);
+            if (period === 'PM' && hour24 !== 12) {
+              hour24 += 12;
+            } else if (period === 'AM' && hour24 === 12) {
+              hour24 = 0;
+            }
+            
+            // Create Date object
+            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), hour24, parseInt(minutes));
+            
+            // Format date as "Sep 23" and time as "3:00 PM"
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const formattedDate = `${monthNames[date.getMonth()]} ${date.getDate()}`;
+            const formattedTime = date.toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
+            });
+            
+            return `${formattedDate} ${formattedTime}`;
+          } catch (error) {
+            console.error('Error parsing date:', dateTimeStr, error);
+            // Fallback to original string if parsing fails
+            return dateTimeStr;
+          }
+        };
+        
+        if (timeSlot.length === 1) {
+          return formatDateTime(timeSlot[0]);
+        } else if (timeSlot.length === 2) {
+          const start = formatDateTime(timeSlot[0]);
+          const end = formatDateTime(timeSlot[1]);
+          // Extract just the time from end time if same date
+          const startDate = timeSlot[0].split(' ')[0];
+          const endDate = timeSlot[1].split(' ')[0];
+          if (startDate === endDate) {
+            const endTime = timeSlot[1].split(' ')[1] + ' ' + timeSlot[1].split(' ')[2];
+            return `${start} - ${endTime}`;
+          } else {
+            return `${start} - ${end}`;
+          }
+        } else {
+          return timeSlot.map(formatDateTime).join(", ");
+        }
+      };
+      
+      const timeSlotDisplay = selectedTest?.time_slot ? formatTimeSlot(selectedTest.time_slot) : "";
+      
+      if (selectedTest?.time_status === "expired") {
+        toast({
+          title: "Time slot ended",
+          description: timeSlotDisplay ? `Was scheduled: ${timeSlotDisplay}` : "This test's time slot has ended.",
+        });
+      } else if (selectedTest?.time_status === "not_started_yet") {
+        toast({
+          title: "Test not started",
+          description: timeSlotDisplay ? `Test starts only between: ${timeSlotDisplay}` : "This test has not started yet.",
+        });
+      }
+      return;
+    }
+
     setLoadingTest(testId);
     
     // Track test selection
-    const selectedTest = tests.find(test => test.test_id === testId);
     trackUserAction('test_selected', {
       test_id: testId,
       test_name: selectedTest?.test_name || 'unknown',
@@ -204,42 +286,7 @@ export default function TestSelection() {
         {/* Admin Access - Top Left for Admin Users Only */}
         {userRole === 'admin' && (
           <div className="flex justify-start">
-            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                >
-                  <img src="/Admin.png" alt="Admin" className="h-4 w-4" />
-                  Admin Panel
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-80">
-                <SheetHeader>
-                  <SheetTitle className="flex items-center gap-2">
-                    <img src="/Admin.png" alt="Admin" className="h-5 w-5" />
-                    Admin Panel
-                  </SheetTitle>
-                  <SheetDescription>
-                    Manage tests and assessments
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="mt-6">
-                  <Button 
-                    onClick={() => {
-                      setLocation('/admin');
-                      setSidebarOpen(false);
-                    }}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <img src="/Admin.png" alt="Admin" className="h-4 w-4 mr-2" />
-                    Admin Dashboard
-                  </Button>
-                </div>
-              </SheetContent>
-            </Sheet>
+            {/* Admin panel removed - functionality moved to app sidebar */}
           </div>
         )}
 
@@ -259,54 +306,64 @@ export default function TestSelection() {
         <div className="relative">
           <div className="overflow-x-auto pb-4" id="tests-container">
             <div className={`flex gap-6 min-w-max px-1 ${tests.length === 1 ? 'justify-center' : ''}`}>
-              {tests.map((test) => (
-                <Card 
-                  key={test.test_id}
-                  className="flex-shrink-0 w-72 h-[480px] shadow-sm transition-all duration-200 overflow-hidden relative border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md cursor-pointer"
-                  onClick={() => handleSelectTest(test.test_id)}
-                >
-                  <CardContent className="p-8 h-full flex flex-col justify-between relative">
-                    {/* Icon Section */}
-                    <div className="bg-gray-100 dark:bg-custom-dark-2 rounded-lg p-6 mb-6 flex items-center justify-center">
-                      <SparrowLogo />
-                    </div>
-                    
-                    {/* Content Section */}
-                    <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-                      {test.test_name}
-                    </h3>
-                    <p className="text-sm leading-relaxed mb-4 text-gray-600 dark:text-gray-300">
-                      {test.description}
-                    </p>
-                    
-                    {/* Button Section */}
-                    <div className="mt-auto">
-                      <Button
-                        onClick={() => handleSelectTest(test.test_id)}
-                        disabled={loadingTest === test.test_id}
-                        className="group relative overflow-hidden w-full" 
-                        size="lg"
-                      >
-                        {loadingTest === test.test_id ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Selecting...
-                          </>
-                        ) : (
-                          <>
-                            <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
-                              Select Test
-                            </span>
-                            <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
-                              <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
-                            </i>
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+              {tests.map((test) => {
+                const isLocked = test.time_status !== "allowed";
+                
+                return (
+                  <Card 
+                    key={test.test_id}
+                    className="flex-shrink-0 w-72 h-[480px] shadow-sm transition-all duration-200 overflow-hidden relative border-gray-200 dark:border-gray-700 hover:border-teal-300 hover:shadow-md cursor-pointer"
+                    onClick={() => handleSelectTest(test.test_id)}
+                  >
+                    <CardContent className="p-8 h-full flex flex-col justify-between relative">
+                      {/* Icon Section */}
+                      <div className="bg-gray-100 dark:bg-custom-dark-2 rounded-lg p-6 mb-6 flex items-center justify-center">
+                        <SparrowLogo />
+                      </div>
+                      
+                      {/* Content Section */}
+                      <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+                        {test.test_name}
+                      </h3>
+                      <p className="text-sm leading-relaxed mb-4 text-gray-600 dark:text-gray-300">
+                        {test.description}
+                      </p>
+                      
+                      {/* Button Section */}
+                      <div className="mt-auto">
+                        <Button
+                          onClick={() => handleSelectTest(test.test_id)}
+                          disabled={loadingTest === test.test_id}
+                          className={`group relative overflow-hidden w-full ${
+                            isLocked ? 'bg-gray-500 hover:bg-gray-600 text-white' : ''
+                          }`}
+                          size="lg"
+                        >
+                          {loadingTest === test.test_id ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Selecting...
+                            </>
+                          ) : (
+                            <>
+                              <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
+                                {test.time_status === "expired" 
+                                  ? "Time slot ended" 
+                                  : test.time_status === "not_started_yet" 
+                                  ? "Test not started" 
+                                  : "Select Test"}
+                              </span>
+                              <i className="absolute right-1 top-1 bottom-1 rounded-sm z-10 grid w-1/4 place-items-center transition-all duration-500 bg-primary-foreground/15 group-hover:w-[calc(100%-0.5rem)] group-active:scale-95">
+                                <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+                              </i>
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </div>
           

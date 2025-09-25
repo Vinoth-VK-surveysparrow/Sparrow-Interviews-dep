@@ -10,9 +10,16 @@ import { AssessmentProvider } from "@/contexts/AssessmentContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/components/ThemeProvider";
+import { AppSidebar } from "@/components/AppSidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import Dashboard from "@/pages/Dashboard";
 import TestSelection from "@/pages/TestSelection";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AdminTests from "@/pages/AdminTests";
+import AdminUsers from "@/pages/AdminUsers";
+import CreateAssessment from "@/pages/CreateAssessment";
+import UserAccess from "@/pages/UserAccess";
 import AssessmentProgress from "@/pages/AssessmentProgress";
 import AssessmentUsers from "@/pages/AssessmentUsers";
 import UserAnswers from "@/pages/UserAnswers";
@@ -37,6 +44,7 @@ import SettingsModal from "@/components/SettingsModal";
 
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
+  const { theme } = useTheme();
   const [location, setLocation] = useLocation(); 
 
   const handleSignOut = async () => {
@@ -55,8 +63,17 @@ function Header() {
   if (!isAuthenticated) {
     return null;
   }
+
+  // Determine effective theme for styling
+  const effectiveTheme = theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : theme;
+
   return (
-    <header className="bg-background border-b border-border shadow-sm">
+    <header
+      className="border-b border-border shadow-sm"
+      style={{ backgroundColor: effectiveTheme === 'light' ? '#f6f6f6' : undefined }}
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-3">
@@ -73,8 +90,7 @@ function Header() {
           </div>
           
           <div className="flex items-center gap-4">
-            {/* Only show settings when NOT in assessment */}
-            {!isInAssessment && <SettingsModal />}
+            {/* Settings moved to sidebar */}
           </div>
         </div>
       </div>
@@ -117,95 +133,130 @@ function SecurityWrapper() {
 }
 
 function Router() {
+  const [location] = useLocation();
+  
+  // Check if user is in active assessment (adjust layout when sidebar is hidden)
+  const isInActiveAssessment = location.startsWith('/assessment/') || 
+                              location.startsWith('/question/') ||
+                              location.startsWith('/conductor/') ||
+                              location.startsWith('/triple-step/') ||
+                              location.startsWith('/sales-ai/') ||
+                              location.startsWith('/rapid-fire/');
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Header />
-      <SecurityWrapper />
-      <Switch>
-        <Route path="/login" component={Login} />
-        <Route path="/">
-          <ProtectedRoute>
-            <TestSelection />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/test-selection">
-          <ProtectedRoute>
-            <TestSelection />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/dashboard">
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/admin">
-          <AdminProtectedRoute>
-            <AdminDashboard />
-          </AdminProtectedRoute>
-        </Route>
-        <Route path="/admin/assessment-progress/:testId">
-          <AdminProtectedRoute>
-            <AssessmentProgress />
-          </AdminProtectedRoute>
-        </Route>
-        <Route path="/admin/assessment-users/:assessmentId">
-          <AdminProtectedRoute>
-            <AssessmentUsers />
-          </AdminProtectedRoute>
-        </Route>
-        <Route path="/admin/user-answers/:userEmail/:assessmentId">
-          <AdminProtectedRoute>
-            <UserAnswers />
-          </AdminProtectedRoute>
-        </Route>
-        <Route path="/admin/user/:userEmail">
-          <AdminProtectedRoute>
-            <UserDetails />
-          </AdminProtectedRoute>
-        </Route>
-        <Route path="/rules/:assessmentId">
-          <ProtectedRoute>
-            <Rules />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/assessment/:assessmentId">
-          <ProtectedRoute>
-            <Assessment />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/conductor/:assessmentId">
-          <ProtectedRoute>
-            <ConductorAssessment />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/triple-step/:assessmentId">
-          <ProtectedRoute>
-            <TripleStepAssessment />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/sales-ai/:assessmentId">
-          <ProtectedRoute>
-            <SalesAIAssessment />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/rapid-fire/:assessmentId">
-          <ProtectedRoute>
-            <RapidFireAssessment />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/question/:assessmentId/:questionNumber">
-          <ProtectedRoute>
-            <Question />
-          </ProtectedRoute>
-        </Route>
-        <Route path="/results/:assessmentId">
-          <ProtectedRoute>
-            <Results />
-          </ProtectedRoute>
-        </Route>
-        <Route component={NotFoundPage} />
-      </Switch>
-    </div>
+    <SidebarProvider>
+      <AppSidebar />
+      <div className={`flex-1 flex flex-col ${isInActiveAssessment ? 'ml-0' : 'ml-12'}`}>
+        <Header />
+        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          <SecurityWrapper />
+          <Switch>
+            <Route path="/login" component={Login} />
+            <Route path="/">
+              <ProtectedRoute>
+                <TestSelection />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/test-selection">
+              <ProtectedRoute>
+                <TestSelection />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/dashboard">
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/admin">
+              <AdminProtectedRoute>
+                <AdminDashboard />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/tests">
+              <AdminProtectedRoute>
+                <AdminTests />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/users">
+              <AdminProtectedRoute>
+                <AdminUsers />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/create-assessment">
+              <AdminProtectedRoute>
+                <CreateAssessment />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/user-access">
+              <AdminProtectedRoute>
+                <UserAccess />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/assessment-progress/:testId">
+              <AdminProtectedRoute>
+                <AssessmentProgress />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/assessment-users/:assessmentId">
+              <AdminProtectedRoute>
+                <AssessmentUsers />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/user-answers/:userEmail/:assessmentId">
+              <AdminProtectedRoute>
+                <UserAnswers />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/user/:userEmail">
+              <AdminProtectedRoute>
+                <UserDetails />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/rules/:assessmentId">
+              <ProtectedRoute>
+                <Rules />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/assessment/:assessmentId">
+              <ProtectedRoute>
+                <Assessment />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/conductor/:assessmentId">
+              <ProtectedRoute>
+                <ConductorAssessment />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/triple-step/:assessmentId">
+              <ProtectedRoute>
+                <TripleStepAssessment />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/sales-ai/:assessmentId">
+              <ProtectedRoute>
+                <SalesAIAssessment />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/rapid-fire/:assessmentId">
+              <ProtectedRoute>
+                <RapidFireAssessment />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/question/:assessmentId/:questionNumber">
+              <ProtectedRoute>
+                <Question />
+              </ProtectedRoute>
+            </Route>
+            <Route path="/results/:assessmentId">
+              <ProtectedRoute>
+                <Results />
+              </ProtectedRoute>
+            </Route>
+            <Route component={NotFoundPage} />
+          </Switch>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 }
 
@@ -233,3 +284,5 @@ function App() {
 }
 
 export default App;
+
+

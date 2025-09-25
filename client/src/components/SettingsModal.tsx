@@ -31,7 +31,11 @@ interface PermissionStatus {
   error?: string;
 }
 
-export default function SettingsModal() {
+interface SettingsModalProps {
+  children?: React.ReactNode;
+}
+
+export default function SettingsModal({ children }: SettingsModalProps) {
   const [open, setOpen] = useState(false);
   const { user, signOut } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -271,10 +275,16 @@ export default function SettingsModal() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="flex items-center gap-2">
-          <Settings className="h-4 w-4" />
-          <span className="hidden sm:inline">Settings</span>
-        </Button>
+        {children ? (
+          <div onClick={() => setOpen(true)} className="cursor-pointer">
+            {children}
+          </div>
+        ) : (
+          <Button variant="outline" size="sm" className="flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            <span className="hidden sm:inline">Settings</span>
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="overflow-visible p-0 sm:max-w-4xl gap-0">
         <DialogHeader className="border-b px-6 py-4 mb-0">

@@ -555,7 +555,7 @@ export class S3Service {
       }
 
       // Handle different assessment types based on their response structure
-      if (request.type === 'Games-arena') {
+      if (request.type?.toLowerCase() === 'games-arena') {
         // Games-arena returns prompt data in 'content' field, not 'questions'
         const promptData = data.questions || data.content;
         if (!promptData) {
@@ -573,13 +573,13 @@ export class S3Service {
           type: 'Games-arena'
         };
         return [promptQuestion];
-      } else if (request.type === 'Triple-Step') {
+      } else if (request.type?.toLowerCase() === 'triple-step') {
         // Handle TripleStep specifically - use the new function
         return await this.fetchTripleStepQuestions({
           user_email: request.user_email,
           assessment_id: request.assessment_id
         });
-      } else if (request.type === 'Conductor') {
+      } else if (request.type?.toLowerCase() === 'conductor') {
         // Handle Conductor assessments - convert topics to questions format
         const content = (data as any).content;
         if (!content || !content.topics || !Array.isArray(content.topics) || content.topics.length === 0) {
