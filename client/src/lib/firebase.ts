@@ -37,7 +37,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ;
 const authorizationCache = new Map<string, { authorized: boolean; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Check authorization via API for non-@surveysparrow.com emails
+// Note: This function is no longer used - all emails are now allowed
 const checkEmailAuthorization = async (email: string): Promise<boolean> => {
   // Check cache first
   const cached = authorizationCache.get(email);
@@ -64,17 +64,12 @@ const checkEmailAuthorization = async (email: string): Promise<boolean> => {
   }
 };
 
-// Email domain validation with API fallback
+// Email domain validation - now allows all emails
 export const isAuthorizedEmail = async (email: string | null): Promise<boolean> => {
   if (!email) return false;
   
-  // If it's a surveysparrow.com email, allow immediately
-  if (email.endsWith('@surveysparrow.com')) {
-    return true;
-  }
-  
-  // For other domains, check via API
-  return await checkEmailAuthorization(email);
+  // Allow all emails - no domain restrictions
+  return true;
 };
 
 // Google Sign In with Popup (works for all environments)
