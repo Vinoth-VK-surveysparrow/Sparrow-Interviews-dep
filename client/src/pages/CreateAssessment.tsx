@@ -136,6 +136,41 @@ export default function CreateAssessment() {
     }
   };
 
+  // Convert Date to IST format string (treating input as local IST time)
+  const toISTString = (date: Date) => {
+    if (!date || isNaN(date.getTime())) return "";
+    
+    // Treat the input date as IST time and format it properly
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const milliseconds = String(date.getMilliseconds()).padStart(3, '0');
+    
+    // Return IST formatted string
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${milliseconds}+05:30`;
+  };
+
+  // Parse IST time string to Date object (for editing existing times)
+  const parseISTString = (istTimeString: string): Date | undefined => {
+    if (!istTimeString) return undefined;
+    
+    try {
+      // Parse the IST time string as a regular date
+      // Since we're treating everything as IST, we can parse it directly
+      const date = new Date(istTimeString);
+      
+      // If it has timezone info (+05:30), it will parse correctly
+      // If not, it will be treated as local time, which is what we want for IST
+      return date;
+    } catch (error) {
+      console.error('Error parsing IST time string:', error);
+      return undefined;
+    }
+  };
+
   // Step 1: Test Details
   const [testDetails, setTestDetails] = useState({
     test_id: '',
@@ -558,8 +593,8 @@ export default function CreateAssessment() {
       email_notification: user.email_notification || false,
       call_notification: user.call_notification || false
     });
-    setStartDate(new Date(user.start_time));
-    setEndDate(new Date(user.end_time));
+    setStartDate(parseISTString(user.start_time));
+    setEndDate(parseISTString(user.end_time));
     setEditingUser(index);
   };
 
@@ -568,8 +603,8 @@ export default function CreateAssessment() {
       const updatedUsers = [...structuredUsers];
       updatedUsers[editingUser] = {
         user_email: editForm.email,
-        start_time: startDate.toISOString(),
-        end_time: endDate.toISOString(),
+        start_time: toISTString(startDate),
+        end_time: toISTString(endDate),
         email_notification: editForm.email_notification,
         call_notification: editForm.call_notification
       };
@@ -614,8 +649,8 @@ export default function CreateAssessment() {
 
     const newUser = {
       user_email: newUserEmail.trim(),
-      start_time: newUserStartDate.toISOString(),
-      end_time: newUserEndDate.toISOString(),
+      start_time: toISTString(newUserStartDate),
+      end_time: toISTString(newUserEndDate),
       email_notification: newUserEmailNotification,
       call_notification: newUserCallNotification
     };
@@ -1736,7 +1771,7 @@ export default function CreateAssessment() {
                                     </PopoverContent>
                                   </Popover>
                                 ) : (
-                                  safeFormatDate(new Date(user.start_time), "PPP hh:mm:ss a")
+                                  safeFormatDate(parseISTString(user.start_time), "PPP hh:mm:ss a")
                                 )}
                               </td>
                               <td className="px-4 py-3 text-sm text-muted-foreground">
@@ -1800,7 +1835,7 @@ export default function CreateAssessment() {
                                     </PopoverContent>
                                   </Popover>
                                 ) : (
-                                  safeFormatDate(new Date(user.end_time), "PPP hh:mm:ss a")
+                                  safeFormatDate(parseISTString(user.end_time), "PPP hh:mm:ss a")
                                 )}
                               </td>
                               <td className="px-4 py-3 text-center">
