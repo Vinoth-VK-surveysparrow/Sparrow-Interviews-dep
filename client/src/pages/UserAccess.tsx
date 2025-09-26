@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
+import { API_ENDPOINTS } from '@/config/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -118,7 +119,7 @@ export default function UserAccess() {
     setUserLoading(true);
     setErrorMessage(''); // Clear previous error
     try {
-      const response = await fetch(`${import.meta.env.VITE_CREATE_TEST_URL}/structure-users`, {
+      const response = await fetch(API_ENDPOINTS.STRUCTURE_USERS, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -271,7 +272,7 @@ export default function UserAccess() {
     };
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_CREATE_TEST_URL}/give-access`, {
+      const response = await fetch(API_ENDPOINTS.GIVE_ACCESS, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

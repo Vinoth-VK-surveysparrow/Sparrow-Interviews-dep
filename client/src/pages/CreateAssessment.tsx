@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation } from 'wouter';
+import { API_ENDPOINTS, API_CONFIG } from '@/config/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -184,7 +185,7 @@ export default function CreateAssessment() {
     // Generate description if test name exists
     if (testDetails.test_name.trim()) {
       try {
-        const response = await fetch(`${import.meta.env.VITE_CREATE_TEST_URL}/create-description`, {
+        const response = await fetch(API_ENDPOINTS.CREATE_DESCRIPTION, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -219,7 +220,7 @@ export default function CreateAssessment() {
     // Generate description if assessment name exists
     if (assessments[assessmentStep].name.trim()) {
       try {
-        const response = await fetch(`${import.meta.env.VITE_CREATE_TEST_URL}/create-description`, {
+        const response = await fetch(API_ENDPOINTS.CREATE_DESCRIPTION, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -515,7 +516,7 @@ export default function CreateAssessment() {
     setUserLoading(true);
     setErrorMessage(''); // Clear previous error
     try {
-      const response = await fetch(`${import.meta.env.VITE_CREATE_TEST_URL}/structure-users`, {
+      const response = await fetch(API_ENDPOINTS.STRUCTURE_USERS, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -675,18 +676,19 @@ export default function CreateAssessment() {
   };
 
   const getApiUrl = (type: string) => {
-    const baseUrl = import.meta.env.VITE_CREATE_TEST_URL;
     switch (type) {
       case 'QA':
-        return `${baseUrl}/qa`;
+        return API_ENDPOINTS.QA;
       case 'rapid-fire':
-        return `${baseUrl}/rapid-fire`;
+        return API_ENDPOINTS.RAPID_FIRE;
       case 'conductor':
-        return `${baseUrl}/conductor`;
+        return API_ENDPOINTS.CONDUCTOR;
       case 'triple-step':
-        return `${baseUrl}/triple-step`;
+        return API_ENDPOINTS.TRIPLE_STEP;
+      case 'games-arena':
+        return API_ENDPOINTS.GAMES_ARENA;
       default:
-        return '';
+        return API_ENDPOINTS.QA;
     }
   };
 
@@ -935,7 +937,7 @@ export default function CreateAssessment() {
     console.log('🔍 Final payload being sent:', JSON.stringify(payload, null, 2));
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_CREATE_TEST_URL}/create-complete-test`, {
+      const response = await fetch(API_ENDPOINTS.CREATE_COMPLETE_TEST, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

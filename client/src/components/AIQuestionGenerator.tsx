@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { API_ENDPOINTS } from '@/config/api';
 
 interface AIQuestionGeneratorProps {
   assessmentType: 'QA' | 'rapid-fire' | 'conductor' | 'triple-step' | 'games-arena';
@@ -25,18 +26,19 @@ export default function AIQuestionGenerator({
   const { toast } = useToast();
 
   const getApiUrl = () => {
-    const baseUrl = import.meta.env.VITE_CREATE_TEST_URL;
     switch (assessmentType) {
       case 'QA':
-        return `${baseUrl}/qa`;
+        return API_ENDPOINTS.QA;
       case 'rapid-fire':
-        return `${baseUrl}/rapid-fire`;
+        return API_ENDPOINTS.RAPID_FIRE;
       case 'conductor':
-        return `${baseUrl}/conductor`;
+        return API_ENDPOINTS.CONDUCTOR;
       case 'triple-step':
-        return `${baseUrl}/triple-step`;
+        return API_ENDPOINTS.TRIPLE_STEP;
+      case 'games-arena':
+        return API_ENDPOINTS.GAMES_ARENA;
       default:
-        return '';
+        return API_ENDPOINTS.QA;
     }
   };
 
