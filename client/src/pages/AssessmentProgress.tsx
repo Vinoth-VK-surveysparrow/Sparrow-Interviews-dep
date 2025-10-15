@@ -1,21 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Input } from '@/components/ui/input';
-import { 
-  Table,
-  TableHeader, 
-  TableHead, 
-  TableBody, 
-  TableRow, 
-  TableCell
-} from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { AdminTable, Column } from '@/components/ui/admin-table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ArrowLeft, AlertCircle, Loader2, Eye, RefreshCw } from 'lucide-react';
 import { TablePlaceholder } from '@/components/ui/table-placeholder';
@@ -36,13 +23,6 @@ const SparrowIcon = () => (
   </svg>
 );
 
-const allColumns = [
-  "Assessment Name",
-  "Description", 
-  "Time Limit",
-  "Completed Count",
-  "User Info",
-] as const;
 
 export default function AssessmentProgress() {
   const [match, params] = useRoute('/admin/assessment-progress/:testId');
@@ -53,7 +33,7 @@ export default function AssessmentProgress() {
   const [assessments, setAssessments] = useState<AssessmentProgressType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>([...allColumns]);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
   const [nameFilter, setNameFilter] = useState("");
   const [testName, setTestName] = useState("");
   
@@ -135,6 +115,52 @@ export default function AssessmentProgress() {
     setLocation(`/admin/assessment-users/${assessmentId}`);
   };
 
+  const allColumns: Column[] = [
+    {
+      key: "assessment_name",
+      label: "Assessment Name",
+      width: "200px"
+    },
+    {
+      key: "description",
+      label: "Description",
+      width: "300px"
+    },
+    {
+      key: "time_limit",
+      label: "Time Limit",
+      width: "120px",
+      render: (value) => `${value} min`
+    },
+    {
+      key: "completed_count",
+      label: "Completed Count",
+      width: "120px"
+    },
+    {
+      key: "user_info",
+      label: "User Info",
+      width: "100px",
+      render: (value, row) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleViewUsers(row.assessment_id, row.assessment_name)}
+          className="h-8 w-8 p-0"
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+      )
+    }
+  ];
+
+  const allColumnKeys = allColumns.map(col => col.key);
+
+  // Initialize visible columns
+  useEffect(() => {
+    setVisibleColumns([...allColumnKeys]);
+  }, []);
+
   // Refresh data function
   const handleRefresh = async () => {
     if (refreshing || !params?.testId) return;
@@ -185,12 +211,13 @@ export default function AssessmentProgress() {
         {/* Header */}
         <div className="flex items-center gap-4">
           <Button
-            variant="outline"
+            variant="solid"
+            color="primary"
             size="sm"
             onClick={() => window.history.back()}
-            className="flex items-center gap-2"
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
           >
-            <ArrowLeft className="h-4 w-4" />
+            Back
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
@@ -223,108 +250,20 @@ export default function AssessmentProgress() {
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="container my-10 space-y-4 p-4 border border-border rounded-lg bg-background shadow-sm overflow-x-auto">
-            {/* Filters and Controls */}
-            <div className="flex flex-wrap gap-4 items-center justify-between mb-6">
-              <div className="flex gap-2 flex-wrap">
-                <Input
-                  placeholder="Filter by assessment name..."
-                  value={nameFilter}
-                  onChange={(e) => setNameFilter(e.target.value)}
-                  className="w-64"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      Columns
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-48">
-                    {allColumns.map((col) => (
-                      <DropdownMenuCheckboxItem
-                        key={col}
-                        checked={visibleColumns.includes(col)}
-                        onCheckedChange={() => toggleColumn(col)}
-                      >
-                        {col}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
+          <div className="container my-10 space-y-4 p-4 border border-border rounded-lg bg-background shadow-sm">
             {/* Assessment Progress Table */}
-            <Table className="w-full">
-              <TableHeader>
-                <TableRow>
-                  {visibleColumns.includes("Assessment Name") && <TableHead className="w-[200px]">Assessment Name</TableHead>}
-                  {visibleColumns.includes("Description") && <TableHead className="w-[300px]">Description</TableHead>}
-                  {visibleColumns.includes("Time Limit") && <TableHead className="w-[120px] text-center">Time Limit (min)</TableHead>}
-                  {visibleColumns.includes("Completed Count") && <TableHead className="w-[120px] text-center">Completed Count</TableHead>}
-                  {visibleColumns.includes("User Info") && <TableHead className="w-[100px] text-center">User Info</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredAssessments.length ? (
-                  filteredAssessments.map((assessment) => (
-                    <TableRow key={assessment.assessment_id}>
-                      {visibleColumns.includes("Assessment Name") && (
-                        <TableCell className="font-medium whitespace-nowrap">
-                          {assessment.assessment_name}
-                        </TableCell>
-                      )}
-                      {visibleColumns.includes("Description") && (
-                        <TableCell className="whitespace-nowrap">
-                          {assessment.description}
-                        </TableCell>
-                      )}
-                      {visibleColumns.includes("Time Limit") && (
-                        <TableCell className="whitespace-nowrap text-center">
-                          {assessment.time_limit}
-                        </TableCell>
-                      )}
-                      {visibleColumns.includes("Completed Count") && (
-                        <TableCell className="whitespace-nowrap text-center font-medium">
-                          {assessment.completed_count}
-                        </TableCell>
-                      )}
-                      {visibleColumns.includes("User Info") && (
-                        <TableCell className="whitespace-nowrap text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewUsers(assessment.assessment_id, assessment.assessment_name)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={visibleColumns.length} className="text-center py-6">
-                      No assessments found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <AdminTable
+              columns={allColumns}
+              data={filteredAssessments}
+              visibleColumns={visibleColumns}
+              onToggleColumn={toggleColumn}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+              searchValue={nameFilter}
+              onSearchChange={setNameFilter}
+              searchPlaceholder="Filter by assessment name..."
+              emptyMessage="No assessments found."
+            />
           </div>
         )}
       </div>

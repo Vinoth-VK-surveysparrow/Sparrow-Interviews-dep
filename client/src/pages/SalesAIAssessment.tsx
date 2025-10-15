@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRoute, useLocation } from 'wouter';
-import { Button } from '@/components/ui/button';
+import { Button, CircleLoader } from "@sparrowengg/twigs-react";
 import { Home, Mic, MicOff, Square, Settings as SettingsIcon, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchGeminiApiKey } from '@/services/geminiApiService';
@@ -163,7 +163,7 @@ interface SalesAIAssessmentContentProps {
 
 // AI Robot SVG Component
 const AIRobotIcon = () => (
-  <svg width="80" height="80" viewBox="0 0 149 149" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg width="120" height="120" viewBox="0 0 149 149" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M148.66 74.5009C148.66 115.493 115.429 148.724 74.4364 148.724C33.4439 148.724 0.212891 115.493 0.212891 74.5009C0.212891 33.5084 33.4439 0.277344 74.4364 0.277344C115.429 0.277344 148.66 33.5084 148.66 74.5009Z" fill="#7400F9"/>
     <path fillRule="evenodd" clipRule="evenodd" d="M89.9216 75.9134C86.0908 77.4625 81.9558 78.4179 77.6309 78.6654C76.885 78.7081 76.1335 78.7298 75.377 78.7298C74.6204 78.7298 73.8689 78.7081 73.123 78.6654C68.7971 78.4178 64.6611 77.462 60.8296 75.9123C52.7888 72.6602 46.0887 66.7925 41.7871 59.3659C48.4919 47.7901 61.0238 40.002 75.377 40.002C89.7301 40.002 102.262 47.7901 108.967 59.3659C104.665 66.7934 97.9636 72.6615 89.9216 75.9134Z" fill="white"/>
     <path d="M60.8292 78.9257C59.9029 78.5511 58.9944 78.1417 58.1052 77.6992C55.2157 79.7321 52.773 82.2641 50.9336 85.1527C54.06 90.0627 58.9297 93.942 64.7737 96.0921C67.5585 97.1166 70.5645 97.7485 73.7085 97.9123H76.9849C80.1283 97.7486 85.6531 100.859 77.6305 108.707C83.4754 106.557 96.6331 90.0633 99.7599 85.1527C97.9257 82.2723 95.4917 79.7466 92.6129 77.7166C91.7341 78.1528 90.8363 78.5568 89.9212 78.9268C86.0905 80.4759 81.9554 81.4313 77.6305 81.6788C76.8847 81.7215 76.1331 81.7431 75.3766 81.7431C74.62 81.7431 73.8685 81.7215 73.1226 81.6788C68.7967 81.4312 64.6607 80.4754 60.8292 78.9257Z" fill="white"/>
@@ -175,6 +175,36 @@ const AIRobotIcon = () => (
     <ellipse cx="83.8503" cy="88.7011" rx="2.12568" ry="2.12295" fill="#162550"/>
   </svg>
 );
+
+// SiriOrb Component for animated background
+interface SiriOrbProps {
+  size?: string
+  className?: string
+  isSpeaking?: boolean
+}
+const SiriOrb: React.FC<SiriOrbProps> = ({
+  size = "400px",
+  className,
+  isSpeaking = false,
+}) => {
+  const sizeValue = parseInt(size.replace("px", ""), 10)
+  const blurAmount = Math.max(sizeValue * 0.08, 8)
+  const contrastAmount = Math.max(sizeValue * 0.003, 1.8)
+
+  return (
+    <div
+      className={`siri-orb ${isSpeaking ? 'speaking' : 'idle'} ${className || ''}`}
+      style={
+        {
+          width: size,
+          height: size,
+          '--blur-amount': `${blurAmount}px`,
+          '--contrast-amount': contrastAmount,
+        } as React.CSSProperties
+      }
+    />
+  )
+}
 
 const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ assessmentId }) => {
   const [, setLocation] = useLocation();
@@ -567,14 +597,16 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     };
   }, [hasStarted, timeLeft]);
 
-
-
   // Format time for display
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Calculate progress percentage
+  const progressPercentage = ((assessmentTimeLimit - timeLeft) / assessmentTimeLimit) * 100;
+
 
   // Start dual recording function
   const startDualRecording = async () => {
@@ -774,8 +806,6 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     return false;
   };
 
-  // Calculate progress percentage
-  const progressPercentage = ((assessmentTimeLimit - timeLeft) / assessmentTimeLimit) * 100;
 
   const handleStartClick = async () => {
     if (!hasStarted && !startButtonClicked) {
@@ -905,20 +935,21 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   // Show start interface before beginning assessment
   if (!hasStarted) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
-          {/* Home Button */}
-          <div className="flex justify-start">
-            <Button
-              onClick={goHome}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <Home className="h-4 w-4" />
-              Back
-            </Button>
-          </div>
+      <div>
+        {/* Back Button - Left aligned */}
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <Button
+            onClick={goHome}
+            variant="secondary"
+            size="sm"
+            leftIcon={<Home className="h-4 w-4" />}
+          >
+            Back
+          </Button>
+        </div>
+
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="space-y-8">
 
           <div className="text-center">
             <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-2">
@@ -1205,10 +1236,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
                   Loading...
                 </>
               ) : startButtonClicked ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Starting...
-                </>
+                <CircleLoader size="xl" />
               ) : (
                 <>
                   <Mic className="w-5 h-5 mr-2" />
@@ -1218,7 +1246,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             </button>
           </div>
         </div>
-      </main>
+        </main>
+      </div>
     );
   }
 
@@ -1259,7 +1288,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             />
             <circle
               className="progress-ring-circle"
-              stroke="#6366f1"
+              stroke="#4A9CA6"
               strokeWidth="8"
               fill="transparent"
               r="52"
@@ -1319,14 +1348,9 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         {/* AI Robot Container - Left */}
         <div className="video-participant">
           <div className="video-circle ai-circle">
+            <SiriOrb size="400px" isSpeaking={isModelSpeaking} />
             <div className="ai-robot-container">
               <AIRobotIcon />
-              <div className="audio-pulse-container">
-                <AudioPulse 
-                  volume={volume} 
-                  speaking={isModelSpeaking}
-                />
-              </div>
             </div>
           </div>
           <span className="participant-label">
@@ -1404,7 +1428,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         __html: `
           .video-assessment-area {
             min-height: 100vh;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: #1C1C1C;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -1477,15 +1501,16 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           .time-remaining {
             font-size: 1.25rem;
             font-weight: 700;
-            color: #1f2937;
+            color: #ffffff;
             line-height: 1;
           }
 
           .timer-label {
             font-size: 0.75rem;
-            color: #6b7280;
+            color: #d1d5db;
             margin-top: 2px;
           }
+
 
           .video-containers {
             display: flex;
@@ -1503,8 +1528,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           }
 
           .video-circle {
-            width: 320px;
-            height: 320px;
+            width: 400px;
+            height: 400px;
             border-radius: 50%;
             overflow: hidden;
             position: relative;
@@ -1514,9 +1539,127 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           }
 
           .ai-circle {
-            background: rgba(116, 75, 162, 0.8);
-            backdrop-filter: blur(10px);
-            border: 3px solid rgba(255, 255, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+            border-radius: 50%;
+            background: #242424;
+            border: none;
+          }
+
+          .siri-orb {
+            position: absolute;
+            top: 0;
+            left: 0;
+            border-radius: 50%;
+            transition: opacity 0.3s ease;
+            background:
+              conic-gradient(
+                from calc(var(--angle, 0deg) * 1.2) at 30% 65%,
+                oklch(75% 0.15 350) 0deg,
+                transparent 45deg 315deg,
+                oklch(75% 0.15 350) 360deg
+              ),
+              conic-gradient(
+                from calc(var(--angle, 0deg) * 0.8) at 70% 35%,
+                oklch(80% 0.12 200) 0deg,
+                transparent 60deg 300deg,
+                oklch(80% 0.12 200) 360deg
+              ),
+              conic-gradient(
+                from calc(var(--angle, 0deg) * -1.5) at 65% 75%,
+                oklch(78% 0.14 280) 0deg,
+                transparent 90deg 270deg,
+                oklch(78% 0.14 280) 360deg
+              ),
+              conic-gradient(
+                from calc(var(--angle, 0deg) * 2.1) at 25% 25%,
+                oklch(80% 0.12 200) 0deg,
+                transparent 30deg 330deg,
+                oklch(80% 0.12 200) 360deg
+              ),
+              conic-gradient(
+                from calc(var(--angle, 0deg) * -0.7) at 80% 80%,
+                oklch(78% 0.14 280) 0deg,
+                transparent 45deg 315deg,
+                oklch(78% 0.14 280) 360deg
+              ),
+              radial-gradient(
+                ellipse 120% 80% at 40% 60%,
+                oklch(75% 0.15 350) 0%,
+                transparent 50%
+              );
+            filter: blur(var(--blur-amount, 8px)) contrast(var(--contrast-amount, 1.8)) saturate(1.2);
+            transform: translateZ(0);
+            will-change: transform;
+          }
+
+          .siri-orb.idle {
+            animation: rotate-idle 30s linear infinite;
+            opacity: 0.6;
+          }
+
+          .siri-orb.speaking {
+            animation: rotate-speaking 8s linear infinite, pulse 1.5s ease-in-out infinite;
+            opacity: 1;
+          }
+
+          .siri-orb::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: radial-gradient(
+              circle at 45% 55%,
+              rgba(255, 255, 255, 0.1) 0%,
+              rgba(255, 255, 255, 0.05) 30%,
+              transparent 60%
+            );
+            mix-blend-mode: overlay;
+          }
+
+          @keyframes rotate-idle {
+            from {
+              --angle: 0deg;
+            }
+            to {
+              --angle: 360deg;
+            }
+          }
+
+          @keyframes rotate-speaking {
+            0% {
+              --angle: 0deg;
+              transform: scale(1);
+            }
+            50% {
+              --angle: 180deg;
+              transform: scale(1.05);
+            }
+            100% {
+              --angle: 360deg;
+              transform: scale(1);
+            }
+          }
+
+          @keyframes pulse {
+            0%, 100% {
+              opacity: 0.8;
+            }
+            50% {
+              opacity: 1;
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .siri-orb.idle {
+              animation: none;
+            }
+            .siri-orb.speaking {
+              animation: none;
+            }
           }
 
           .video-box {
@@ -1540,12 +1683,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 1rem;
-          }
-
-          .audio-pulse-container {
-            width: 100px;
-            height: 40px;
+            justify-content: flex-start;
+            padding-top: 40px;
           }
 
           .user-video {
@@ -1654,13 +1793,6 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
               padding: 1rem;
             }
 
-            .timer-container {
-              position: relative;
-              top: auto;
-              left: auto;
-              transform: none;
-              margin-bottom: 2rem;
-            }
           }
         `
       }} />

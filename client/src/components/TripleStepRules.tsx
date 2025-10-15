@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Card, CardContent } from '@/components/ui/card';
 import { Target, Clock, CheckCircle, Zap, AlertTriangle, Play, Home } from 'lucide-react';
 import { useLocation } from 'wouter';

@@ -1,0 +1,17 @@
+/* Admin Table Dark Theme Overrides */
+
+.admin-table-header th {
+  color: #B3B3B3 !important;
+}
+
+.dark .admin-table-header th {
+  color: #B3B3B3 !important;
+}
+
+.admin-table-header th span {
+  color: #B3B3B3 !important;
+}
+
+.dark .admin-table-header th span {
+  color: #B3B3B3 !important;
+}

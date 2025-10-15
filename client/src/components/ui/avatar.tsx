@@ -19,11 +19,18 @@ const avatarStatusVariants = cva('flex items-center rounded-full size-2 border-2
   },
 });
 
-function Avatar({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Root>) {
-  return (
-    <AvatarPrimitive.Root data-slot="avatar" className={cn('relative flex shrink-0 size-10', className)} {...props} />
-  );
-}
+const Avatar = React.forwardRef<
+  React.ElementRef<typeof AvatarPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <AvatarPrimitive.Root
+    ref={ref}
+    data-slot="avatar"
+    className={cn('relative flex shrink-0 size-10', className)}
+    {...props}
+  />
+));
+Avatar.displayName = AvatarPrimitive.Root.displayName;
 
 function AvatarImage({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
   return (

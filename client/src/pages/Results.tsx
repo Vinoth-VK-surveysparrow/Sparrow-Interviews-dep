@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRoute, Link } from 'wouter';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { CheckCircle, ArrowRight, Home, Volume2, ChevronDown, Target } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { S3Service, Assessment } from '@/lib/s3Service';
@@ -218,15 +218,14 @@ export default function Results() {
                             <Button
                               onClick={handleNextAssessment}
                               disabled={loadingNext}
-                              className="bg-teal-600 hover:bg-teal-700 text-white"
+                              variant="secondary"
+                              rightIcon={<ArrowRight className="h-4 w-4" />}
+                              className="px-6 py-3"
                             >
                               {loadingNext ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
                               ) : (
-                                <>
-                                  Next Assessment
-                                  <ArrowRight className="ml-2 h-4 w-4" />
-                                </>
+                                "Next Assessment"
                               )}
                             </Button>
                           </div>
@@ -250,14 +249,12 @@ export default function Results() {
                       {/* Home and Dashboard buttons */}
                       <div className="flex gap-2">
                         <Link to="/">
-                          <Button variant="outline">
-                            <Home className="mr-2 h-4 w-4" />
+                          <Button variant="secondary" leftIcon={<Home className="h-4 w-4" />} className="px-6 py-3">
                             Home
                           </Button>
                         </Link>
                         <Link to="/dashboard">
-                          <Button variant="outline">
-                            <Target className="mr-2 h-4 w-4" />
+                          <Button variant="secondary" leftIcon={<Target className="h-4 w-4" />} className="px-6 py-3">
                             Rounds
                           </Button>
                         </Link>

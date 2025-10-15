@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { 
@@ -301,7 +301,7 @@ export default function AdminDashboard() {
               variant="outline"
               size="sm"
               onClick={() => setLocation('/test-selection')}
-              className="flex items-center gap-2 flex-shrink-0"
+              className="flex items-center gap-2 flex-shrink-0 px-6 py-3"
             >
               <Home className="h-4 w-4" />
               Home
@@ -354,13 +354,13 @@ export default function AdminDashboard() {
               variant="outline"
               size="sm"
               onClick={() => setLocation('/test-selection')}
-              className="flex items-center gap-2 flex-shrink-0"
+              className="flex items-center gap-2 flex-shrink-0 px-6 py-3"
             >
               <Home className="h-4 w-4" />
               Home
             </Button>
           </div>
-          
+
           <div className="flex items-center justify-center min-h-[40vh]">
             <Alert className="border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800 max-w-md">
               <AlertCircle className="h-4 w-4" />
@@ -394,7 +394,7 @@ export default function AdminDashboard() {
             variant="outline"
             size="sm"
             onClick={() => setLocation('/test-selection')}
-            className="flex items-center gap-2 flex-shrink-0"
+            className="flex items-center gap-2 flex-shrink-0 px-6 py-3"
           >
             <Home className="h-4 w-4" />
             Home
@@ -430,14 +430,15 @@ export default function AdminDashboard() {
                     <p className="order-1 text-sm font-medium md:order-none md:col-span-2">
                       {item.description}
                     </p>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="solid"
+                        color="primary"
                         size="sm"
                         onClick={() => handleViewRounds(item.test_id, item.title)}
-                        className="order-3 ml-auto w-fit gap-2 md:order-none text-xs"
+                        className="order-3 ml-auto w-fit md:order-none text-xs px-6 py-3"
+                        rightIcon={<ArrowRight className="h-3 w-3" />}
                       >
-                        <span>View Rounds</span>
-                        <ArrowRight className="h-3 w-3" />
+                        View Rounds
                       </Button>
                     </div>
                     <Separator />
@@ -459,13 +460,13 @@ export default function AdminDashboard() {
                   className="w-64"
                 />
                 <Button
-                  variant="outline"
+                  variant="solid"
+                  color="primary"
                   size="sm"
                   onClick={handleRefresh}
                   disabled={refreshing}
-                  className="flex items-center gap-2"
+                  leftIcon={<RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />}
                 >
-                  <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                   Refresh
                 </Button>
               </div>
@@ -543,12 +544,13 @@ export default function AdminDashboard() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
-                        variant="outline"
+                        variant="solid"
+                        color="primary"
                         size="sm"
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={currentPage === 1}
+                        leftIcon={<ChevronLeft className="h-4 w-4" />}
                       >
-                        <ChevronLeft className="h-4 w-4" />
                         Previous
                       </Button>
                       
@@ -571,13 +573,14 @@ export default function AdminDashboard() {
                       </div>
                       
                       <Button
-                        variant="outline"
+                        variant="solid"
+                        color="primary"
                         size="sm"
                         onClick={() => handlePageChange(currentPage + 1)}
                         disabled={currentPage === totalPages}
+                        rightIcon={<ChevronRight className="h-4 w-4" />}
                       >
                         Next
-                        <ChevronRight className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>

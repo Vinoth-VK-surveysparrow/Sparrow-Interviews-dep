@@ -1,16 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useRoute } from 'wouter';
-import { Button } from '@/components/ui/button';
+import { Button, Drawer, DrawerHeader, DrawerBody, DrawerFooter, Heading } from "@sparrowengg/twigs-react";
 import { Button as CustomButton } from '@/components/ui/button-custom';
 import { Input } from '@/components/ui/input';
-import { 
-  Table,
-  TableHeader, 
-  TableHead, 
-  TableBody, 
-  TableRow, 
-  TableCell
-} from '@/components/ui/table';
+import { AdminTable, Column } from '@/components/ui/admin-table';
 import {
   Tooltip,
   TooltipContent,
@@ -23,14 +16,8 @@ import {
   AvatarImage,
 } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft, AlertCircle, Loader2, Crown, RefreshCw, ChevronUp, ChevronDown, ArrowUpDown, CheckCircle, Users, Clock, UserCheck } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Loader2, Crown, RefreshCw, ChevronUp, ChevronDown, ArrowUpDown, CheckCircle, Users, Clock, UserCheck, ChevronLeft, ChevronRight, Play, Pause, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -38,6 +25,185 @@ import { useClarity } from '@/hooks/useClarity';
 import { S3Service, AssessmentUsersResponse, AssessmentUser, AssessmentSummary } from '@/lib/s3Service';
 import { AuthenticatedAdminApiService } from '@/lib/authenticatedApiService';
 import { Progress, ProgressCircle } from '@/components/ui/progress-custom';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { motion, AnimatePresence } from 'framer-motion';
+
+// Interfaces for User Answers
+interface Question {
+  question_id: string;
+  question_text: string;
+  question_order: number;
+  original_id: string;
+}
+
+interface ImageData {
+  filename: string;
+  url: string;
+  size: number;
+  key: string;
+}
+
+interface Interaction {
+  question: string;
+  question_id: string;
+  start_time: string;
+  end_time: string;
+  duration_seconds: number;
+}
+
+interface AnswerResponse {
+  status: string;
+  message: string;
+  data: {
+    audio_url: string;
+    audio_filename: string;
+    audio_size: number;
+    questions: {
+      user_email: string;
+      assessment_id: string;
+      fetched_at: string;
+      questions: Question[];
+    };
+    images: ImageData[];
+    image_count: number;
+    logs: {
+      user_email: string;
+      assessment_id: string;
+      uploaded_at: string;
+      logs: {
+        session_start: string;
+        user_agent: string;
+        interactions: Interaction[];
+        performance_metrics: {
+          recording_duration: number;
+        };
+      };
+    };
+  };
+}
+
+// Custom Audio Player component
+const CustomAudioPlayer = ({
+  src,
+}: {
+  src: string;
+}) => {
+  const audioRef = React.useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isAudioReady, setIsAudioReady] = useState(false);
+
+
+  const togglePlayPause = () => {
+    if (!audioRef.current) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleTimeUpdate = () => {
+    if (!audioRef.current) return;
+    const current = audioRef.current.currentTime;
+    const total = audioRef.current.duration;
+    setCurrentTime(current);
+    setProgress((current / total) * 100);
+  };
+
+  const handleLoadedMetadata = () => {
+    if (!audioRef.current) return;
+    setDuration(audioRef.current.duration);
+    setIsAudioReady(true);
+  };
+
+  const handleSeek = (percentage: number) => {
+    if (!audioRef.current || !isFinite(duration)) return;
+    const newTime = (percentage / 100) * duration;
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+    setProgress(percentage);
+  };
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  React.useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('ended', () => setIsPlaying(false));
+      audio.addEventListener('play', () => setIsPlaying(true));
+      audio.addEventListener('pause', () => setIsPlaying(false));
+
+      return () => {
+        audio.removeEventListener('timeupdate', handleTimeUpdate);
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('ended', () => setIsPlaying(false));
+        audio.removeEventListener('play', () => setIsPlaying(true));
+        audio.removeEventListener('pause', () => setIsPlaying(false));
+      };
+    }
+  }, [src]);
+
+  return (
+    <div className="space-y-2">
+      <audio ref={audioRef} src={src} preload="metadata" />
+
+      {/* Audio Controls - Play button on left, seeker on right */}
+      <div className="flex items-center space-x-4">
+        <Button
+          variant="solid"
+          color="primary"
+          size="sm"
+          onClick={togglePlayPause}
+          disabled={!isAudioReady}
+          className="px-3 py-2 flex-shrink-0"
+        >
+          {isPlaying ? (
+            <Pause className="h-4 w-4" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
+        </Button>
+
+        {/* Progress Bar */}
+        <div className="flex-1">
+          <div
+            className="relative w-full h-2 bg-gray-600 rounded-full cursor-pointer"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const percentage = (x / rect.width) * 100;
+              handleSeek(percentage);
+            }}
+          >
+            <motion.div
+              className="absolute top-0 left-0 h-full bg-teal-500 rounded-full"
+              style={{ width: `${progress}%` }}
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            />
+          </div>
+        </div>
+
+        {/* Current Time */}
+        <div className="text-sm text-gray-300 flex-shrink-0">
+          {formatTime(currentTime)}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // SurveySparrow logo component
 const SparrowIcon = () => (
@@ -50,13 +216,6 @@ const SparrowIcon = () => (
   </svg>
 );
 
-const allColumns = [
-  "User",
-  "Email",
-  "Test ID",
-  "Completed At",
-  "Status",
-] as const;
 
 export default function AssessmentUsers() {
   const [match, params] = useRoute('/admin/assessment-users/:assessmentId');
@@ -67,7 +226,7 @@ export default function AssessmentUsers() {
   const [assessmentData, setAssessmentData] = useState<AssessmentUsersResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>([...allColumns]);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
   const [emailFilter, setEmailFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
@@ -75,9 +234,77 @@ export default function AssessmentUsers() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
+  // Table sorting state
+  const [tableSortColumn, setTableSortColumn] = useState<string>('');
+  const [tableSortDirection, setTableSortDirection] = useState<'asc' | 'desc'>('asc');
+
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
-  
+
+  // Drawer state for user answers
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AssessmentUser | null>(null);
+  const [userAnswers, setUserAnswers] = useState<AnswerResponse | null>(null);
+  const [loadingUserAnswers, setLoadingUserAnswers] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Function to fetch user answers for the drawer
+  const fetchUserAnswers = async (userEmail: string) => {
+    try {
+      setLoadingUserAnswers(true);
+      console.log('🔍 AssessmentUsers: Fetching user answers with Firebase auth');
+
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const data: AnswerResponse = await AuthenticatedApiService.getUserAnswers({
+        user_email: userEmail,
+        assessment_id: params?.assessmentId || '',
+      });
+      setUserAnswers(data);
+      setCurrentImageIndex(0); // Reset to first image
+
+    } catch (err) {
+      console.error('Error fetching user answers:', err);
+      toast({
+        title: "Error",
+        description: "Failed to load user answers",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingUserAnswers(false);
+    }
+  };
+
+  // Get question duration from interactions
+  const getQuestionDuration = (questionId: string): number | null => {
+    if (!userAnswers?.data?.logs?.logs?.interactions) return null;
+
+    const interaction = userAnswers.data.logs.logs.interactions.find(
+      (interaction: Interaction) => interaction.question_id === questionId
+    );
+
+    return interaction ? interaction.duration_seconds : null;
+  };
+
+  // Format duration for display
+  const formatDuration = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+  };
+
+  // Handle user row click - open drawer instead of navigating
+  const handleUserClick = async (userRecord: AssessmentUser) => {
+    if (userRecord.status === 'completed') {
+      setSelectedUser(userRecord);
+      setIsDrawerOpen(true);
+      await fetchUserAnswers(userRecord.user_email);
+    } else {
+      toast({
+        description: "User has not completed the assessment yet",
+      });
+    }
+  };
+
   // Microsoft Clarity tracking
   const { trackPageView, trackUserAction, setUserId, setTag } = useClarity(true, 'Assessment Users');
 
@@ -132,6 +359,16 @@ export default function AssessmentUsers() {
     }
   };
 
+  // Table sorting function
+  const handleTableSort = (column: string) => {
+    if (tableSortColumn === column) {
+      setTableSortDirection(tableSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setTableSortColumn(column);
+      setTableSortDirection('asc');
+    }
+  };
+
   // Get sorted and filtered users
   const processedUsers = useMemo(() => {
     if (!assessmentData?.users) return [];
@@ -143,7 +380,17 @@ export default function AssessmentUsers() {
       return emailMatch && statusMatch;
     });
 
-    // Then sort
+    // Default sort: Show completed users first
+    filtered = filtered.sort((a, b) => {
+      // Completed users come first
+      if (a.status === 'completed' && b.status !== 'completed') return -1;
+      if (a.status !== 'completed' && b.status === 'completed') return 1;
+
+      // If both are completed or both are not, maintain current order
+      return 0;
+    });
+
+    // Then apply existing sort on top of the default completed-first sorting
     if (sortField) {
       filtered = filtered.sort((a, b) => {
         let aValue: any = a[sortField as keyof AssessmentUser];
@@ -167,8 +414,32 @@ export default function AssessmentUsers() {
       });
     }
 
+    // Apply table column sorting
+    if (tableSortColumn) {
+      filtered = filtered.sort((a, b) => {
+        let aValue: any = a[tableSortColumn as keyof AssessmentUser];
+        let bValue: any = b[tableSortColumn as keyof AssessmentUser];
+
+        // Handle null values
+        if (tableSortColumn === 'completed_at') {
+          aValue = aValue || '';
+          bValue = bValue || '';
+        }
+
+        // Convert to strings for comparison
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+
+        if (tableSortDirection === 'asc') {
+          return aStr.localeCompare(bStr);
+        } else {
+          return bStr.localeCompare(aStr);
+        }
+      });
+    }
+
     return filtered;
-  }, [assessmentData?.users, emailFilter, statusFilter, sortField, sortDirection]);
+  }, [assessmentData?.users, emailFilter, statusFilter, sortField, sortDirection, tableSortColumn, tableSortDirection]);
 
   const toggleColumn = (col: string) => {
     setVisibleColumns((prev) =>
@@ -198,6 +469,86 @@ export default function AssessmentUsers() {
       minute: '2-digit'
     });
   };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'bg-green-500 text-white';
+      case 'started':
+      case 'in_progress':
+        return 'bg-yellow-500 text-white';
+      case 'not_started':
+        return 'bg-red-400 text-white';
+      case 'pending':
+        return 'bg-blue-400 text-white';
+      default:
+        return 'bg-gray-500 text-white';
+    }
+  };
+
+  const allColumns: Column[] = [
+    {
+      key: "user",
+      label: "User",
+      width: "200px",
+      render: (value, row) => {
+        const { displayName, initials, avatarUrl } = getUserDisplayInfo(row.user_email);
+        return (
+          <div className="flex items-center gap-3">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Avatar className="h-8 w-8 hover:z-10">
+                    <AvatarImage src={avatarUrl} alt={displayName} />
+                    <AvatarFallback>{initials}</AvatarFallback>
+                  </Avatar>
+                </TooltipTrigger>
+                <TooltipContent className="text-sm">
+                  <p className="font-semibold">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">{row.user_email}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <span>{displayName}</span>
+          </div>
+        );
+      }
+    },
+    {
+      key: "user_email",
+      label: "Email",
+      width: "250px"
+    },
+    {
+      key: "test_id",
+      label: "Test ID",
+      width: "150px"
+    },
+    {
+      key: "completed_at",
+      label: "Completed At",
+      width: "180px",
+      render: (value) => value ? formatDate(value) : 'Not completed'
+    },
+    {
+      key: "status",
+      label: "Status",
+      width: "100px",
+      sortable: true,
+      render: (value) => (
+        <Badge className={getStatusColor(value)}>
+          {value}
+        </Badge>
+      )
+    }
+  ];
+
+  const allColumnKeys = allColumns.map(col => col.key);
+
+  // Initialize visible columns
+  useEffect(() => {
+    setVisibleColumns([...allColumnKeys]);
+  }, []);
 
   // Refresh data function
   const handleRefresh = async () => {
@@ -253,11 +604,12 @@ export default function AssessmentUsers() {
               {/* Left side - Back button and Assessment info */}
               <div className="flex items-start gap-4">
                 <Button
-                  variant="outline"
+                  variant="solid"
+                  color="primary"
                   onClick={() => window.history.back()}
-                  className="flex items-center gap-2 h-10 w-10 p-0 mt-1"
+                  className="h-10 w-10 p-0 mt-1"
+                  leftIcon={<ArrowLeft className="h-4 w-4" />}
                 >
-                  <ArrowLeft className="h-4 w-4" />
                 </Button>
 
                 <div className="flex-1">
@@ -358,16 +710,9 @@ export default function AssessmentUsers() {
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="container my-10 space-y-4 p-4 border border-border rounded-lg bg-background shadow-sm overflow-x-auto">
-            {/* Filters and Controls */}
+          <div className="container my-10 space-y-4 p-4 border border-border rounded-lg bg-background shadow-sm">
             <div className="flex flex-wrap gap-4 items-center justify-between mb-6">
               <div className="flex gap-2 flex-wrap">
-                <Input
-                  placeholder="Filter by email..."
-                  value={emailFilter}
-                  onChange={(e) => setEmailFilter(e.target.value)}
-                  className="w-48"
-                />
                 <Input
                   placeholder="Filter by status..."
                   value={statusFilter}
@@ -375,154 +720,174 @@ export default function AssessmentUsers() {
                   className="w-48"
                 />
               </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      Columns
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-48">
-                    {allColumns.map((col) => (
-                      <DropdownMenuCheckboxItem
-                        key={col}
-                        checked={visibleColumns.includes(col)}
-                        onCheckedChange={() => toggleColumn(col)}
-                      >
-                        {col}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
             </div>
 
             {/* Users Table */}
-            <Table className="w-full">
-              <TableHeader>
-                <TableRow>
-                  {visibleColumns.includes("User") && <TableHead className="w-[200px]">User</TableHead>}
-                  {visibleColumns.includes("Email") && <TableHead className="w-[250px]">Email</TableHead>}
-                  {visibleColumns.includes("Test ID") && <TableHead className="w-[150px]">Test ID</TableHead>}
-                  {visibleColumns.includes("Completed At") && <TableHead className="w-[180px]">Completed At</TableHead>}
-                  {visibleColumns.includes("Status") && (
-                    <TableHead className="w-[100px]">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSort('status')}
-                        className="h-auto p-0 font-medium hover:bg-transparent"
-                      >
-                        Status
-                        {sortField === 'status' ? (
-                          sortDirection === 'asc' ? (
-                            <ChevronUp className="ml-1 h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="ml-1 h-4 w-4" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="ml-1 h-4 w-4 opacity-50" />
-                        )}
-                      </Button>
-                    </TableHead>
-                  )}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {processedUsers.length ? (
-                  processedUsers.map((userRecord, index) => {
-                    const { displayName, initials, avatarUrl } = getUserDisplayInfo(userRecord.user_email);
-                    
-                    return (
-                      <TableRow
-                        key={`${userRecord.user_email}-${index}`}
-                        className="cursor-pointer hover:bg-[#333333] hover:shadow-sm hover:scale-[1.01] transition-all duration-200 ease-in-out border-l-2 hover:border-l-blue-500"
-                        onClick={() => {
-                          if (userRecord.status === 'completed') {
-                            setLocation(`/admin/user-answers/${encodeURIComponent(userRecord.user_email)}/${encodeURIComponent(params?.assessmentId || '')}`);
-                          } else {
-                            toast({
-                              description: "User has not completed the assessment yet",
-                            });
-                          }
-                        }}
-                      >
-                        {visibleColumns.includes("User") && (
-                          <TableCell className="font-medium whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Avatar className="h-8 w-8 hover:z-10">
-                                      <AvatarImage src={avatarUrl} alt={displayName} />
-                                      <AvatarFallback>{initials}</AvatarFallback>
-                                    </Avatar>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="text-sm">
-                                    <p className="font-semibold">{displayName}</p>
-                                    <p className="text-xs text-muted-foreground">{userRecord.user_email}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <span>{displayName}</span>
-                            </div>
-                          </TableCell>
-                        )}
-                        {visibleColumns.includes("Email") && (
-                          <TableCell className="whitespace-nowrap">
-                            {userRecord.user_email}
-                          </TableCell>
-                        )}
-                        {visibleColumns.includes("Test ID") && (
-                          <TableCell className="whitespace-nowrap">
-                            {userRecord.test_id}
-                          </TableCell>
-                        )}
-                        {visibleColumns.includes("Completed At") && (
-                          <TableCell className="whitespace-nowrap">
-                            {userRecord.completed_at ? formatDate(userRecord.completed_at) : 'Not completed'}
-                          </TableCell>
-                        )}
-                        {visibleColumns.includes("Status") && (
-                          <TableCell className="whitespace-nowrap">
-                            <Badge
-                              className={cn(
-                                "whitespace-nowrap",
-                                userRecord.status === "completed" && "bg-green-500 text-white",
-                                userRecord.status === "in_progress" && "bg-yellow-500 text-white",
-                                userRecord.status === "not_started" && "bg-red-400 text-white",
-                                userRecord.status === "pending" && "bg-blue-400 text-white",
-                              )}
-                            >
-                              {userRecord.status === "not_started" ? "Not Completed" : userRecord.status}
-                            </Badge>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={visibleColumns.length} className="text-center py-6">
-                      No users found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <AdminTable
+              columns={allColumns}
+              data={processedUsers}
+              visibleColumns={visibleColumns}
+              onToggleColumn={toggleColumn}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+              searchValue={emailFilter}
+              onSearchChange={setEmailFilter}
+              searchPlaceholder="Filter by email..."
+              emptyMessage="No users found."
+              sortColumn={tableSortColumn}
+              sortDirection={tableSortDirection}
+              onSort={handleTableSort}
+              onRowClick={handleUserClick}
+              rowClassName="hover:bg-[#333333] hover:shadow-sm hover:scale-[1.01] transition-all duration-200 ease-in-out border-l-2 hover:border-l-blue-500"
+            />
           </div>
         )}
+
+        {/* User Answers Drawer */}
+        <Drawer
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+        >
+          <DrawerHeader className="bg-card border-b border-border">
+            <Heading size="h4" className="text-foreground text-xs">
+              {selectedUser?.user_email} - Assessment Answers
+            </Heading>
+          </DrawerHeader>
+          <DrawerBody className="bg-background">
+            {loadingUserAnswers ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                <span className="ml-2 text-gray-600 dark:text-gray-300">Loading answers...</span>
+              </div>
+            ) : userAnswers && userAnswers.data ? (
+              <div className="space-y-6">
+                {/* Questions Section */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    Questions ({userAnswers.data.questions?.questions?.length || 0})
+                  </h3>
+                  <Accordion type="single" collapsible className="w-full">
+                    {userAnswers.data.questions?.questions?.map((question, index) => {
+                      const duration = getQuestionDuration(question.question_id);
+                      return (
+                        <AccordionItem
+                          key={question.question_id}
+                          value={question.question_id}
+                        >
+                          <AccordionTrigger>
+                            <div className="flex items-start gap-3 text-left">
+                              <Badge variant="secondary" className="text-xs mt-0.5">
+                                Q{question.question_order}
+                              </Badge>
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900 dark:text-white leading-relaxed">
+                                  {question.question_text}
+                                </p>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                              <Clock className="h-4 w-4" />
+                              <span>
+                                Time taken: {duration ? formatDuration(duration) : 'Not available'}
+                              </span>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    }) || (
+                      <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+                        No questions found.
+                      </div>
+                    )}
+                  </Accordion>
+                </div>
+
+                {/* Images Section */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    Screenshots ({userAnswers.data.image_count || 0})
+                  </h3>
+                  {userAnswers.data.images && userAnswers.data.images.length > 0 ? (
+                    <div className="space-y-4">
+                      {/* Image Navigation */}
+                      <div className="flex items-center justify-between">
+                        <Button
+                          variant="solid"
+                          color="primary"
+                          size="sm"
+                          onClick={() => setCurrentImageIndex(Math.max(0, currentImageIndex - 1))}
+                          disabled={currentImageIndex === 0}
+                          leftIcon={<ChevronLeft className="h-4 w-4" />}
+                        >
+                          Previous
+                        </Button>
+                        <span className="text-sm text-gray-600 dark:text-gray-300">
+                          {currentImageIndex + 1} of {userAnswers.data.images.length}
+                        </span>
+                        <Button
+                          variant="solid"
+                          color="primary"
+                          size="sm"
+                          onClick={() => setCurrentImageIndex(Math.min(userAnswers.data.images.length - 1, currentImageIndex + 1))}
+                          disabled={currentImageIndex === userAnswers.data.images.length - 1}
+                          rightIcon={<ChevronRight className="h-4 w-4" />}
+                        >
+                          Next
+                        </Button>
+                      </div>
+
+                      {/* Current Image */}
+                      <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                        <img
+                          src={userAnswers.data.images[currentImageIndex]?.url}
+                          alt={`Screenshot ${currentImageIndex + 1}`}
+                          className="w-full h-auto max-h-96 object-contain bg-gray-50 dark:bg-gray-800"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = '/user.png'; // Fallback image
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      No screenshots available.
+                    </div>
+                  )}
+                </div>
+
+                {/* Audio Section */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    Audio Recording
+                  </h3>
+                  {userAnswers.data.audio_url ? (
+                    <CustomAudioPlayer src={userAnswers.data.audio_url} />
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      No audio recording available.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                Failed to load user answers.
+              </div>
+            )}
+          </DrawerBody>
+          <DrawerFooter className="bg-card border-t border-border">
+            <Button
+              variant="solid"
+              color="primary"
+              onClick={() => setIsDrawerOpen(false)}
+            >
+              Close
+            </Button>
+          </DrawerFooter>
+        </Drawer>
       </div>
     </main>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { CircularTimer } from '@/components/CircularTimer';
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';

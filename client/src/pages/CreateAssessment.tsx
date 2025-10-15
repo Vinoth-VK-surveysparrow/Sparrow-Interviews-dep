@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLocation } from 'wouter';
 import { API_ENDPOINTS, API_CONFIG } from '@/config/api';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,7 @@ import {
   StepperPanel,
   StepperSeparator
 } from '@/components/ui/stepper';
-import { Plus, Trash2, Check, ChevronRight, FileText, Users, Send, Loader2, Edit, Save, X, Clock, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Check, ChevronLeft, ChevronRight, FileText, Users, Send, Loader2, Edit, Save, X, Clock, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
@@ -1213,7 +1213,7 @@ export default function CreateAssessment() {
                                 <Button
                                   type="button"
                                   variant="ghost"
-                                  size="sm"
+                                  size="md"
                                   onClick={handleGenerateAssessmentId}
                                   disabled={assessmentIdLoading}
                                   className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 hover:bg-muted"
@@ -1491,8 +1491,8 @@ export default function CreateAssessment() {
                       <DialogTrigger asChild>
                         <Button
                           variant="outline"
-                          size="icon"
-                          className="rounded-full"
+                          size="sm"
+                          className="rounded-full w-10 h-10 p-0"
                           onClick={() => setManualAddOpen(true)}
                         >
                           <Plus className="h-4 w-4" />
@@ -1526,9 +1526,10 @@ export default function CreateAssessment() {
                             <PopoverTrigger asChild>
                               <Button
                                 variant="outline"
-                                className="w-full justify-start text-left font-normal"
+                                size="md"
+                                        className="w-full min-w-[280px] justify-start text-left font-normal"
+                                leftIcon={<Clock className="h-4 w-4" />}
                               >
-                                <Clock className="mr-2 h-4 w-4" />
                                 {newUserStartDate ? safeFormatDate(newUserStartDate, "PPP hh:mm:ss a") : "Pick start date & time"}
                               </Button>
                             </PopoverTrigger>
@@ -1587,9 +1588,10 @@ export default function CreateAssessment() {
                             <PopoverTrigger asChild>
                               <Button
                                 variant="outline"
-                                className="w-full justify-start text-left font-normal"
+                                size="md"
+                                        className="w-full min-w-[280px] justify-start text-left font-normal"
+                                leftIcon={<Clock className="h-4 w-4" />}
                               >
-                                <Clock className="mr-2 h-4 w-4" />
                                 {newUserEndDate ? safeFormatDate(newUserEndDate, "PPP hh:mm:ss a") : "Pick end date & time"}
                               </Button>
                             </PopoverTrigger>
@@ -1662,6 +1664,7 @@ export default function CreateAssessment() {
                         <div className="flex gap-2 pt-4">
                           <Button
                             variant="outline"
+                            size="sm"
                             onClick={() => setManualAddOpen(false)}
                             className="flex-1"
                           >
@@ -1669,9 +1672,10 @@ export default function CreateAssessment() {
                           </Button>
                           <Button
                             onClick={handleManualAddUser}
+                            size="sm"
                             className="flex-1"
+                            leftIcon={<Plus className="h-4 w-4" />}
                           >
-                            <Plus className="h-4 w-4 mr-2" />
                             Add User
                           </Button>
                         </div>
@@ -1684,16 +1688,16 @@ export default function CreateAssessment() {
                 {structuredUsers.length > 0 && (
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold">Structured Users</h3>
-                    <div className="border border-border rounded-lg overflow-hidden">
-                      <table className="w-full">
+                    <div className="border border-border rounded-lg overflow-hidden overflow-x-auto">
+                      <table className="w-full min-w-[1080px]">
                         <thead className="bg-muted/50">
                           <tr>
-                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Email</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Start Time</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">End Time</th>
-                            <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Email</th>
-                            <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Call</th>
-                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Actions</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-[200px]">Email</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-[300px]">Start Time</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-[300px]">End Time</th>
+                            <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground w-[80px]">Email</th>
+                            <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground w-[80px]">Call</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-[120px]">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1710,15 +1714,16 @@ export default function CreateAssessment() {
                                   user.user_email
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">
+                              <td className="px-4 py-3 text-sm">
                                 {editingUser === index ? (
                                   <Popover>
                                     <PopoverTrigger asChild>
                                       <Button
                                         variant="outline"
+                                        size="md"
                                         className="w-full justify-start text-left font-normal"
+                                        leftIcon={<Clock className="h-4 w-4" />}
                                       >
-                                        <Clock className="mr-2 h-4 w-4" />
                                         {startDate ? safeFormatDate(startDate, "PPP hh:mm:ss a") : "Pick start date & time"}
                                       </Button>
                                     </PopoverTrigger>
@@ -1771,18 +1776,21 @@ export default function CreateAssessment() {
                                     </PopoverContent>
                                   </Popover>
                                 ) : (
-                                  safeFormatDate(parseISTString(user.start_time), "PPP hh:mm:ss a")
+                                  <div className="w-full justify-start text-left font-normal text-sm h-9 flex items-center px-3 py-2 border border-transparent rounded-md">
+                                    {safeFormatDate(parseISTString(user.start_time), "PPP hh:mm:ss a")}
+                                  </div>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-sm text-muted-foreground">
+                              <td className="px-4 py-3 text-sm">
                                 {editingUser === index ? (
                                   <Popover>
                                     <PopoverTrigger asChild>
                                       <Button
                                         variant="outline"
+                                        size="md"
                                         className="w-full justify-start text-left font-normal"
+                                        leftIcon={<Clock className="h-4 w-4" />}
                                       >
-                                        <Clock className="mr-2 h-4 w-4" />
                                         {endDate ? safeFormatDate(endDate, "PPP hh:mm:ss a") : "Pick end date & time"}
                                       </Button>
                                     </PopoverTrigger>
@@ -1835,7 +1843,9 @@ export default function CreateAssessment() {
                                     </PopoverContent>
                                   </Popover>
                                 ) : (
-                                  safeFormatDate(parseISTString(user.end_time), "PPP hh:mm:ss a")
+                                  <div className="w-full justify-start text-left font-normal text-sm h-9 flex items-center px-3 py-2 border border-transparent rounded-md">
+                                    {safeFormatDate(parseISTString(user.end_time), "PPP hh:mm:ss a")}
+                                  </div>
                                 )}
                               </td>
                               <td className="px-4 py-3 text-center">
@@ -1871,18 +1881,18 @@ export default function CreateAssessment() {
                                   {editingUser === index ? (
                                     <>
                                       <Button
-                                        size="sm"
+                                        size="md"
                                         variant="outline"
                                         onClick={handleSaveEdit}
-                                        className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20"
+                                        className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20 focus-visible:ring-0 focus-visible:ring-offset-0"
                                       >
                                         <Check className="h-4 w-4" />
                                       </Button>
                                       <Button
-                                        size="sm"
+                                        size="md"
                                         variant="outline"
                                         onClick={handleCancelEdit}
-                                        className="h-8 w-8 p-0"
+                                        className="h-8 w-8 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                                       >
                                         <X className="h-4 w-4" />
                                       </Button>
@@ -1890,18 +1900,18 @@ export default function CreateAssessment() {
                                   ) : (
                                     <>
                                       <Button
-                                        size="sm"
+                                        size="md"
                                         variant="outline"
                                         onClick={() => handleEditUser(index)}
-                                        className="h-8 w-8 p-0"
+                                        className="h-8 w-8 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                                       >
                                         <Edit className="h-4 w-4" />
                                       </Button>
                                       <Button
-                                        size="sm"
+                                        size="md"
                                         variant="outline"
                                         onClick={() => handleDeleteUser(index)}
-                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                        className="h-8 w-8 p-0 text-destructive hover:text-destructive focus-visible:ring-0 focus-visible:ring-offset-0"
                                       >
                                         <Trash2 className="h-4 w-4" />
                                       </Button>
@@ -1923,29 +1933,37 @@ export default function CreateAssessment() {
           {/* Navigation Buttons */}
           <div className="flex justify-between items-center">
             <Button
-              variant="outline"
+              variant="solid"
+              color="primary"
+              size="sm"
               onClick={handlePrevious}
               disabled={activeStep === 1}
               className={activeStep === 1 ? 'invisible' : ''}
+              leftIcon={<ChevronLeft className="h-4 w-4" />}
             >
               Previous
             </Button>
 
             {activeStep < 3 ? (
-              <Button onClick={handleNext}>
+              <Button 
+                onClick={handleNext} 
+                variant="solid"
+                color="primary"
+                size="sm" 
+                rightIcon={<ChevronRight className="h-4 w-4" />}
+              >
                 Next
-                <ChevronRight className="h-4 w-4 ml-2" />
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={loading}>
-                {loading ? (
-                  <>Creating...</>
-                ) : (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    Create Assessment
-                  </>
-                )}
+              <Button 
+                onClick={handleSubmit} 
+                disabled={loading} 
+                variant="solid"
+                color="primary"
+                size="md"
+                leftIcon={!loading ? <Check className="h-4 w-4" /> : undefined}
+              >
+                {loading ? "Creating..." : "Create Assessment"}
               </Button>
             )}
           </div>

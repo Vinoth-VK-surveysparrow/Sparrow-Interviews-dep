@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation } from 'wouter';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Home, ArrowLeft, AlertTriangle } from 'lucide-react';
 
 export default function NotFoundPage() {
@@ -33,19 +33,21 @@ export default function NotFoundPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
-          <Button 
+          <Button
+            variant="solid"
+            color="primary"
             onClick={goHome}
-            className="flex items-center gap-2 flex-1"
+            leftIcon={<Home className="w-4 h-4" />}
+            className="flex-1 px-6 py-3"
           >
-            <Home className="w-4 h-4" />
             Go Home
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={goBack}
-            className="flex items-center gap-2 flex-1"
+            leftIcon={<ArrowLeft className="w-4 h-4" />}
+            className="flex-1"
           >
-            <ArrowLeft className="w-4 h-4" />
             Go Back
           </Button>
         </div>

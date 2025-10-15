@@ -1,17 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useRoute } from 'wouter';
 import { ArrowLeft, User, Calendar, Image, CheckCircle, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Button, Drawer, DrawerHeader, DrawerBody, DrawerFooter, Heading } from "@sparrowengg/twigs-react";
 import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { AdminTable, Column } from '@/components/ui/admin-table';
 import {
   Tooltip,
   TooltipContent,
@@ -23,17 +15,10 @@ import {
   AvatarFallback,
   AvatarImage,
 } from '@/components/ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { useCenteredToast } from '@/hooks/use-centered-toast';
 import { useClarity } from '@/hooks/useClarity';
 import { S3Service, UserDetails as UserDetailsType } from '@/lib/s3Service';
 import { AuthenticatedAdminApiService } from '@/lib/authenticatedApiService';
@@ -49,25 +34,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-// Define columns for table
-const allTestColumns = [
-  "Test ID",
-  "Status",
-  "Started",
-  "Last Updated",
-  "Completed Assessments",
-  "Images Uploaded",
-  "Clear Data",
-] as const;
-
-const allAssessmentColumns = [
-  "Assessment Name",
-  "Assessment ID",
-  "Test ID",
-  "Completed At",
-  "Images Count",
-  "Clear Data",
-] as const;
 
 export default function UserDetails() {
   const [match, params] = useRoute('/admin/user/:userEmail');
@@ -75,13 +41,15 @@ export default function UserDetails() {
   const [userDetails, setUserDetails] = useState<UserDetailsType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [visibleTestColumns, setVisibleTestColumns] = useState<string[]>([...allTestColumns]);
-  const [visibleAssessmentColumns, setVisibleAssessmentColumns] = useState<string[]>([...allAssessmentColumns]);
+  const [visibleTestColumns, setVisibleTestColumns] = useState<string[]>([]);
   const [testFilter, setTestFilter] = useState("");
-  const [assessmentFilter, setAssessmentFilter] = useState("");
   
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
+
+  // Drawer state
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedTest, setSelectedTest] = useState<any>(null);
   // Deletion loading states
   const [deletingTest, setDeletingTest] = useState<string | null>(null);
   const [deletingAssessment, setDeletingAssessment] = useState<string | null>(null);
@@ -89,7 +57,6 @@ export default function UserDetails() {
   const [deleteTestDialog, setDeleteTestDialog] = useState<{ open: boolean; testId: string; testName: string } | null>(null);
   const [deleteAssessmentDialog, setDeleteAssessmentDialog] = useState<{ open: boolean; assessmentId: string; assessmentName: string } | null>(null);
   const { toast } = useToast();
-  const { toast: centeredToast } = useCenteredToast();
   const { trackUserAction } = useClarity();
 
   // Extract user email from route parameters
@@ -119,10 +86,9 @@ export default function UserDetails() {
       });
 
       // Show loading toast
-      centeredToast({
+      toast({
         title: "Deleting...",
         description: "Removing test data and associated files...",
-        variant: "loading",
       });
 
       console.log('🔍 UserDetails: Deleting test assessments with Firebase auth');
@@ -131,10 +97,9 @@ export default function UserDetails() {
       const result = await AuthenticatedAdminApiService.deleteTestAssessments(testId, userEmail);
       console.log('Delete test assessments result:', result);
 
-      centeredToast({
+      toast({
         title: "Test Data Deleted Successfully",
         description: `Removed all assessments and files for test ${testToDelete?.test_id || testId}`,
-        variant: "success",
       });
 
       // Close the dialog
@@ -153,7 +118,7 @@ export default function UserDetails() {
         };
       });
 
-      centeredToast({
+      toast({
         title: "Deletion Failed",
         description: "Failed to delete test assessments. Data has been restored.",
         variant: "destructive",
@@ -185,46 +150,36 @@ export default function UserDetails() {
       // Optimistic update: Remove the assessment from the UI immediately
       setUserDetails(prev => {
         if (!prev) return prev;
+        const updatedTests = prev.tests.map(test => ({
+          ...test,
+          completed_assessments: test.completed_assessments?.filter((ass: any) => ass.assessment_id !== assessmentId) || [],
+          total_assessments_completed: test.total_assessments_completed - (test.completed_assessments?.find((ass: any) => ass.assessment_id === assessmentId) ? 1 : 0)
+        }));
+        
+        // Also update selectedTest if it's the one being modified
+        if (selectedTest && testContainingAssessment && selectedTest.test_id === testContainingAssessment.test_id) {
+          const updatedSelectedTest = updatedTests.find(test => test.test_id === selectedTest.test_id);
+          setSelectedTest(updatedSelectedTest || null);
+        }
+        
         return {
           ...prev,
-          tests: prev.tests.map(test => ({
-            ...test,
-            completed_assessments: test.completed_assessments?.filter((ass: any) => ass.assessment_id !== assessmentId) || [],
-            total_assessments_completed: test.total_assessments_completed - (test.completed_assessments?.find((ass: any) => ass.assessment_id === assessmentId) ? 1 : 0)
-          }))
+          tests: updatedTests
         };
       });
 
       // Show loading toast
-      centeredToast({
+      toast({
         title: "Deleting...",
         description: "Removing assessment data and associated files...",
-        variant: "loading",
       });
 
-      const adminApiUrl = import.meta.env.VITE_API_ADMIN_URL || 'https://tqqg7hko9g.execute-api.us-west-2.amazonaws.com/api';
-      const response = await fetch(`${adminApiUrl}/delete-assessment`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_email: userEmail,
-          assessment_id: assessmentId,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete assessment');
-      }
-
-      const result = await response.json();
+      const result = await AuthenticatedAdminApiService.deleteAssessment(userEmail, assessmentId);
       console.log('Delete assessment result:', result);
 
-      centeredToast({
+      toast({
         title: "Assessment Deleted Successfully",
         description: `Removed assessment ${assessmentToDelete?.assessment_name || assessmentId} and associated files`,
-        variant: "success",
       });
 
       // Close the dialog
@@ -241,8 +196,13 @@ export default function UserDetails() {
           tests: originalTests
         };
       });
+      
+      // Also restore selectedTest if it was being modified
+      if (selectedTest && testContainingAssessment && selectedTest.test_id === testContainingAssessment.test_id) {
+        setSelectedTest(testContainingAssessment);
+      }
 
-      centeredToast({
+      toast({
         title: "Deletion Failed",
         description: "Failed to delete assessment. Data has been restored.",
         variant: "destructive",
@@ -258,6 +218,11 @@ export default function UserDetails() {
 
   const handleDeleteAssessment = (assessmentId: string, assessmentName: string) => {
     setDeleteAssessmentDialog({ open: true, assessmentId, assessmentName });
+  };
+
+  const handleTestRowClick = (test: any) => {
+    setSelectedTest(test);
+    setIsDrawerOpen(true);
   };
 
   const confirmDeleteTest = async () => {
@@ -309,13 +274,6 @@ export default function UserDetails() {
     );
   };
 
-  const toggleAssessmentColumn = (col: string) => {
-    setVisibleAssessmentColumns((prev) =>
-      prev.includes(col)
-        ? prev.filter((c) => c !== col)
-        : [...prev, col]
-    );
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -348,6 +306,70 @@ export default function UserDetails() {
         return 'bg-gray-500 text-white';
     }
   };
+
+  // Test columns definition
+  const allTestColumns: Column[] = [
+    {
+      key: "test_id",
+      label: "Test ID",
+      width: "150px"
+    },
+    {
+      key: "status",
+      label: "Status",
+      width: "100px",
+      render: (value) => (
+        <Badge className={getStatusColor(value)}>
+          {value}
+        </Badge>
+      )
+    },
+    {
+      key: "started_at",
+      label: "Started",
+      width: "180px",
+      render: (value) => formatDate(value)
+    },
+    {
+      key: "last_updated",
+      label: "Last Updated",
+      width: "180px",
+      render: (value) => formatDate(value)
+    },
+    {
+      key: "total_assessments_completed",
+      label: "Completed Assessments",
+      width: "150px"
+    },
+    {
+      key: "total_images_uploaded",
+      label: "Images Uploaded",
+      width: "120px"
+    },
+    {
+      key: "clear_data",
+      label: "Clear Data",
+      width: "100px",
+      render: (value, row) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleDeleteTest(row.test_id, row.test_id)}
+          disabled={deletingTest === row.test_id}
+          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )
+    }
+  ];
+
+  const allTestColumnKeys = allTestColumns.map(col => col.key);
+
+  // Initialize visible columns
+  useEffect(() => {
+    setVisibleTestColumns([...allTestColumnKeys]);
+  }, []);
 
   // Refresh data function
   const handleRefresh = async () => {
@@ -434,11 +456,12 @@ export default function UserDetails() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">
           <Button 
-            variant="outline" 
+            variant="solid"
+            color="primary"
             onClick={handleBack}
-            className="flex items-center gap-2"
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
           >
-            <ArrowLeft className="h-4 w-4" />
+            Back
           </Button>
           
           <Alert variant="destructive">
@@ -458,11 +481,12 @@ export default function UserDetails() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">
           <Button 
-            variant="outline" 
+            variant="solid"
+            color="primary"
             onClick={handleBack}
-            className="flex items-center gap-2"
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
           >
-            <ArrowLeft className="h-4 w-4" />
+            Back
           </Button>
           
           <div className="text-center py-12">
@@ -490,11 +514,12 @@ export default function UserDetails() {
               {/* Left side - Back button and User info */}
               <div className="flex items-center gap-4">
                 <Button
-                  variant="outline"
+                  variant="solid"
+                  color="primary"
                   onClick={handleBack}
-                  className="flex items-center gap-2 h-10 w-10 p-0"
+                  className="h-10 w-10 p-0"
+                  leftIcon={<ArrowLeft className="h-4 w-4" />}
                 >
-                  <ArrowLeft className="h-4 w-4" />
                 </Button>
 
                 <div className="flex items-center gap-3">
@@ -553,7 +578,7 @@ export default function UserDetails() {
         </div>
 
         {/* Tests Table */}
-        <div className="container my-10 space-y-4 p-4 border border-border rounded-lg bg-background shadow-sm overflow-x-auto">
+        <div className="container my-10 space-y-4 p-4 border border-border rounded-lg bg-background shadow-sm">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               Test History
@@ -563,240 +588,28 @@ export default function UserDetails() {
             </p>
           </div>
 
-          {/* Filters and Controls */}
-          <div className="flex flex-wrap gap-4 items-center justify-between mb-6">
-            <div className="flex gap-2 flex-wrap">
-              <Input
-                placeholder="Filter by test ID..."
-                value={testFilter}
-                onChange={(e) => setTestFilter(e.target.value)}
-                className="w-48"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    Columns
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-48">
-                  {allTestColumns.map((col) => (
-                    <DropdownMenuCheckboxItem
-                      key={col}
-                      checked={visibleTestColumns.includes(col)}
-                      onCheckedChange={() => toggleTestColumn(col)}
-                    >
-                      {col}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          <Table className="w-full">
-            <TableHeader>
-              <TableRow>
-                {visibleTestColumns.includes("Test ID") && <TableHead className="w-[150px]">Test ID</TableHead>}
-                {visibleTestColumns.includes("Status") && <TableHead className="w-[100px]">Status</TableHead>}
-                {visibleTestColumns.includes("Started") && <TableHead className="w-[180px]">Started</TableHead>}
-                {visibleTestColumns.includes("Last Updated") && <TableHead className="w-[180px]">Last Updated</TableHead>}
-                {visibleTestColumns.includes("Completed Assessments") && <TableHead className="w-[150px]">Completed Assessments</TableHead>}
-                {visibleTestColumns.includes("Images Uploaded") && <TableHead className="w-[120px]">Images Uploaded</TableHead>}
-                {visibleTestColumns.includes("Clear Data") && <TableHead className="w-[100px]">Clear Data</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {userDetails.tests.filter(test => 
-                !testFilter || test.test_id.toLowerCase().includes(testFilter.toLowerCase())
-              ).length ? (
-                userDetails.tests.filter(test => 
-                  !testFilter || test.test_id.toLowerCase().includes(testFilter.toLowerCase())
-                ).map((test, index) => (
-                  <TableRow key={`${test.test_id}-${index}`}>
-                    {visibleTestColumns.includes("Test ID") && (
-                      <TableCell className="font-medium whitespace-nowrap">{test.test_id}</TableCell>
-                    )}
-                    {visibleTestColumns.includes("Status") && (
-                      <TableCell className="whitespace-nowrap">
-                        <Badge className={getStatusColor(test.status)}>
-                          {test.status}
-                        </Badge>
-                      </TableCell>
-                    )}
-                    {visibleTestColumns.includes("Started") && (
-                      <TableCell className="whitespace-nowrap">{formatDate(test.started_at)}</TableCell>
-                    )}
-                    {visibleTestColumns.includes("Last Updated") && (
-                      <TableCell className="whitespace-nowrap">{formatDate(test.last_updated)}</TableCell>
-                    )}
-                    {visibleTestColumns.includes("Completed Assessments") && (
-                      <TableCell className="whitespace-nowrap">{test.total_assessments_completed}</TableCell>
-                    )}
-                    {visibleTestColumns.includes("Images Uploaded") && (
-                      <TableCell className="whitespace-nowrap">{test.total_images_uploaded}</TableCell>
-                    )}
-                    {visibleTestColumns.includes("Clear Data") && (
-                      <TableCell className="whitespace-nowrap">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteTest(test.test_id, test.test_id)}
-                          disabled={deletingTest === test.test_id}
-                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={visibleTestColumns.length} className="text-center py-6">
-                    No tests found for this user.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <AdminTable
+            columns={allTestColumns}
+            data={userDetails.tests.filter(test =>
+              !testFilter || test.test_id.toLowerCase().includes(testFilter.toLowerCase())
+            )}
+            visibleColumns={visibleTestColumns}
+            onToggleColumn={toggleTestColumn}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+            searchValue={testFilter}
+            onSearchChange={setTestFilter}
+            searchPlaceholder="Filter by test ID..."
+            emptyMessage="No tests found for this user."
+            onRowClick={handleTestRowClick}
+            rowClassName="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+          />
         </div>
 
-        {/* Completed Assessments Details */}
-        {userDetails.tests.some(test => test.completed_assessments.length > 0) && (
-          <div className="container my-10 space-y-4 p-4 border border-border rounded-lg bg-background shadow-sm overflow-x-auto">
-            <div className="mb-4">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Completed Assessments
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-300">
-                Detailed breakdown of completed assessments
-              </p>
-            </div>
-
-            {/* Filters and Controls */}
-            <div className="flex flex-wrap gap-4 items-center justify-between mb-6">
-              <div className="flex gap-2 flex-wrap">
-                <Input
-                  placeholder="Filter by assessment name..."
-                  value={assessmentFilter}
-                  onChange={(e) => setAssessmentFilter(e.target.value)}
-                  className="w-48"
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      Columns
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-48">
-                    {allAssessmentColumns.map((col) => (
-                      <DropdownMenuCheckboxItem
-                        key={col}
-                        checked={visibleAssessmentColumns.includes(col)}
-                        onCheckedChange={() => toggleAssessmentColumn(col)}
-                      >
-                        {col}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            <Table className="w-full">
-              <TableHeader>
-                <TableRow>
-                  {visibleAssessmentColumns.includes("Assessment Name") && <TableHead className="w-[200px]">Assessment Name</TableHead>}
-                  {visibleAssessmentColumns.includes("Assessment ID") && <TableHead className="w-[180px]">Assessment ID</TableHead>}
-                  {visibleAssessmentColumns.includes("Test ID") && <TableHead className="w-[150px]">Test ID</TableHead>}
-                  {visibleAssessmentColumns.includes("Completed At") && <TableHead className="w-[180px]">Completed At</TableHead>}
-                  {visibleAssessmentColumns.includes("Images Count") && <TableHead className="w-[120px]">Images Count</TableHead>}
-                  {visibleAssessmentColumns.includes("Clear Data") && <TableHead className="w-[100px]">Clear Data</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(() => {
-                  const filteredAssessments = userDetails.tests.flatMap(test => 
-                    test.completed_assessments.filter(assessment =>
-                      !assessmentFilter || assessment.assessment_name.toLowerCase().includes(assessmentFilter.toLowerCase())
-                    ).map((assessment, index) => ({ ...assessment, test_id: test.test_id, key: `${assessment.assessment_id}-${index}` }))
-                  );
-
-                  return filteredAssessments.length ? (
-                    filteredAssessments.map((assessment) => (
-                      <TableRow key={assessment.key}>
-                        {visibleAssessmentColumns.includes("Assessment Name") && (
-                          <TableCell className="font-medium whitespace-nowrap">{assessment.assessment_name}</TableCell>
-                        )}
-                        {visibleAssessmentColumns.includes("Assessment ID") && (
-                          <TableCell className="whitespace-nowrap">{assessment.assessment_id}</TableCell>
-                        )}
-                        {visibleAssessmentColumns.includes("Test ID") && (
-                          <TableCell className="whitespace-nowrap">{assessment.test_id}</TableCell>
-                        )}
-                        {visibleAssessmentColumns.includes("Completed At") && (
-                          <TableCell className="whitespace-nowrap">{formatDate(assessment.completed_at)}</TableCell>
-                        )}
-                        {visibleAssessmentColumns.includes("Images Count") && (
-                          <TableCell className="whitespace-nowrap">{assessment.image_count}</TableCell>
-                        )}
-                        {visibleAssessmentColumns.includes("Clear Data") && (
-                          <TableCell className="whitespace-nowrap">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteAssessment(assessment.assessment_id, assessment.assessment_name)}
-                              disabled={deletingAssessment === assessment.assessment_id}
-                              className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={visibleAssessmentColumns.length} className="text-center py-6">
-                        No assessments found.
-                      </TableCell>
-                    </TableRow>
-                  );
-                })()}
-              </TableBody>
-            </Table>
-          </div>
-        )}
 
         {/* Delete Test Confirmation Dialog */}
         <AlertDialog open={deleteTestDialog?.open || false} onOpenChange={(open) => setDeleteTestDialog(open ? deleteTestDialog : null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="z-[9999]">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Test Data</AlertDialogTitle>
               <AlertDialogDescription>
@@ -820,7 +633,7 @@ export default function UserDetails() {
 
         {/* Delete Assessment Confirmation Dialog */}
         <AlertDialog open={deleteAssessmentDialog?.open || false} onOpenChange={(open) => setDeleteAssessmentDialog(open ? deleteAssessmentDialog : null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="z-[9999]">
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Assessment Data</AlertDialogTitle>
               <AlertDialogDescription>
@@ -841,6 +654,70 @@ export default function UserDetails() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Assessments Drawer */}
+        <Drawer
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+        >
+          <DrawerHeader className="bg-card border-b border-border">
+            <Heading size="h4" className="text-foreground">
+              Assessments
+            </Heading>
+          </DrawerHeader>
+          <DrawerBody className="bg-background">
+            {selectedTest && selectedTest.completed_assessments.length > 0 ? (
+              <div className="space-y-0">
+                {selectedTest.completed_assessments.map((assessment: any, index: number) => (
+                  <div key={assessment.assessment_id || index}>
+                    <div className="py-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-medium text-foreground">
+                          {assessment.assessment_name}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-teal-500 text-white">
+                            Completed
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteAssessment(assessment.assessment_id, assessment.assessment_name)}
+                            disabled={deletingAssessment === assessment.assessment_id}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <p><strong className="text-foreground">Assessment ID:</strong> <span className="text-foreground/80">{assessment.assessment_id}</span></p>
+                        <p><strong className="text-foreground">Completed At:</strong> <span className="text-foreground/80">{formatDate(assessment.completed_at)}</span></p>
+                        <p><strong className="text-foreground">Images Count:</strong> <span className="text-foreground/80">{assessment.image_count}</span></p>
+                      </div>
+                    </div>
+                    {index < selectedTest.completed_assessments.length - 1 && (
+                      <hr className="border-border my-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                No assessments found for this test.
+              </div>
+            )}
+          </DrawerBody>
+          <DrawerFooter className="bg-card border-t border-border">
+            <Button
+              variant="solid"
+              color="primary"
+              onClick={() => setIsDrawerOpen(false)}
+            >
+              Close
+            </Button>
+          </DrawerFooter>
+        </Drawer>
       </div>
     </main>
   );

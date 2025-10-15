@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, CircleLoader } from "@sparrowengg/twigs-react";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ChevronRight, CheckCircle, Loader2, AlertCircle, Lock, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -249,59 +249,8 @@ export default function Dashboard() {
 
         console.log('✅ Test assessments fetched with auth:', data);
         
-        const dashboardAssessments: DashboardAssessment[] = [];
-        
-        // Process each assessment - status comes from API response
-        for (const assessment of data.assessments) {
-          // Convert TestAssessment to Assessment format
-          const assessmentData: Assessment = {
-            assessment_id: assessment.assessment_id,
-            assessment_name: assessment.assessment_name,
-            description: assessment.description,
-            type: assessment.type,
-            order: assessment.order,
-          };
-
-          // Use status from API response instead of manual checking
-          const completed = assessment.status === 'completed';
-
-          // For unlocked status: only unlock the next open assessment with lowest order
-          let unlocked = false;
-
-          // Sort assessments by order to find the next available assessment
-          const sortedAssessments = [...data.assessments].sort((a, b) => a.order - b.order);
-          const completedAssessments = sortedAssessments.filter(a => a.status === 'completed');
-          const openAssessments = sortedAssessments.filter(a => a.status === 'open');
-
-          const maxCompletedOrder = completedAssessments.length > 0
-            ? Math.max(...completedAssessments.map(a => a.order))
-            : 0;
-
-          // Find the next assessment that should be unlocked
-          // It should be the first open assessment after all completed ones
-          if (openAssessments.length > 0) {
-            const nextOpenAssessment = openAssessments[0]; // First open assessment (lowest order)
-            if (assessment.order === nextOpenAssessment.order) {
-              unlocked = true;
-            }
-          }
-
-          // If assessment is completed, mark it as unlocked (so it shows as completed)
-          if (completed) {
-            unlocked = true;
-          }
-
-          dashboardAssessments.push({
-            ...assessmentData,
-            completed,
-            unlocked,
-          });
-        }
-        
-        // Sort by order
-        dashboardAssessments.sort((a, b) => a.order - b.order);
-        
-        setAssessments(dashboardAssessments);
+        // Process assessments directly - acknowledgment is now handled in test selection
+        processAssessments(data);
         
       } catch (error) {
         console.error('❌ Failed to fetch test assessments:', error);
@@ -322,6 +271,63 @@ export default function Dashboard() {
 
     fetchTestAssessments();
   }, [toast, user?.email, authLoading, selectedTestId, refreshTrigger]);
+
+  // Function to process assessments
+  const processAssessments = (data: TestAssessmentsResponse) => {
+    const dashboardAssessments: DashboardAssessment[] = [];
+    
+    // Process each assessment - status comes from API response
+    for (const assessment of data.assessments) {
+      // Convert TestAssessment to Assessment format
+      const assessmentData: Assessment = {
+        assessment_id: assessment.assessment_id,
+        assessment_name: assessment.assessment_name,
+        description: assessment.description,
+        type: assessment.type,
+        order: assessment.order,
+      };
+
+      // Use status from API response instead of manual checking
+      const completed = assessment.status === 'completed';
+
+      // For unlocked status: only unlock the next open assessment with lowest order
+      let unlocked = false;
+
+      // Sort assessments by order to find the next available assessment
+      const sortedAssessments = [...data.assessments].sort((a, b) => a.order - b.order);
+      const completedAssessments = sortedAssessments.filter(a => a.status === 'completed');
+      const openAssessments = sortedAssessments.filter(a => a.status === 'open');
+
+      const maxCompletedOrder = completedAssessments.length > 0
+        ? Math.max(...completedAssessments.map(a => a.order))
+        : 0;
+
+      // Find the next assessment that should be unlocked
+      // It should be the first open assessment after all completed ones
+      if (openAssessments.length > 0) {
+        const nextOpenAssessment = openAssessments[0]; // First open assessment (lowest order)
+        if (assessment.order === nextOpenAssessment.order) {
+          unlocked = true;
+        }
+      }
+
+      // If assessment is completed, mark it as unlocked (so it shows as completed)
+      if (completed) {
+        unlocked = true;
+      }
+
+      dashboardAssessments.push({
+        ...assessmentData,
+        completed,
+        unlocked,
+      });
+    }
+    
+    // Sort by order
+    dashboardAssessments.sort((a, b) => a.order - b.order);
+    
+    setAssessments(dashboardAssessments);
+  };
 
   // Function to refresh assessment states (completion and unlock status)
   const refreshAssessmentStates = async () => {
@@ -876,20 +882,22 @@ export default function Dashboard() {
 
   if (loadingAssessments) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-8">
-          {/* Header with Back Button */}
-          <div className="flex justify-start">
-            <Button
-              onClick={() => setLocation('/test-selection')}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </Button>
-          </div>
+      <div>
+        {/* Back Button - Left aligned */}
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
+          <Button
+            onClick={() => setLocation('/test-selection')}
+            variant="solid"
+            color="primary"
+            size="sm"
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
+          >
+            Back
+          </Button>
+        </div>
+
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="space-y-8">
           
           <div className="text-center">
             <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
@@ -911,7 +919,8 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      </main>
+        </main>
+      </div>
     );
   }
 
@@ -929,20 +938,22 @@ export default function Dashboard() {
   }
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="space-y-8">
-        {/* Header with Back Button */}
-        <div className="flex justify-start">
-          <Button
-            onClick={() => setLocation('/test-selection')}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-        </div>
+    <div>
+      {/* Back Button - Left aligned */}
+      <div className="px-4 sm:px-6 lg:px-8 py-4">
+        <Button
+          onClick={() => setLocation('/test-selection')}
+          variant="solid"
+          color="primary"
+          size="sm"
+          leftIcon={<ArrowLeft className="h-4 w-4" />}
+        >
+          Back
+        </Button>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-8">
         
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
@@ -1050,10 +1061,7 @@ export default function Dashboard() {
                         size="lg"
                       >
                         {loadingAssessment === assessment.assessment_id ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Starting...
-                          </>
+                          <CircleLoader size="xl" />
                         ) : (
                           "Start Now"
                         )}
@@ -1102,6 +1110,7 @@ export default function Dashboard() {
           </div>
         )}
       </div>
-    </main>
+      </main>
+    </div>
   );
 }

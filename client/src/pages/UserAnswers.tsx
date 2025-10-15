@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ArrowLeft, ChevronLeft, ChevronRight, Play, Pause, Volume2, Clock } from 'lucide-react';
@@ -318,13 +318,13 @@ const CustomAudioPlayer = ({
                 whileTap={{ scale: 0.95 }}
               >
                 <Button
-                  onClick={(e) => {
+                  onClick={(e: React.MouseEvent) => {
                     e.stopPropagation();
                     togglePlay();
                   }}
                   variant="ghost"
-                  size="icon"
-                  className="text-white hover:bg-white/20 hover:text-white h-8 w-8 rounded-full bg-white/10"
+                  size="sm"
+                  className="text-white hover:bg-white/20 hover:text-white h-8 w-8 p-0 rounded-full bg-white/10"
                   disabled={isDownloading}
                 >
                   {isDownloading ? (
@@ -403,7 +403,7 @@ export default function UserAnswers() {
   };
 
   const nextImage = () => {
-    if (answers?.data.images) {
+    if (answers?.data?.images) {
       setCurrentImageIndex((prev) =>
         prev === answers.data.images.length - 1 ? 0 : prev + 1
       );
@@ -411,7 +411,7 @@ export default function UserAnswers() {
   };
 
   const prevImage = () => {
-    if (answers?.data.images) {
+    if (answers?.data?.images) {
       setCurrentImageIndex((prev) =>
         prev === 0 ? answers.data.images.length - 1 : prev - 1
       );
@@ -420,7 +420,7 @@ export default function UserAnswers() {
 
 
   const getQuestionDuration = (questionId: string): number | null => {
-    if (!answers?.data.logs?.logs?.interactions) return null;
+    if (!answers?.data?.logs?.logs?.interactions) return null;
 
     const interaction = answers.data.logs.logs.interactions.find(
       (interaction: Interaction) => interaction.question_id === questionId
@@ -451,7 +451,7 @@ export default function UserAnswers() {
     );
   }
 
-  if (error || !answers) {
+  if (error || !answers || !answers.data) {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">
@@ -459,9 +459,8 @@ export default function UserAnswers() {
             onClick={() => window.history.back()}
             variant="outline"
             size="sm"
-            className="flex items-center gap-2"
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
           >
-            <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
 
@@ -489,9 +488,8 @@ export default function UserAnswers() {
             onClick={() => window.history.back()}
             variant="outline"
             size="sm"
-            className="flex items-center gap-2"
+            leftIcon={<ArrowLeft className="h-4 w-4" />}
           >
-            <ArrowLeft className="h-4 w-4" />
             Back to Users
           </Button>
 
@@ -511,10 +509,10 @@ export default function UserAnswers() {
           <div className="lg:col-span-1 space-y-4">
             <div className="w-full">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Questions ({answers.data.questions.questions.length})
+                Questions ({answers.data.questions?.questions?.length || 0})
               </h3>
               <Accordion type="single" collapsible className="w-full">
-                {answers.data.questions.questions.map((question, index) => {
+                {answers.data.questions?.questions ? answers.data.questions.questions.map((question, index) => {
                   const duration = getQuestionDuration(question.question_id);
                   return (
                     <AccordionItem
@@ -543,7 +541,11 @@ export default function UserAnswers() {
                       </AccordionContent>
                     </AccordionItem>
                   );
-                })}
+                }) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No questions found.
+                  </div>
+                )}
               </Accordion>
             </div>
           </div>
@@ -551,11 +553,11 @@ export default function UserAnswers() {
           {/* Images and Audio Section - Right Side */}
           <div className="lg:col-span-1 space-y-6">
             {/* Images Section */}
-            {answers.data.images && answers.data.images.length > 0 && (
+            {answers?.data?.images && answers.data.images.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    Images ({answers.data.image_count})
+                    Images ({answers.data.image_count || answers.data.images.length})
                   </h4>
                   <span className="text-sm text-gray-600 dark:text-gray-300">
                     {currentImageIndex + 1} / {answers.data.images.length}
@@ -569,10 +571,9 @@ export default function UserAnswers() {
                       variant="outline"
                       size="sm"
                       onClick={prevImage}
+                      leftIcon={<ChevronLeft className="h-4 w-4" />}
                       className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 border-gray-300 dark:border-gray-600 shadow-md"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
+                    ></Button>
                   )}
 
                   <div className="bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden inline-block relative">
@@ -599,10 +600,9 @@ export default function UserAnswers() {
                       variant="outline"
                       size="sm"
                       onClick={nextImage}
+                      rightIcon={<ChevronRight className="h-4 w-4" />}
                       className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 border-gray-300 dark:border-gray-600 shadow-md"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+                    ></Button>
                   )}
                 </div>
               </div>

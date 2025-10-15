@@ -400,12 +400,12 @@ export class AuthenticatedApiService {
   static async getUserAnswers(request: any): Promise<any> {
     try {
       console.log('🔍 Fetching user answers with authentication:', request);
-      
+
       const data = await authenticatedFetchJson(`${this.API_BASE_URL}/get-answers`, {
         method: 'POST',
         body: JSON.stringify(request)
       });
-      
+
       console.log('✅ User answers fetched with auth:', data);
       return data;
     } catch (error) {

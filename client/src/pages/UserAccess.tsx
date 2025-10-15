@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { API_ENDPOINTS } from '@/config/api';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
@@ -396,12 +396,13 @@ export default function UserAccess() {
               <Dialog open={manualAddOpen} onOpenChange={setManualAddOpen}>
                 <DialogTrigger asChild>
                   <Button
-                    variant="outline"
-                    size="icon"
-                    className="rounded-full"
+                    variant="solid"
+                    color="primary"
+                    size="sm"
+                    className="rounded-full w-10 h-10 p-0"
                     onClick={() => setManualAddOpen(true)}
+                    leftIcon={<Plus className="h-4 w-4" />}
                   >
-                    <Plus className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
               </Dialog>
@@ -432,9 +433,10 @@ export default function UserAccess() {
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
+                          size="sm"
                           className="w-full justify-start text-left font-normal"
+                          leftIcon={<Clock className="h-4 w-4" />}
                         >
-                          <Clock className="mr-2 h-4 w-4" />
                           {newUserStartDate ? safeFormatDate(newUserStartDate, "PPP hh:mm:ss a") : "Pick start date & time"}
                         </Button>
                       </PopoverTrigger>
@@ -493,9 +495,10 @@ export default function UserAccess() {
                       <PopoverTrigger asChild>
                         <Button
                           variant="outline"
+                          size="sm"
                           className="w-full justify-start text-left font-normal"
+                          leftIcon={<Clock className="h-4 w-4" />}
                         >
-                          <Clock className="mr-2 h-4 w-4" />
                           {newUserEndDate ? safeFormatDate(newUserEndDate, "PPP hh:mm:ss a") : "Pick end date & time"}
                         </Button>
                       </PopoverTrigger>
@@ -568,6 +571,7 @@ export default function UserAccess() {
                   <div className="flex gap-2 pt-4">
                     <Button
                       variant="outline"
+                      size="sm"
                       onClick={() => setManualAddOpen(false)}
                       className="flex-1"
                     >
@@ -575,9 +579,12 @@ export default function UserAccess() {
                     </Button>
                     <Button
                       onClick={handleManualAddUser}
+                      variant="solid"
+                      color="primary"
+                      size="sm"
                       className="flex-1"
+                      leftIcon={<Plus className="h-4 w-4" />}
                     >
-                      <Plus className="h-4 w-4 mr-2" />
                       Add User
                     </Button>
                   </div>
@@ -622,9 +629,10 @@ export default function UserAccess() {
                               <PopoverTrigger asChild>
                                 <Button
                                   variant="outline"
+                                  size="sm"
                                   className="w-full justify-start text-left font-normal"
+                                  leftIcon={<Clock className="h-4 w-4" />}
                                 >
-                                  <Clock className="mr-2 h-4 w-4" />
                                   {startDate ? safeFormatDate(startDate, "PPP hh:mm:ss a") : "Pick start date & time"}
                                 </Button>
                               </PopoverTrigger>
@@ -685,9 +693,10 @@ export default function UserAccess() {
                               <PopoverTrigger asChild>
                                 <Button
                                   variant="outline"
+                                  size="sm"
                                   className="w-full justify-start text-left font-normal"
+                                  leftIcon={<Clock className="h-4 w-4" />}
                                 >
-                                  <Clock className="mr-2 h-4 w-4" />
                                   {endDate ? safeFormatDate(endDate, "PPP hh:mm:ss a") : "Pick end date & time"}
                                 </Button>
                               </PopoverTrigger>
@@ -826,16 +835,12 @@ export default function UserAccess() {
             <Button 
               onClick={handleGiveAccess} 
               disabled={loading || !selectedTestId || structuredUsers.length === 0}
-              size="lg"
+              variant="solid"
+              color="primary"
+              size="md"
+              leftIcon={!loading ? <Check className="h-4 w-4" /> : undefined}
             >
-              {loading ? (
-                <>Granting Access...</>
-              ) : (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Give Access
-                </>
-              )}
+              {loading ? "Granting Access..." : "Give Access"}
             </Button>
           </div>
         </div>

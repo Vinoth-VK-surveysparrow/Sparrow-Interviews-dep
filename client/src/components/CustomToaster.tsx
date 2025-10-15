@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { cn } from '@/lib/utils';
 
 type Variant = 'default' | 'success' | 'error' | 'warning';

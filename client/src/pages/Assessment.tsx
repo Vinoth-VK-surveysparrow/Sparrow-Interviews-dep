@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { useRoute, useLocation } from 'wouter';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Card } from '@/components/ui/card';
 import { useS3Upload } from '@/hooks/useS3Upload';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -513,7 +513,7 @@ export default function Assessment() {
               onClick={() => setLocation('/test-selection')}
               variant="outline"
               size="sm"
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 px-6 py-3"
             >
               <Home className="h-4 w-4" />
               Home

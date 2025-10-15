@@ -1,16 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableHeader,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell
-} from '@/components/ui/table';
+import { AdminTable, Column } from '@/components/ui/admin-table';
 import {
   Avatar,
   AvatarFallback,
@@ -37,6 +30,9 @@ export default function AdminUsers() {
 
   // Refresh state
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Visible columns state
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
 
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -149,6 +145,68 @@ export default function AdminUsers() {
     });
   };
 
+  const allColumns: Column[] = [
+    {
+      key: "user",
+      label: "User",
+      width: "250px",
+      render: (value, row) => {
+        const { displayName, initials, avatarUrl } = getUserDisplayInfo(row.user_email);
+        return (
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={avatarUrl} alt={displayName} />
+              <AvatarFallback>{initials}</AvatarFallback>
+            </Avatar>
+            <span>{displayName}</span>
+          </div>
+        );
+      }
+    },
+    {
+      key: "user_email",
+      label: "Email",
+      width: "300px"
+    },
+    {
+      key: "last_active",
+      label: "Last Activity",
+      width: "200px",
+      render: (value) => formatDate(value)
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      width: "100px",
+      render: (value, row) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => handleUserDetails(row.user_email)}
+          className="h-8 w-8 p-0"
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+      )
+    }
+  ];
+
+  const allColumnKeys = allColumns.map(col => col.key);
+
+  // Initialize visible columns
+  useEffect(() => {
+    setVisibleColumns([...allColumnKeys]);
+  }, []);
+
+  // Toggle column visibility
+  const toggleColumn = (col: string) => {
+    setVisibleColumns((prev) =>
+      prev.includes(col)
+        ? prev.filter((c) => c !== col)
+        : [...prev, col]
+    );
+  };
+
   // Refresh data function
   const handleRefresh = async () => {
     if (refreshing) return;
@@ -240,90 +298,20 @@ export default function AdminUsers() {
         {/* Users View */}
         <section className="py-8 min-h-[60vh]">
           <div className="container mx-auto px-0 md:px-8">
-            {/* Users Controls */}
-            <div className="flex gap-4 items-center justify-between mb-6">
-              <Input
-                placeholder="Filter by email..."
-                value={emailFilter}
-                onChange={(e) => setEmailFilter(e.target.value)}
-                className="w-64"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-            </div>
-
             {/* Users Table */}
-            <div className="border border-border rounded-lg bg-background shadow-sm overflow-x-auto">
-              <Table className="w-full">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[250px]">User</TableHead>
-                    <TableHead className="w-[300px]">Email</TableHead>
-                    <TableHead className="w-[200px]">
-                      <Button
-                        variant="ghost"
-                        onClick={handleSortToggle}
-                        className="h-auto p-0 font-medium text-muted-foreground hover:text-foreground"
-                      >
-                        Last Activity
-                        {sortOrder === 'desc' ? (
-                          <ChevronDown className="ml-2 h-4 w-4" />
-                        ) : (
-                          <ChevronUp className="ml-2 h-4 w-4" />
-                        )}
-                      </Button>
-                    </TableHead>
-                    <TableHead className="w-[100px]">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedUsers.length ? (
-                    paginatedUsers.map((userRecord, index) => {
-                      const { displayName, initials, avatarUrl } = getUserDisplayInfo(userRecord.user_email);
-
-                      return (
-                        <TableRow key={`${userRecord.user_email}-${index}`}>
-                           <TableCell className="font-medium">
-                             <div className="flex items-center gap-3">
-                               <Avatar className="h-8 w-8">
-                                 <AvatarImage src={avatarUrl} alt={displayName} />
-                                 <AvatarFallback>{initials}</AvatarFallback>
-                               </Avatar>
-                               <span>{displayName}</span>
-                             </div>
-                           </TableCell>
-                           <TableCell>{userRecord.user_email}</TableCell>
-                           <TableCell>{formatDate(userRecord.last_active)}</TableCell>
-                           <TableCell>
-                             <Button
-                               variant="ghost"
-                               size="sm"
-                               onClick={() => handleUserDetails(userRecord.user_email)}
-                               className="h-8 w-8 p-0"
-                             >
-                               <Eye className="h-4 w-4" />
-                             </Button>
-                           </TableCell>
-                         </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-6">
-                        No users found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+            <div className="border border-border rounded-lg bg-background shadow-sm p-4">
+              <AdminTable
+                columns={allColumns}
+                data={paginatedUsers}
+                visibleColumns={visibleColumns}
+                onToggleColumn={toggleColumn}
+                onRefresh={handleRefresh}
+                refreshing={refreshing}
+                searchValue={emailFilter}
+                onSearchChange={setEmailFilter}
+                searchPlaceholder="Filter by email..."
+                emptyMessage="No users found."
+              />
 
               {/* Pagination */}
               {totalPages > 1 && (
@@ -333,12 +321,13 @@ export default function AdminUsers() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
-                      variant="outline"
+                      variant="solid"
+                      color="primary"
                       size="sm"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
+                      leftIcon={<ChevronLeft className="h-4 w-4" />}
                     >
-                      <ChevronLeft className="h-4 w-4" />
                       Previous
                     </Button>
 
@@ -361,13 +350,14 @@ export default function AdminUsers() {
                     </div>
 
                     <Button
-                      variant="outline"
+                      variant="solid"
+                      color="primary"
                       size="sm"
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
+                      rightIcon={<ChevronRight className="h-4 w-4" />}
                     >
                       Next
-                      <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>

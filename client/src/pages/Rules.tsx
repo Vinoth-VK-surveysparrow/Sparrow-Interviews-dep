@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { useCameraCapture } from '@/hooks/useCameraCapture';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 import { useAssessment } from '@/contexts/AssessmentContext';
@@ -246,20 +246,22 @@ export default function Rules() {
   };
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="space-y-8">
-        {/* Back Button */}
-        <div className="flex justify-start">
-          <Button
-            onClick={() => setLocation('/dashboard')}
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </Button>
-        </div>
+    <div>
+      {/* Back Button - Left aligned */}
+      <div className="px-4 sm:px-6 lg:px-8 py-4">
+        <Button
+          onClick={() => setLocation('/dashboard')}
+          variant="solid"
+          color="primary"
+          size="sm"
+          leftIcon={<ArrowLeft className="h-4 w-4" />}
+        >
+          Back
+        </Button>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-8">
 
         <div className="text-center">
           <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-2">
@@ -323,7 +325,7 @@ export default function Rules() {
           </Card>
         </div>
 
-        <div className="text-center">
+        <div className="flex justify-center">
           <Button
             onClick={startAssessment}
             disabled={cameraPermission !== 'granted' || microphonePermission !== 'granted' || validatingApiKey}
@@ -332,7 +334,6 @@ export default function Rules() {
             {validatingApiKey ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Validating API Key...
               </>
             ) : (
               'Start Assessment'
@@ -340,6 +341,7 @@ export default function Rules() {
           </Button>
         </div>
       </div>
-    </main>
+      </main>
+    </div>
   );
 }

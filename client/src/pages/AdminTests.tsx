@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Button } from "@sparrowengg/twigs-react";
 import { Separator } from '@/components/ui/separator';
 import { ArrowRight, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -205,13 +205,13 @@ export default function AdminTests() {
           </div>
           <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              variant="solid"
+              color="primary"
               size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex items-center gap-2"
+              leftIcon={<RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />}
             >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -240,13 +240,14 @@ export default function AdminTests() {
                       {item.description}
                     </p>
                     <Button
-                      variant="outline"
+                      variant="solid"
+                      color="primary"
                       size="sm"
                       onClick={() => handleViewRounds(item.test_id, item.title)}
-                      className="order-3 ml-auto w-fit gap-2 md:order-none text-xs"
+                      className="order-3 ml-auto w-fit md:order-none text-xs px-6 py-3"
+                      rightIcon={<ArrowRight className="h-3 w-3" />}
                     >
-                      <span>View Rounds</span>
-                      <ArrowRight className="h-3 w-3" />
+                      View Rounds
                     </Button>
                   </div>
                   <Separator />

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, CircleLoader } from "@sparrowengg/twigs-react";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { ChevronRight, Loader2, AlertCircle } from 'lucide-react';
@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { useClarity } from '@/hooks/useClarity';
 import CardPlaceholder from '@/components/CardPlaceholder';
+import { AcknowledgmentModal } from '@/components/AcknowledgmentModal';
 
 // Test interface based on your API response
 interface Test {
@@ -19,11 +20,34 @@ interface Test {
   time_slot?: string[];
 }
 
+interface AcknowledgmentPDF {
+  data: string; // base64 encoded PDF data
+  filename: string;
+  content_type: string;
+}
+
+interface TestDetails {
+  test_id: string;
+  test_name: string;
+  description: string;
+  created_at: string;
+  created_by: string;
+}
+
 interface UserTestsResponse {
   user_email: string;
   role: string;
   tests: Test[];
   test_count: number;
+}
+
+interface TestAvailabilityResponse {
+  test_id: string;
+  user_email: string;
+  assessments: any[];
+  assessment_count: number;
+  test_details?: TestDetails;
+  acknowledgement_pdf?: AcknowledgmentPDF;
 }
 
 
@@ -45,6 +69,11 @@ export default function TestSelection() {
   const [loadingTests, setLoadingTests] = useState(true);
   const [loadingTest, setLoadingTest] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Acknowledgment modal state
+  const [showAcknowledgmentModal, setShowAcknowledgmentModal] = useState(false);
+  const [acknowledgmentPdf, setAcknowledgmentPdf] = useState<AcknowledgmentPDF | null>(null);
+  const [pendingTestId, setPendingTestId] = useState<string | null>(null);
 
   const { user, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -213,17 +242,33 @@ export default function TestSelection() {
       test_id: testId,
       test_name: selectedTest?.test_name || 'unknown',
       user_email: user.email,
-      // is_fallback_test: isShowingFallbackTests
     });
     
     try {
       console.log('🎯 Selecting test:', testId);
       
-      // Store the selected test_id in localStorage or context for later use
-      localStorage.setItem('selectedTestId', testId);
+      // Check if test has acknowledgment PDF by calling test availability API
+      console.log('🔍 TestSelection: Checking test availability with Firebase auth');
       
-      // Navigate to dashboard with the selected test
-      setLocation(`/dashboard?test_id=${testId}`);
+      const { AuthenticatedApiService } = await import('@/lib/authenticatedApiService');
+      const testData: TestAvailabilityResponse = await AuthenticatedApiService.checkTestAvailability(testId, {
+        user_email: user.email
+      });
+      
+      console.log('✅ Test availability checked:', testData);
+      
+      // Check if acknowledgment_pdf exists
+      if (testData.acknowledgement_pdf) {
+        console.log('📄 Acknowledgment PDF found, showing modal');
+        setAcknowledgmentPdf(testData.acknowledgement_pdf);
+        setPendingTestId(testId);
+        setShowAcknowledgmentModal(true);
+      } else {
+        console.log('✅ No acknowledgment required, proceeding to dashboard');
+        // Store the selected test_id and navigate directly
+        localStorage.setItem('selectedTestId', testId);
+        setLocation(`/dashboard?test_id=${testId}`);
+      }
       
     } catch (error) {
       console.error('❌ Error selecting test:', error);
@@ -237,18 +282,23 @@ export default function TestSelection() {
     }
   };
 
+  // Handle acknowledgment modal proceed
+  const handleAcknowledgmentProceed = () => {
+    if (pendingTestId) {
+      console.log('✅ Acknowledgment completed, proceeding to dashboard');
+      localStorage.setItem('selectedTestId', pendingTestId);
+      setLocation(`/dashboard?test_id=${pendingTestId}`);
+    }
+    setShowAcknowledgmentModal(false);
+    setAcknowledgmentPdf(null);
+    setPendingTestId(null);
+  };
+
   if (loadingTests) {
     return (
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-              Assessment Tests
-            </h1>
-            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-              Choose from the available tests below to begin your assessment journey.
-            </p>
-          </div>
+          {/* Empty placeholder */}
           <br></br>
           <br></br>
 
@@ -290,14 +340,7 @@ export default function TestSelection() {
           </div>
         )}
 
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            Assessment Tests
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto">
-            Choose from the available tests below to begin your assessment journey.
-          </p>
-        </div>
+        {/* Empty placeholder */}
 
         <br></br>
         <br></br>
@@ -340,10 +383,7 @@ export default function TestSelection() {
                           size="lg"
                         >
                           {loadingTest === test.test_id ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Selecting...
-                            </>
+                            <CircleLoader size="xl" />
                           ) : (
                             <>
                               <span className="mr-8 transition-opacity duration-500 group-hover:opacity-0">
@@ -401,6 +441,18 @@ export default function TestSelection() {
           </div>
         )}
       </div>
+
+      {/* Acknowledgment Modal */}
+      <AcknowledgmentModal
+        isOpen={showAcknowledgmentModal}
+        acknowledgmentPdf={acknowledgmentPdf}
+        onProceed={handleAcknowledgmentProceed}
+        onClose={() => {
+          setShowAcknowledgmentModal(false);
+          setAcknowledgmentPdf(null);
+          setPendingTestId(null);
+        }}
+      />
     </main>
   );
 }

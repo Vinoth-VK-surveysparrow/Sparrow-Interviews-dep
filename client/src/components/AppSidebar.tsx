@@ -1,5 +1,6 @@
 import { useLocation } from "wouter";
-import { Home, Settings, FileText, Users, UserCheck, Plus } from "lucide-react";
+import { HomeIcon, PlusIcon, PageIcon, UsersIcon, UserCirclePlusIcon } from "@sparrowengg/twigs-react-icons";
+import { Settings } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect } from "react";
@@ -12,6 +13,7 @@ export function AppSidebar() {
   const { user } = useAuth();
   const [userRole, setUserRole] = useState<string>('');
   const [loadingRole, setLoadingRole] = useState<boolean>(true);
+  const [roleCheckCompleted, setRoleCheckCompleted] = useState<boolean>(false);
 
   // Check if user is admin
   const isAdmin = userRole === 'admin';
@@ -45,6 +47,7 @@ export function AppSidebar() {
         setUserRole('');
       } finally {
         setLoadingRole(false);
+        setRoleCheckCompleted(true);
       }
     };
 
@@ -88,28 +91,31 @@ export function AppSidebar() {
         >
           {/* Top Icons */}
           <div className="flex flex-col items-center space-y-2">
-            {/* Home Icon */}
-            <div className="flex justify-center">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => window.location.href = '/'}
-                    className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                    style={{
-                      backgroundColor: isActive("/") ? (effectiveTheme === 'dark' ? '#374151' : '#e5e7eb') : 'transparent'
-                    }}
-                  >
-                    <Home className="w-5 h-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Home</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
+            {/* Show icons only after user authentication and role check is complete */}
+            {user && roleCheckCompleted && (
+              <>
+                {/* Home Icon */}
+                <div className="flex justify-center">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => window.location.href = '/'}
+                        className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        style={{
+                          backgroundColor: isActive("/") ? (effectiveTheme === 'dark' ? '#374151' : '#e5e7eb') : 'transparent'
+                        }}
+                      >
+                        <HomeIcon className="w-5 h-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <p>Home</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
 
-            {/* Admin-only icons */}
-            {isAdmin && (
+                {/* Admin-only icons */}
+                {isAdmin && (
               <>
                 {/* Create Assessment Icon */}
                 <div className="flex justify-center">
@@ -122,7 +128,7 @@ export function AppSidebar() {
                           backgroundColor: isActive("/admin/create-assessment") ? (effectiveTheme === 'dark' ? '#374151' : '#e5e7eb') : 'transparent'
                         }}
                       >
-                        <Plus className="w-5 h-5" />
+                        <PlusIcon className="w-5 h-5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
@@ -142,7 +148,7 @@ export function AppSidebar() {
                           backgroundColor: isActive("/admin/tests") ? (effectiveTheme === 'dark' ? '#374151' : '#e5e7eb') : 'transparent'
                         }}
                       >
-                        <FileText className="w-5 h-5" />
+                        <PageIcon className="w-5 h-5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
@@ -162,7 +168,7 @@ export function AppSidebar() {
                           backgroundColor: isActive("/admin/users") ? (effectiveTheme === 'dark' ? '#374151' : '#e5e7eb') : 'transparent'
                         }}
                       >
-                        <Users className="w-5 h-5" />
+                        <UsersIcon className="w-5 h-5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
@@ -182,7 +188,7 @@ export function AppSidebar() {
                           backgroundColor: isActive("/admin/user-access") ? (effectiveTheme === 'dark' ? '#374151' : '#e5e7eb') : 'transparent'
                         }}
                       >
-                        <UserCheck className="w-5 h-5" />
+                        <UserCirclePlusIcon className="w-5 h-5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
@@ -190,6 +196,8 @@ export function AppSidebar() {
                     </TooltipContent>
                   </Tooltip>
                 </div>
+              </>
+            )}
               </>
             )}
           </div>
