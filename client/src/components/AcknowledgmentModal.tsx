@@ -3,6 +3,8 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from "@sparrowengg/twigs-react";
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Info } from 'lucide-react';
 
 interface AcknowledgmentPDF {
   data: string; // base64 encoded PDF data
@@ -26,6 +28,7 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
   const [acknowledgmentText, setAcknowledgmentText] = useState('');
   const [isAcknowledged, setIsAcknowledged] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pageCount, setPageCount] = useState<number>(1);
 
   const handleAcknowledgmentChange = (value: string) => {
     setAcknowledgmentText(value);
@@ -55,6 +58,23 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
     }
   };
 
+  // Function to count PDF pages
+  const countPdfPages = async (pdfData: string): Promise<number> => {
+    try {
+      // Convert base64 to binary
+      const binaryString = atob(pdfData);
+      
+      // Count occurrences of "/Type /Page" which indicates individual pages
+      const pageMatches = binaryString.match(/\/Type\s*\/Page[^s]/g);
+      const pageCount = pageMatches ? pageMatches.length : 1;
+      
+      return Math.max(pageCount, 1); // Ensure at least 1 page
+    } catch (error) {
+      console.error('Error counting PDF pages:', error);
+      return 1; // Fallback to 1 page
+    }
+  };
+
   useEffect(() => {
     if (acknowledgmentPdf?.data) {
       // Create blob URL for PDF display
@@ -63,6 +83,11 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
       ], { type: acknowledgmentPdf.content_type });
       const url = URL.createObjectURL(pdfBlob);
       setPdfUrl(url);
+
+      // Count PDF pages
+      countPdfPages(acknowledgmentPdf.data).then(count => {
+        setPageCount(count);
+      });
 
       // Cleanup function to revoke URL
       return () => {
@@ -88,7 +113,7 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
               <h2 className="text-lg font-semibold text-white">
                 {acknowledgmentPdf.filename || 'Job Description & Requirements'}
               </h2>
-              <p className="text-sm text-gray-300">1 page</p>
+              <p className="text-sm text-gray-300">{pageCount} {pageCount === 1 ? 'page' : 'pages'}</p>
             </div>
           </div>
         </div>
@@ -113,7 +138,9 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
                 </div>
               </div>
               <div className="text-center">
-                <span className="text-xs font-medium text-gray-300">Page 1</span>
+                <span className="text-xs font-medium text-gray-300">
+                  {pageCount === 1 ? 'Page 1' : `${pageCount} Pages`}
+                </span>
               </div>
             </div>
           </div>
@@ -133,9 +160,23 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
             {/* Acknowledgment Section */}
             <div className="p-4" style={{ backgroundColor: '#44444E', borderTop: '1px solid #5a5a64' }}>
               <div className="max-w-4xl mx-auto space-y-3">
-                <p className="text-sm text-gray-300">
-                  Type "acknowledged" to confirm you have read and understood the job description:
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-gray-300">
+                    Type "acknowledged" to confirm you have read and understood the job description
+                  </p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-gray-400 hover:text-gray-200 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-sm">
+                          Notice: Your mic, audio, and video are recorded and evaluated by AI during this assessment. By continuing, you agree to this.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <div className="flex items-center gap-4">
                   <Input
                     id="acknowledgment"
