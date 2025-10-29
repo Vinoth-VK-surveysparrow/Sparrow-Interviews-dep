@@ -506,20 +506,6 @@ export default function Assessment() {
   return (
     <div className="min-h-screen">
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header with Home Button (only when assessment hasn't started) */}
-        {!assessmentStarted && (
-          <div className="mb-6">
-            <Button
-              onClick={() => setLocation('/test-selection')}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2 px-6 py-3"
-            >
-              <Home className="h-4 w-4" />
-              Home
-            </Button>
-          </div>
-        )}
 
         {/* Progress Bar */}
         <div className="mb-8">

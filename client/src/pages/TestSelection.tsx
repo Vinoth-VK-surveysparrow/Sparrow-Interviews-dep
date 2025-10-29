@@ -340,8 +340,10 @@ export default function TestSelection() {
           </div>
         )}
 
-        {/* Empty placeholder */}
-
+        {/* Empty placeholder - positioning like Dashboard */}
+        <div className="text-center">
+          <div className="mb-4 h-16"></div> {/* Empty space for positioning */}
+        </div>
         <br></br>
         <br></br>
 

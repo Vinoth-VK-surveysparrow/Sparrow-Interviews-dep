@@ -240,6 +240,7 @@ export default function Rules() {
         'You have a time limit for each question',
         'Speak clearly and maintain good eye contact with the camera',
         'Do not close the browser window during the assessment',
+        'You\'ll be proctored throughout the session with AI',
         'Your responses will be analyzed for assessment scoring'
       ];
     }
@@ -299,12 +300,15 @@ export default function Rules() {
                 </span>
               </div>
 
-              <Button 
-                onClick={requestPermissions}
-                className="w-full bg-gray-200 dark:bg-custom-dark-2 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-custom-dark-3"
-              >
-                Test Permissions
-              </Button>
+              <div className="flex justify-center mt-4">
+                <Button 
+                  onClick={requestPermissions}
+                  size="sm"
+                  className="w-auto px-6 py-3 bg-gray-200 dark:bg-custom-dark-2 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-custom-dark-3"
+                >
+                  Test Permissions
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

@@ -71,7 +71,7 @@ export function AdminProtectedRoute({ children }: AdminProtectedRouteProps) {
         <div className="flex items-center justify-center min-h-[50vh]">
           <div className="flex items-center gap-3">
             <Loader2 className="h-6 w-6 animate-spin text-gray-600" />
-            <span className="text-gray-600 dark:text-gray-300">Verifying admin access...</span>
+            <span className="text-gray-600 dark:text-gray-300">Verifying access...</span>
           </div>
         </div>
       </main>
