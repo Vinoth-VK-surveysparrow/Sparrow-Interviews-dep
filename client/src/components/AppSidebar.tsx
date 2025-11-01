@@ -1,19 +1,31 @@
 import { useLocation } from "wouter";
 import { HomeIcon, PlusIcon, PageIcon, UsersIcon, UserCirclePlusIcon } from "@sparrowengg/twigs-react-icons";
-import { Settings } from "lucide-react";
+import { Settings, LogOut } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { useState, useEffect } from "react";
 import SettingsModal from "./SettingsModal";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export function AppSidebar() {
   const { theme } = useTheme();
   const [location] = useLocation();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [userRole, setUserRole] = useState<string>('');
   const [loadingRole, setLoadingRole] = useState<boolean>(true);
   const [roleCheckCompleted, setRoleCheckCompleted] = useState<boolean>(false);
+  const [signOutDialogOpen, setSignOutDialogOpen] = useState<boolean>(false);
 
   // Check if user is admin
   const isAdmin = userRole === 'admin';
@@ -202,22 +214,57 @@ export function AppSidebar() {
             )}
           </div>
 
-          {/* Settings Icon at Bottom */}
-          <div className="flex justify-center">
-            <SettingsModal>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <Settings className="w-5 h-5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Settings</p>
-                </TooltipContent>
-              </Tooltip>
-            </SettingsModal>
+          {/* Bottom Icons */}
+          <div className="flex flex-col items-center space-y-2">
+            {/* Settings Icon */}
+            <div className="flex justify-center">
+              <SettingsModal>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                    >
+                      <Settings className="w-5 h-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>Settings</p>
+                  </TooltipContent>
+                </Tooltip>
+              </SettingsModal>
+            </div>
+
+            {/* Sign Out Button */}
+            <div className="flex justify-center">
+              <AlertDialog open={signOutDialogOpen} onOpenChange={setSignOutDialogOpen}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <LogOut className="w-5 h-5" />
+                      </button>
+                    </AlertDialogTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>Sign Out</p>
+                  </TooltipContent>
+                </Tooltip>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Sign Out</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to sign out? You will need to sign in again to access your account.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={signOut}>Sign Out</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
         </div>
       </div>
