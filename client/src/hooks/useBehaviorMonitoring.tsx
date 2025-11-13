@@ -2,8 +2,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useAssessment } from '@/contexts/AssessmentContext';
 
+// Mapping of flag reasons to user-friendly warning messages
+const FLAG_REASON_MESSAGES: Record<string, string> = {
+  'Suspicious Gaze Direction': 'Do not look away from the screen; keep your eyes focused on the camera.',
+  'Hands Not Visible': 'Keep both hands clearly visible in front of the camera at all times.',
+  'Headphones Detected': 'Remove any headphones, earbuds, or audio devices before continuing the assessment.',
+  'Electronic Device Detected': 'Do not use or keep any electronic devices near you during the assessment.',
+  'Profile Not Clearly Visible': 'Sit facing the camera directly with your full face clearly visible.',
+  'Looking Outside Screen': 'Avoid looking outside the screen; stay focused on the assessment window.',
+};
+
 interface BehaviorMonitoringResponse {
+  email: string;
+  round: string;
   recent_flag_id: boolean;
+  flag_count: number;
+  total_images: number;
+  flag_reason: string;
   message?: string;
 }
 
@@ -70,11 +85,96 @@ export function useBehaviorMonitoring(options: UseBehaviorMonitoringOptions = {}
       if (data.recent_flag_id) {
         setFlagCount(prev => prev + 1);
         
+        // Parse flag_reason to find the most frequent violation
+        // Format: "Profile Not Clearly Visible (40%), Suspicious Gaze Direction (31%), ..."
+        const reasonEntries = data.flag_reason?.split(',').map(r => r.trim()).filter(r => r) || [];
+        
+        console.log('🔍 Raw reasons from API:', reasonEntries);
+        
+        // Parse each entry to extract reason and percentage
+        const parsedReasons: Array<{ reason: string; percentage: number }> = [];
+        
+        reasonEntries.forEach(entry => {
+          // Match pattern: "Reason Text (XX%)"
+          const match = entry.match(/^(.+?)\s*\((\d+)%\)$/);
+          if (match) {
+            const reason = match[1].trim();
+            const percentage = parseInt(match[2], 10);
+            parsedReasons.push({ reason, percentage });
+          } else {
+            // If no percentage found, treat the whole entry as reason with 0%
+            parsedReasons.push({ reason: entry.trim(), percentage: 0 });
+          }
+        });
+        
+        console.log('📊 Parsed reasons with percentages:', parsedReasons);
+        
+        // Sort by percentage (highest first)
+        parsedReasons.sort((a, b) => b.percentage - a.percentage);
+        
+        console.log('📊 Sorted by percentage:', parsedReasons);
+        
+        // Find the most frequent reason, skipping "Multiple Violations" and "No Violations Detected"
+        let mostFrequentReason = '';
+        
+        for (const entry of parsedReasons) {
+          if (entry.reason !== 'Multiple Violations' && entry.reason !== 'No Violations Detected') {
+            mostFrequentReason = entry.reason;
+            break;
+          }
+        }
+        
+        // If no valid reason found, use first available (even if it's Multiple Violations)
+        if (!mostFrequentReason && parsedReasons.length > 0) {
+          // Skip "No Violations Detected" but allow others
+          for (const entry of parsedReasons) {
+            if (entry.reason !== 'No Violations Detected') {
+              mostFrequentReason = entry.reason;
+              break;
+            }
+          }
+        }
+        
+        // If still no reason, use the original flag_reason
+        if (!mostFrequentReason) {
+          mostFrequentReason = data.flag_reason || '';
+        }
+        
+        console.log('🎯 Selected most frequent reason:', mostFrequentReason);
+        console.log('🔑 Available message keys:', Object.keys(FLAG_REASON_MESSAGES));
+        console.log('✅ Has exact match?', FLAG_REASON_MESSAGES.hasOwnProperty(mostFrequentReason));
+        
+        // Get appropriate warning message based on most frequent flag reason
+        let warningMessage = FLAG_REASON_MESSAGES[mostFrequentReason];
+        
+        // If no exact match found, try case-insensitive matching
+        if (!warningMessage) {
+          const matchedKey = Object.keys(FLAG_REASON_MESSAGES).find(
+            key => key.toLowerCase() === mostFrequentReason.toLowerCase()
+          );
+          if (matchedKey) {
+            warningMessage = FLAG_REASON_MESSAGES[matchedKey];
+            console.log('✅ Found case-insensitive match:', matchedKey);
+          }
+        }
+        
+        // Final fallback
+        if (!warningMessage) {
+          warningMessage = "Do not look away from the screen and look at the camera. Keep your hands visible in front of the camera.";
+          console.warn('⚠️ No matching message found for:', mostFrequentReason);
+        }
+        
         // Show warning badge
-        setWarningMessage("Do not look away from the screen and look at the camera. Keep your hands visible in front of the camera.");
+        setWarningMessage(warningMessage);
         setShowWarning(true);
 
-        console.log('🚨 Behavior flag detected! Warning displayed to user.');
+        console.log('🚨 Behavior flag detected!', { 
+          flag_reason: data.flag_reason,
+          parsed_reasons: parsedReasons,
+          most_frequent_reason: mostFrequentReason,
+          message: warningMessage,
+          flag_count: data.flag_count 
+        });
         
         // Auto-hide warning after 5 seconds
         setTimeout(() => {
