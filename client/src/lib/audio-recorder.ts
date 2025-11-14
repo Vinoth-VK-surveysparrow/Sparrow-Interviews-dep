@@ -38,8 +38,10 @@ export class AudioRecorder extends EventEmitter {
 
     this.starting = new Promise(async (resolve, reject) => {
       try {
-        console.log("Starting AudioRecorder...");
+        console.log("Starting AudioRecorder with 16kHz for Gemini Live API...");
         
+      // Use simple audio: true to let browser handle echo cancellation automatically
+      // Complex constraints can interfere with browser's built-in echo cancellation
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       this.audioContext = await audioContext({ sampleRate: this.sampleRate });
       this.source = this.audioContext.createMediaStreamSource(this.stream);

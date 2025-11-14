@@ -135,7 +135,8 @@ export default function Assessment() {
     endQuestionLog,
     handleQuestionTransition
   } = useAssessment();
-  const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const { startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture({ videoRef });
   const { startContinuousRecording, stopContinuousRecording, isRecording, recordingDuration, forceCleanup } = useContinuousAudioRecording();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true); // Enable auto-restart for assessment
   const { fetchQuestions } = useS3Upload();

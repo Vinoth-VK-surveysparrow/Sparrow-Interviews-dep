@@ -145,7 +145,8 @@ export default function RapidFireAssessment() {
     endQuestionLog,
     handleQuestionTransition
   } = useAssessment();
-  const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const { startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture({ videoRef });
   const { startContinuousRecording, stopContinuousRecording, isRecording, recordingDuration, forceCleanup } = useContinuousAudioRecording();
   const { fetchQuestions } = useS3Upload();
   const { user, loading: authLoading } = useAuth();

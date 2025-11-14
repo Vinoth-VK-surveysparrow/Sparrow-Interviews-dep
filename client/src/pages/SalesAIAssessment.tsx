@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Button, CircleLoader } from "@sparrowengg/twigs-react";
-import { Home, Mic, MicOff, Square, Settings as SettingsIcon, Loader2 } from 'lucide-react';
+import { Home, Mic, MicOff, Square, Settings as SettingsIcon, Loader2, AlertTriangle, AlertCircle, Info, Camera } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from '@/hooks/useAuth';
-import { fetchGeminiApiKey } from '@/services/geminiApiService';
+import { getVertexModel } from '@/services/vertexApiService';
+import { tokenCache } from '@/services/vertexTokenService';
 import { useToast } from '@/hooks/use-toast';
 import { LiveAPIProvider, useLiveAPIContext } from '@/contexts/LiveAPIContext';
 import { LiveConfig } from '@/multimodal-live-types';
@@ -26,9 +29,9 @@ import { AssessmentSecurity } from '@/components/AssessmentSecurity';
 import { NavigationBlocker } from '@/components/NavigationBlocker';
 
 
-// Hardcoded base system configuration
+// Hardcoded base system configuration for Vertex AI
 const HARDCODED_BASE_CONFIG = {
-  model: "models/gemini-2.0-flash-exp",
+  model: getVertexModel(),
   generationConfig: {
     responseModalities: "audio" as const,
     speechConfig: {
@@ -72,8 +75,12 @@ const selectPersonaByAssessmentId = (assessmentId: string, type: string) => {
       // TS prefix -> Mike persona
       console.log(`🎯 Assessment ID "${assessmentId}" starts with "TS" -> selecting Mike persona`);
       return PERSONAS.find(p => p.name === 'Mike') || PERSONAS[0];
+    } else if (assessmentId.startsWith('CAMPUS')) {
+      // CAMPUS prefix -> Eric persona
+      console.log(`🎯 Assessment ID "${assessmentId}" starts with "CAMPUS" -> selecting Eric persona`);
+      return PERSONAS.find(p => p.name === 'Eric') || PERSONAS[1];
     } else {
-      console.log(`🎯 Assessment ID "${assessmentId}" doesn't match SS/TS prefix -> selecting random persona`);
+      console.log(`🎯 Assessment ID "${assessmentId}" doesn't match SS/TS/CAMPUS prefix -> selecting random persona`);
     }
   }
   
@@ -85,7 +92,7 @@ const selectPersonaByAssessmentId = (assessmentId: string, type: string) => {
 
 // Default conversation starter prompt
 const HARDCODED_CONVERSATION_STARTER = {
-  text: "ROLE DEFINITION: You ARE the prospect character described below. This is your identity and personality. You are receiving a sales call from someone. Respond as this character would respond - with their specific background, concerns, and communication style. Start the conversation by reacting naturally to receiving this call, perhaps asking who's calling or showing initial skepticism. Stay in character throughout the entire conversation. Speak only in English."
+  text: "ROLE DEFINITION: You ARE the prospect character described below. This is your identity and personality. You are in a scheduled sales conversation with a SurveySparrow representative who is calling you. You are actively evaluating survey platforms and are interested in learning about their solution. Respond as this character would respond - with their specific background, concerns, and communication style. Wait for them to introduce themselves and begin the conversation professionally. Stay in character throughout the entire conversation. Speak only in English."
 };
 
 // Hardcoded video enhancement prompt - for visual awareness only
@@ -95,16 +102,33 @@ const HARDCODED_VIDEO_PROMPT = {
 
 // Critical role assignment prompt to prevent AI hallucination
 const CRITICAL_ROLE_ASSIGNMENT_PROMPT = {
-  text: `CRITICAL ROLE ASSIGNMENT: YOU are the PROSPECT/CLIENT. I am the SALES AGENT trying to sell to YOU. This NEVER reverses.
+  text: `CRITICAL ROLE ASSIGNMENT: YOU are the PROSPECT/CLIENT evaluating solutions. I am the SALES AGENT from SurveySparrow. This NEVER reverses.
 
-As my prospect, you will:
+CONVERSATION CONTEXT:
+- This is a scheduled sales conversation, NOT a cold call
+- You are professional, engaged, and genuinely considering this solution
+- Initially, talk without interest as you're busy with other things.
+- As the conversation progresses, show more interest and ask more questions.
 
-1. **Evaluate my sales performance** continuously based on what you observe
-2. **React realistically** to my professionalism, energy, and engagement level
-3. **End the call** if I appear distracted, uninterested, or unprofessional
+As an interested prospect, you will:
 
+1. **Listen actively** to the salesperson's introduction and value proposition
+2. **Ask relevant questions** about features, competitive advantages, and your specific needs
+3. **Engage professionally** and show appropriate interest based on what you hear
+4. **Evaluate the solution** based on how well they address your concerns and needs
+5. **React realistically** to their professionalism and product knowledge
+6. **Listen carefully** to the salesperson's responses and talk accordingly , dont repeatedly ask questiosn withiout getting valuable information.
+CONVERSATION RULES:
+- Respond naturally and conversationally as an interested buyer
+- Do NOT repeat yourself or echo your previous statements
+- Listen to what I say and respond directly to it with relevant questions or concerns
+- Move the conversation forward with each response
+- Ask follow-up questions based on their answers
+- Share your evaluation criteria and concerns progressively
+- If I don't respond or pause, wait briefly before asking a clarifying question
+- You are the prospect, not the salesperson.
 
-RESPONSE REQUIREMENT: You must react as a prospect would. If you see good engagement, show interest. If you see distraction or poor presentation, address it directly as a concerned prospect, Make sure to respond onlyin English.
+RESPONSE REQUIREMENT: You are genuinely interested in evaluating this solution. Show professional curiosity, ask probing questions, and engage like a real prospect would in a scheduled sales conversation. Make sure to respond only in English.
 
 `
 };
@@ -236,6 +260,10 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     mergedAudio?: Blob;
     stereoMerged?: Blob;
   } | null>(null);
+  
+  // Instructions modal state for CAMPUS assessments
+  const [showInstructionsModal, setShowInstructionsModal] = useState(false);
+  const [instructionsAcknowledged, setInstructionsAcknowledged] = useState(false);
 
   // Recording system (simplified for now)
   const [isRecordingActive, setIsRecordingActive] = useState(false);
@@ -256,13 +284,13 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     handleQuestionTransition
   } = useAssessment();
   
-  const { 
-    videoRef: cameraRef, 
-    startCamera, 
-    startAutoCapture, 
-    stopAutoCapture, 
-    capturedImages 
-  } = useCameraCapture();
+  const {
+    startCamera,
+    startAutoCapture,
+    stopAutoCapture,
+    captureImage,
+    capturedImages
+  } = useCameraCapture({ videoRef });
   
   const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
     enabled: true,
@@ -303,12 +331,18 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     };
 
     if (connected && audioRecorder) {
+      console.log('🎤 Starting audio recorder and attaching event listeners');
+      // Remove any existing listeners first to prevent duplicates
+      audioRecorder.off("data", onData).off("volume", setInVolume);
+      // Now attach fresh listeners and start
       audioRecorder.on("data", onData).on("volume", setInVolume).start();
     } else {
+      console.log('🎤 Stopping audio recorder');
       audioRecorder.stop();
     }
 
     return () => {
+      console.log('🧹 Cleaning up audio recorder listeners');
       audioRecorder.off("data", onData).off("volume", setInVolume);
     };
   }, [connected, client, audioRecorder]);
@@ -334,12 +368,9 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
     };
   }, [client]);
 
-  // Start auto-capture when S3 is ready (like other assessments)
+  // Debug S3 ready status (auto-capture is now started manually when assessment begins)
   useEffect(() => {
-    if (isS3Ready && hasStarted) {
-      console.log('📸 S3 ready, starting auto-capture for screenshots');
-      startAutoCapture();
-    }
+    console.log('📸 S3 status check - isS3Ready:', isS3Ready, 'hasStarted:', hasStarted);
   }, [isS3Ready, hasStarted]);
 
   // Handle video streaming (send frames to Gemini)
@@ -372,7 +403,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       }
       
       if (connected && hasStarted) {
-        timeoutId = window.setTimeout(sendVideoFrame, 1000 / 0.5);
+        timeoutId = window.setTimeout(sendVideoFrame, 20000);
       }
     }
 
@@ -807,95 +838,120 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
   };
 
 
+  // Handle modal confirmation and start
+  const handleConfirmStart = async () => {
+    setShowInstructionsModal(false);
+    setInstructionsAcknowledged(true);
+    setStartButtonClicked(true);
+    
+    // Proceed with actual start
+    await proceedWithStart();
+  };
+
+  // Main start logic (extracted for reuse)
+  const proceedWithStart = async () => {
+    try {
+      // Start standard assessment session
+      if (user?.email && assessmentId) {
+        await startSession(assessmentId);
+        assessmentStartTimeRef.current = new Date();
+        
+        // Get prompt title from config for logging
+        const promptTitle = promptConfig?.systemInstruction?.parts?.[1]?.text?.split('\n')[0] || 'Games Arena Assessment';
+        startQuestionLog(promptTitle, assessmentId, 1);
+      }
+
+      // Get camera access for screenshots (standard workflow)
+      await startCamera();
+
+      // Get camera access for video streaming
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: true, 
+        audio: false // Audio is handled separately by AudioRecorder
+      });
+      setVideoStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        console.log('📹 Video stream set up successfully:', {
+          streamActive: stream.active,
+          tracks: stream.getVideoTracks().length,
+          videoElement: !!videoRef.current
+        });
+      }
+      
+      // Ensure config is set right before connection
+      if (promptConfig) {
+        console.log('🔄 Re-applying config before connection:', promptConfig);
+        setConfig(promptConfig);
+      } else {
+        console.error('❌ No promptConfig available before connection!');
+      }
+      
+      // Connect to AI and start assessment
+      await connect();
+      
+      // Start dual recording
+      await startDualRecording();
+
+      // Start auto-capture for screenshots (after session and camera are initialized)
+      console.log('📸 Starting auto-capture after assessment initialization');
+      startAutoCapture();
+
+      setHasStarted(true);
+      setTimeLeft(assessmentTimeLimit); // Reset timer to dynamic time limit
+      
+    } catch (error) {
+      console.error('Error starting assessment:', error);
+      // Reset button state on error
+      setStartButtonClicked(false);
+      
+      if (error instanceof Error) {
+        if (error.message === 'ASSESSMENT_ALREADY_COMPLETED') {
+          console.log('🔄 Assessment already completed, redirecting to results...');
+          toast({
+            title: "Assessment Already Completed",
+            description: "Redirecting to results page...",
+          });
+          setTimeout(() => {
+            setLocation(`/results/${assessmentId}`);
+          }, 1000);
+          return;
+        } else if (error.name === 'NotAllowedError') {
+          toast({
+            variant: 'destructive',
+            title: 'Camera Access Denied',
+            description: 'Please allow camera access in your browser settings and try again.',
+          });
+        } else if (error.name === 'NotFoundError') {
+          toast({
+            variant: 'destructive',
+            title: 'No Camera Found',
+            description: 'Please connect a camera to your device and try again.',
+          });
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: error.message,
+          });
+        }
+      }
+    }
+  };
+
   const handleStartClick = async () => {
     if (!hasStarted && !startButtonClicked) {
+      // For CAMPUS assessments, show instructions modal first
+      if (assessmentId.startsWith('CAMPUS') && !instructionsAcknowledged) {
+        setShowInstructionsModal(true);
+        return;
+      }
+      
       // Disable button immediately to prevent multiple clicks
       setStartButtonClicked(true);
       
-      try {
-        // Start standard assessment session
-        if (user?.email && assessmentId) {
-          await startSession(assessmentId);
-          assessmentStartTimeRef.current = new Date();
-          
-          // Get prompt title from config for logging
-          const promptTitle = promptConfig?.systemInstruction?.parts?.[1]?.text?.split('\n')[0] || 'Games Arena Assessment';
-          startQuestionLog(promptTitle, assessmentId, 1);
-        }
-
-        // Get camera access for screenshots (standard workflow)
-        await startCamera();
-
-        // Get camera access for video streaming
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
-          audio: false // Audio is handled separately by AudioRecorder
-        });
-        setVideoStream(stream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          console.log('📹 Video stream set up successfully:', {
-            streamActive: stream.active,
-            tracks: stream.getVideoTracks().length,
-            videoElement: !!videoRef.current
-          });
-        }
-        
-        // Ensure config is set right before connection
-        if (promptConfig) {
-          console.log('🔄 Re-applying config before connection:', promptConfig);
-          setConfig(promptConfig);
-        } else {
-          console.error('❌ No promptConfig available before connection!');
-        }
-        
-        // Connect to AI and start assessment
-        await connect();
-        
-        // Start dual recording
-        await startDualRecording();
-        
-        setHasStarted(true);
-        setTimeLeft(assessmentTimeLimit); // Reset timer to dynamic time limit
-        
-        
-      } catch (error) {
-        console.error('Error starting assessment:', error);
-        // Reset button state on error
-        setStartButtonClicked(false);
-        
-        if (error instanceof Error) {
-          if (error.message === 'ASSESSMENT_ALREADY_COMPLETED') {
-            console.log('🔄 Assessment already completed, redirecting to results...');
-            toast({
-              title: "Assessment Already Completed",
-              description: "Redirecting to results page...",
-            });
-            setTimeout(() => {
-              setLocation(`/results/${assessmentId}`);
-            }, 1000);
-            return;
-          } else if (error.name === 'NotAllowedError') {
-            toast({
-              variant: 'destructive',
-              title: 'Camera Access Denied',
-              description: 'Please allow camera access in your browser settings and try again.',
-            });
-          } else if (error.name === 'NotFoundError') {
-            toast({
-              variant: 'destructive',
-              title: 'No Camera Found',
-              description: 'Please connect a camera to your device and try again.',
-            });
-          } else {
-            toast({
-              variant: 'destructive',
-              title: 'Error',
-              description: error.message,
-            });
-          }
-        }
-      }
+      // Proceed with start
+      await proceedWithStart();
     } else {
       // Stop the assessment and dual recording
       await disconnect();
@@ -1071,11 +1127,11 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             </div>
           ) : (
             /* Single Random Persona Display */
-            <div className="w-full max-w-5xl mx-auto px-4">
+            <div className="w-full max-w-[1400px] mx-auto px-6">
               {/* Desktop layout */}
-              <div className="hidden md:flex relative items-center">
+              <div className="hidden md:flex relative items-center justify-center gap-0">
                 {/* Avatar */}
-                <div className="w-[470px] h-[470px] rounded-3xl overflow-hidden bg-gray-200 dark:bg-neutral-800 flex-shrink-0">
+                <div className="w-[420px] h-[500px] rounded-3xl overflow-hidden bg-gray-200 dark:bg-neutral-800 flex-shrink-0">
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -1091,8 +1147,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
                   </motion.div>
                 </div>
 
-                {/* Card */}
-                <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 ml-[-80px] z-10 max-w-xl flex-1">
+                {/* Card - Centered with reduced height */}
+                <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-7 ml-[-80px] z-10 w-[550px] flex-shrink-0 h-[380px] flex flex-col justify-center">
                   <motion.div
                     initial={{ opacity: 0, x: 50 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -1146,6 +1202,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
                     </div>
                   </motion.div>
                 </div>
+
               </div>
 
               {/* Mobile layout */}
@@ -1217,6 +1274,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
                         </div>
                       </div>
                     </div>
+
                   </motion.div>
                 </div>
               </div>
@@ -1247,6 +1305,101 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           </div>
         </div>
         </main>
+
+        {/* Instructions Modal for CAMPUS assessments */}
+        <Dialog open={showInstructionsModal} onOpenChange={setShowInstructionsModal}>
+          <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col bg-white border-2 border-gray-600 p-0">
+            <DialogHeader className="px-6 pt-6 pb-4 border-b border-gray-300">
+              <DialogTitle className="text-2xl font-bold text-gray-900">
+                Sales Assessment Call Instructions
+              </DialogTitle>
+            </DialogHeader>
+            
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="space-y-6 text-gray-900 leading-relaxed">
+                {/* What Is This Round */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-3 text-gray-900">What Is This Round?</h3>
+                  <p className="text-base">
+                    This is a simulated sales call. You will act as a SurveySparrow salesperson speaking to an AI prospect evaluating survey platforms. The AI is a decision-maker who will respond as a real customer would during a competitive sales process.
+                  </p>
+                </div>
+
+                {/* How the Call Works */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-3 text-gray-900">How the Call Works</h3>
+                  <p className="text-base mb-3">
+                    <strong>You start the conversation:</strong> Always begin with a professional opener. Clearly state you are calling from SurveySparrow and the purpose of your call.
+                  </p>
+                  <p className="text-base">
+                    The AI prospect will reply with questions, scenarios, or concerns about competing solutions. The call will flow as a typical B2B discovery or negotiation conversation.
+                  </p>
+                </div>
+
+                {/* Speaking Guidelines */}
+                <div>
+                  <h3 className="text-xl font-semibold mb-3 text-gray-900">Speaking Guidelines (How to Speak)</h3>
+                  <ul className="space-y-3 text-base list-disc list-inside">
+                    <li>
+                      <strong>Begin with a clear opener:</strong> Briefly introduce yourself and SurveySparrow, and set the agenda. For example, "Hi, this is Jhon from SurveySparrow. I'm reaching out to learn about your survey needs and see if we're a good fit."
+                    </li>
+                    <li>
+                      <strong>Listen actively and be patient:</strong> Let the prospect speak fully before responding. Don't rush to reply.
+                    </li>
+                    <li>
+                      <strong>Sound confident and consultative:</strong> Speak calmly and clearly, using a friendly, professional tone. Avoid jargon and keep your language simple and direct.
+                    </li>
+                    <li>
+                      <strong>Guide the conversation:</strong> Use open-ended questions to better understand their needs, like "Can you share what challenges you're experiencing with your current survey tool?"
+                    </li>
+                    <li>
+                      <strong>Explain patiently:</strong> When you discuss SurveySparrow, clearly connect features to their needs. Speak at a measured pace, using specific examples to illustrate value.
+                    </li>
+                    <li>
+                      <strong>Stay focused:</strong> Keep the conversation on how SurveySparrow can address their priorities. Avoid going off-topic or listing unnecessary features.
+                    </li>
+                    <li>
+                      <strong>Handle objections respectfully:</strong> If the prospect raises concerns, acknowledge them and address each point with facts or relevant experiences without dismissiveness.
+                    </li>
+                    <li>
+                      <strong>Clarify and confirm:</strong> Summarize what you've learned and confirm your understanding. For example, "So you're looking for a solution that boosts engagement and integrates with your CRM, correct?"
+                    </li>
+                    <li>
+                      <strong>Close with next steps:</strong> End with a clear summary and propose a follow-up, such as a demo or a call recap. Thank the prospect for their time before ending the conversation.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Fixed Footer with Checkbox and Start Button */}
+            <div className="px-6 py-4 border-t border-gray-300 bg-white">
+              <div className="flex items-start gap-3 mb-4">
+                <Checkbox
+                  id="instructions-checkbox"
+                  checked={instructionsAcknowledged}
+                  onCheckedChange={(checked) => setInstructionsAcknowledged(checked as boolean)}
+                  className="mt-1"
+                />
+                <label htmlFor="instructions-checkbox" className="text-base text-gray-900 font-medium cursor-pointer select-none">
+                  I have read all the information and I am ready to start the call
+                </label>
+              </div>
+              
+              <div className="flex justify-end">
+                <Button
+                  color="primary"
+                  size="lg"
+                  onClick={handleConfirmStart}
+                  disabled={!instructionsAcknowledged}
+                >
+                  Start Call
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -1260,55 +1413,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       <NavigationBlocker />
       
       {/* Hidden canvas for video processing */}
-              <canvas style={{ display: "none" }} ref={renderCanvasRef} />
-        
-        {/* Hidden camera element for screenshot capture */}
-        <video 
-          ref={cameraRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          style={{ display: "none" }}
-          width={640}
-          height={480}
-        />
-      
-      {/* Timer - Top Center */}
-      <div className="timer-container">
-        <div className="circular-progress">
-          <svg className="progress-ring" width="120" height="120">
-            <circle
-              className="progress-ring-circle-bg"
-              stroke="#e5e7eb"
-              strokeWidth="8"
-              fill="transparent"
-              r="52"
-              cx="60"
-              cy="60"
-            />
-            <circle
-              className="progress-ring-circle"
-              stroke="#4A9CA6"
-              strokeWidth="8"
-              fill="transparent"
-              r="52"
-              cx="60"
-              cy="60"
-              style={{
-                strokeDasharray: `${2 * Math.PI * 52}`,
-                strokeDashoffset: `${2 * Math.PI * 52 * (1 - progressPercentage / 100)}`,
-                transform: 'rotate(-90deg)',
-                transformOrigin: '50% 50%',
-              }}
-            />
-          </svg>
-          <div className="timer-text">
-            <div className="time-remaining">{formatTime(timeLeft)}</div>
-            <div className="timer-label">remaining</div>
-          </div>
-        </div>
-      </div>
-
+      <canvas style={{ display: "none" }} ref={renderCanvasRef} />
 
       {/* Behavior Warning Badge */}
       <div style={{ 
@@ -1330,17 +1435,10 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
       {/* AI Connection Status */}
       <div className="connection-status">
         {connected ? (
-          <div className="status-connected">
-            <div className="w-4 h-4 bg-green-500 rounded-full"></div>
-            <span>AI Connected</span>
-          </div>
+          <div className="w-3 h-3 bg-green-500 rounded-full shadow-lg"></div>
         ) : (
-          <div className="status-disconnected">
-            <div className="w-4 h-4 bg-red-500 rounded-full"></div>
-            <span>AI Disconnected</span>
-          </div>
+          <div className="w-3 h-3 bg-red-500 rounded-full shadow-lg"></div>
         )}
-
       </div>
 
       {/* Video Section - AI Robot Left, User Camera Right */}
@@ -1349,13 +1447,7 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         <div className="video-participant">
           <div className="video-circle ai-circle">
             <SiriOrb size="400px" isSpeaking={isModelSpeaking} />
-            <div className="ai-robot-container">
-              <AIRobotIcon />
-            </div>
           </div>
-          <span className="participant-label">
-            {selectedPersona ? `${selectedPersona.name} (AI Prospect)` : 'AI Prospect'}
-          </span>
         </div>
 
         {/* User Camera Container - Right */}
@@ -1400,28 +1492,58 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
         </div>
       </div>
 
-      {/* Stop Button */}
+      {/* Timer as End Button - Bottom Center */}
       <button
         onClick={handleStartClick}
         disabled={stopButtonClicked || isUploading}
-        className={`stop-conversation-btn ${(stopButtonClicked || isUploading) ? 'disabled' : ''}`}
+        className="timer-end-button"
       >
-        {isUploading ? (
-          <>
-            <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-white"></div>
-            Uploading...
-          </>
-        ) : stopButtonClicked ? (
-          <>
-            <Square className="w-4 h-4" />
-            Processing...
-          </>
-        ) : (
-          <>
-            <Square className="w-4 h-4" />
-            Stop the Convo
-          </>
-        )}
+        <div className="circular-progress">
+          <svg className="progress-ring" width="140" height="140">
+            <circle
+              className="progress-ring-circle-bg"
+              stroke="#e5e7eb"
+              strokeWidth="8"
+              fill="transparent"
+              r="62"
+              cx="70"
+              cy="70"
+            />
+            <circle
+              className="progress-ring-circle"
+              stroke="#4A9CA6"
+              strokeWidth="8"
+              fill="transparent"
+              r="62"
+              cx="70"
+              cy="70"
+              style={{
+                strokeDasharray: `${2 * Math.PI * 62}`,
+                strokeDashoffset: `${2 * Math.PI * 62 * (1 - progressPercentage / 100)}`,
+                transform: 'rotate(-90deg)',
+                transformOrigin: '50% 50%',
+              }}
+            />
+          </svg>
+          <div className="timer-text">
+            {isUploading ? (
+              <>
+                <div className="w-6 h-6 animate-spin rounded-full border-b-2 border-teal-500 mx-auto mb-1"></div>
+                <div className="uploading-text">Uploading...</div>
+              </>
+            ) : stopButtonClicked ? (
+              <>
+                <div className="w-6 h-6 animate-spin rounded-full border-b-2 border-teal-500 mx-auto mb-1"></div>
+                <div className="processing-text">Processing...</div>
+              </>
+            ) : (
+              <>
+                <div className="time-remaining">{formatTime(timeLeft)}</div>
+                <div className="timer-label">End Assessment</div>
+              </>
+            )}
+          </div>
+        </div>
       </button>
 
       <style dangerouslySetInnerHTML={{
@@ -1437,14 +1559,6 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             position: relative;
           }
 
-          .timer-container {
-            position: absolute;
-            top: 2rem;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-          }
-
           .connection-status {
             position: absolute;
             top: 2rem;
@@ -1452,27 +1566,35 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
             z-index: 10;
           }
 
-          .status-connected,
-          .status-disconnected {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            padding: 0.75rem 1rem;
-            rounded: 0.5rem;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            font-size: 0.875rem;
-            font-weight: 500;
-            border-radius: 0.5rem;
+          .timer-end-button {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 0;
+            position: relative;
+            margin-top: 1rem;
           }
 
-          .status-connected span {
-            color: #10b981;
+          .timer-end-button:hover:not(:disabled) {
+            transform: scale(1.05);
           }
 
-          .status-disconnected span {
+          .timer-end-button:hover:not(:disabled) .progress-ring-circle {
+            stroke: #ef4444;
+          }
+
+          .timer-end-button:hover:not(:disabled) .time-remaining {
             color: #ef4444;
+          }
+
+          .timer-end-button:hover:not(:disabled) .timer-label {
+            color: #ef4444;
+          }
+
+          .timer-end-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
           }
 
           .circular-progress {
@@ -1483,11 +1605,11 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           }
 
           .progress-ring {
-            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
           }
 
           .progress-ring-circle {
-            transition: stroke-dashoffset 0.3s ease;
+            transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
           }
 
           .timer-text {
@@ -1499,18 +1621,28 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           }
 
           .time-remaining {
-            font-size: 1.25rem;
+            font-size: 1.75rem;
             font-weight: 700;
             color: #ffffff;
             line-height: 1;
+            transition: color 0.3s ease;
           }
 
           .timer-label {
-            font-size: 0.75rem;
+            font-size: 0.875rem;
             color: #d1d5db;
-            margin-top: 2px;
+            margin-top: 0.5rem;
+            font-weight: 500;
+            transition: color 0.3s ease;
           }
 
+          .uploading-text,
+          .processing-text {
+            font-size: 0.875rem;
+            color: #4A9CA6;
+            font-weight: 500;
+            margin-top: 0.25rem;
+          }
 
           .video-containers {
             display: flex;
@@ -1713,64 +1845,8 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
           .participant-label {
             margin-top: 1rem;
             font-weight: 500;
-            color: #333;
+            color: #ffffff;
             font-size: 1.1rem;
-          }
-
-          .stop-conversation-btn {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.5rem;
-            background: #2d2d2d;
-            color: white;
-            border: none;
-            border-radius: 25px;
-            font-weight: 500;
-            font-size: 0.95rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-          }
-
-          .stop-conversation-btn:hover:not(.disabled) {
-            background: #1a1a1a;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-          }
-          
-          .stop-conversation-btn.disabled {
-            background: #6b7280;
-            cursor: not-allowed;
-            opacity: 0.7;
-          }
-          
-          .stop-conversation-btn.disabled:hover {
-            background: #6b7280;
-            transform: none;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-          }
-
-          .start-conversation-btn {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 1rem 2rem;
-            background: #6366f1;
-            color: white;
-            border: none;
-            border-radius: 30px;
-            font-weight: 600;
-            font-size: 1.1rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
-          }
-
-          .start-conversation-btn:hover {
-            background: #4f46e5;
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
           }
 
           @media (max-width: 768px) {
@@ -1802,53 +1878,90 @@ const SalesAIAssessmentContent: React.FC<SalesAIAssessmentContentProps> = ({ ass
 
 export default function SalesAIAssessment() {
   const [, params] = useRoute('/sales-ai/:assessmentId');
-  const { user } = useAuth();
-  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [tokenValidation, setTokenValidation] = useState<'loading' | 'valid' | 'invalid'>('loading');
 
+  // Validate token availability on component mount
   useEffect(() => {
-    const fetchApiKey = async () => {
-      if (user?.email) {
-        try {
-          const apiKey = await fetchGeminiApiKey(user.email);
-          setGeminiApiKey(apiKey || '');
-        } catch (error) {
-          console.error('Error fetching Gemini API key:', error);
-          setGeminiApiKey('');
+    const validateToken = async () => {
+      try {
+        console.log('🔍 Validating Vertex AI token availability...');
+        const tokenData = await tokenCache.getValidToken();
+        
+        if (tokenData) {
+          console.log('✅ Vertex AI token validation successful');
+          setTokenValidation('valid');
+        } else {
+          console.log('❌ Vertex AI token validation failed');
+          setTokenValidation('invalid');
         }
+      } catch (error) {
+        console.error('❌ Error validating Vertex AI token:', error);
+        setTokenValidation('invalid');
       }
     };
 
-    fetchApiKey();
-  }, [user?.email]);
-
-  // Listen for API key updates from SettingsModal
-  useEffect(() => {
-    const handleApiKeyUpdate = () => {
-      console.log('🔄 SalesAIAssessment - Received API key update event');
-      if (user?.email) {
-        fetchGeminiApiKey(user.email).then(apiKey => {
-          console.log('🔑 SalesAIAssessment - Updated API key:', apiKey ? 'present' : 'missing');
-          setGeminiApiKey(apiKey || '');
-        }).catch(error => {
-          console.error('❌ SalesAIAssessment - Error updating API key:', error);
-          setGeminiApiKey('');
-        });
-      }
-    };
-
-    window.addEventListener('gemini-api-key-updated', handleApiKeyUpdate);
-
-    return () => {
-      window.removeEventListener('gemini-api-key-updated', handleApiKeyUpdate);
-    };
-  }, [user?.email]);
+    validateToken();
+  }, []);
 
   if (!params?.assessmentId) {
     return <div>Invalid assessment ID</div>;
   }
 
+  if (tokenValidation === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            Preparing AI Assessment
+          </h2>
+        </div>
+      </div>
+    );
+  }
+
+  if (tokenValidation === 'invalid') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="mx-auto w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6">
+            <AlertTriangle className="w-10 h-10 text-red-600 dark:text-red-400" />
+          </div>
+          
+          <h2 className="text-3xl font-bold text-white mb-3">
+            Oops! Something went wrong
+          </h2>
+          
+          <p className="text-gray-300 mb-8">
+            We're sorry for the inconvenience. Please try again.
+          </p>
+          
+          <div className="flex justify-center gap-3">
+            <Button 
+              variant="solid"
+              color="primary"
+              size="lg"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </Button>
+            <Button 
+              variant="outline" 
+              color="default"
+              size="lg"
+              leftIcon={<Home className="w-4 h-4" />}
+              onClick={() => window.location.href = '/test-selection'}
+            >
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <LiveAPIProvider apiKey={geminiApiKey}>
+    <LiveAPIProvider>
       <SalesAIAssessmentContent assessmentId={params.assessmentId} />
     </LiveAPIProvider>
   );

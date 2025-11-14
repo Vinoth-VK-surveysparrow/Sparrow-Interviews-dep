@@ -39,7 +39,11 @@ interface User {
 
 export default function UserAccess() {
   const [loading, setLoading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [showBatchProgress, setShowBatchProgress] = useState(false);
   const [tests, setTests] = useState<Test[]>([]);
+  
+  const BATCH_SIZE = 85;
   const [selectedTestId, setSelectedTestId] = useState<string>('');
   const [userQuery, setUserQuery] = useState('');
   const [userLoading, setUserLoading] = useState(false);
@@ -55,6 +59,10 @@ export default function UserAccess() {
   const [newUserEndDate, setNewUserEndDate] = useState<Date | undefined>();
   const [newUserEmailNotification, setNewUserEmailNotification] = useState(false);
   const [newUserCallNotification, setNewUserCallNotification] = useState(false);
+  const [startTimePopoverOpen, setStartTimePopoverOpen] = useState(false);
+  const [endTimePopoverOpen, setEndTimePopoverOpen] = useState(false);
+  const [sharedStartDate, setSharedStartDate] = useState<Date | undefined>();
+  const [sharedEndDate, setSharedEndDate] = useState<Date | undefined>();
 
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -167,9 +175,15 @@ export default function UserAccess() {
       const result = await response.json();
       
       if (response.ok && result.users && Array.isArray(result.users)) {
-        // Add default toggles to each user
-        const usersWithToggles = result.users.map((user: any) => ({
-          ...user,
+        // New format: all users share the same start_time and end_time
+        const sharedStartTime = result.start_time;
+        const sharedEndTime = result.end_time;
+        
+        // Create user objects with shared time and default toggles
+        const usersWithToggles = result.users.map((userEmail: string) => ({
+          user_email: userEmail,
+          start_time: sharedStartTime,
+          end_time: sharedEndTime,
           email_notification: false,
           call_notification: false
         }));
@@ -229,6 +243,28 @@ export default function UserAccess() {
   const handleDeleteUser = (index: number) => {
     const updatedUsers = structuredUsers.filter((_, i) => i !== index);
     setStructuredUsers(updatedUsers);
+  };
+
+  const handleSaveSharedTime = () => {
+    if (sharedStartDate && sharedEndDate) {
+      const updatedUsers = structuredUsers.map(user => ({
+        ...user,
+        start_time: toISTString(sharedStartDate),
+        end_time: toISTString(sharedEndDate)
+      }));
+      setStructuredUsers(updatedUsers);
+      setStartTimePopoverOpen(false);
+      setEndTimePopoverOpen(false);
+      setSharedStartDate(undefined);
+      setSharedEndDate(undefined);
+    }
+  };
+
+  const handleCancelSharedTimeEdit = () => {
+    setStartTimePopoverOpen(false);
+    setEndTimePopoverOpen(false);
+    setSharedStartDate(undefined);
+    setSharedEndDate(undefined);
   };
 
   const handleManualAddUser = () => {
@@ -295,43 +331,89 @@ export default function UserAccess() {
 
     setLoading(true);
 
-    const payload = {
-      test_id: selectedTestId,
-      users: structuredUsers.map(user => ({
-        user_email: user.user_email,
-        start_time: user.start_time,
-        end_time: user.end_time,
-        email: user.email_notification || false,
-        call: user.call_notification || false
-      }))
-    };
+    // Split users into batches of BATCH_SIZE
+    const userEmails = structuredUsers.map(user => user.user_email);
+    const batches = [];
+    for (let i = 0; i < userEmails.length; i += BATCH_SIZE) {
+      batches.push(userEmails.slice(i, i + BATCH_SIZE));
+    }
+
+    // Show progress if more than one batch
+    if (batches.length > 1) {
+      setShowBatchProgress(true);
+      setBatchProgress({ current: 0, total: batches.length });
+    }
+
+    let successCount = 0;
+    let failedCount = 0;
 
     try {
-      const response = await fetch(API_ENDPOINTS.GIVE_ACCESS, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      // Process each batch sequentially
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        
+        // Update progress
+        if (batches.length > 1) {
+          setBatchProgress({ current: i + 1, total: batches.length });
+        }
+
+        const payload = {
+          test_id: selectedTestId,
+          start_time: structuredUsers[0].start_time, // Shared start time
+          end_time: structuredUsers[0].end_time, // Shared end time
+          send_email: structuredUsers.some(u => u.email_notification), // Send email if any user has email notification enabled
+          users: batch // Batch of email addresses
+        };
+
+        try {
+          const response = await fetch(API_ENDPOINTS.GIVE_ACCESS, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+
+          if (response.ok) {
+            successCount += batch.length;
+          } else {
+            failedCount += batch.length;
+            console.error(`Batch ${i + 1} failed:`, await response.text());
+          }
+        } catch (error) {
+          failedCount += batch.length;
+          console.error(`Error in batch ${i + 1}:`, error);
+        }
+      }
+
+      // Track the action
+      trackUserAction('access_given', {
+        test_id: selectedTestId,
+        users_count: structuredUsers.length,
+        batches_count: batches.length,
+        success_count: successCount,
+        failed_count: failedCount,
       });
 
-      if (response.ok) {
-        trackUserAction('access_given', {
-          test_id: selectedTestId,
-          users_count: structuredUsers.length,
-        });
-
+      // Show result toast
+      if (failedCount === 0) {
         toast({
           title: "Success",
-          description: "Access has been granted successfully!",
+          description: `Access granted successfully to ${successCount} user${successCount !== 1 ? 's' : ''}!`,
         });
-
-        // Reset form
-        setStructuredUsers([]);
-        setSelectedTestId('');
+      } else if (successCount > 0) {
+        toast({
+          title: "Partial Success",
+          description: `Access granted to ${successCount} user${successCount !== 1 ? 's' : ''}. ${failedCount} failed.`,
+          variant: "default",
+        });
       } else {
-        throw new Error('Failed to give access');
+        throw new Error('All batches failed');
       }
+
+      // Reset form
+      setStructuredUsers([]);
+      setSelectedTestId('');
     } catch (error) {
       console.error('Error giving access:', error);
       toast({
@@ -341,6 +423,8 @@ export default function UserAccess() {
       });
     } finally {
       setLoading(false);
+      setShowBatchProgress(false);
+      setBatchProgress({ current: 0, total: 0 });
     }
   };
 
@@ -597,15 +681,192 @@ export default function UserAccess() {
           {structuredUsers.length > 0 && (
             <div className="space-y-4 mb-8">
               <h3 className="text-lg font-semibold">Structured Users</h3>
+              
+              {/* Time Slot Display - Single for all users */}
+              <div className="bg-muted/30 border border-border rounded-lg p-4">
+                <h4 className="text-sm font-medium text-muted-foreground mb-2">Time Allocation (All Users)</h4>
+                <div className="flex items-center gap-6">
+                  {/* Start Time - Clickable */}
+                  <Popover 
+                    open={startTimePopoverOpen}
+                    onOpenChange={(open) => {
+                      if (open) {
+                        setSharedStartDate(parseISTString(structuredUsers[0].start_time));
+                        setSharedEndDate(parseISTString(structuredUsers[0].end_time));
+                      }
+                      setStartTimePopoverOpen(open);
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <button className="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="text-xs text-muted-foreground">Start: </span>
+                          <span className="text-sm font-medium">{safeFormatDate(parseISTString(structuredUsers[0].start_time), "PPP hh:mm:ss a")}</span>
+                        </div>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="p-3">
+                        <Calendar
+                          value={sharedStartDate ? dateToInternationalized(sharedStartDate) : undefined}
+                          onChange={(value) => {
+                            if (value) {
+                              const newDate = internationalizedToDate(value);
+                              if (newDate && sharedStartDate) {
+                                newDate.setHours(sharedStartDate.getHours(), sharedStartDate.getMinutes(), sharedStartDate.getSeconds());
+                                setSharedStartDate(newDate);
+                              } else {
+                                setSharedStartDate(newDate);
+                              }
+                            }
+                          }}
+                        />
+                        <div className="mt-3 pt-3 border-t space-y-3">
+                          <div>
+                            <label className="text-sm font-medium block mb-2">Time</label>
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <Input
+                                type="time"
+                                step="1"
+                                value={sharedStartDate ? safeFormatDate(sharedStartDate, "HH:mm:ss") : ""}
+                                onChange={(e) => {
+                                  if (sharedStartDate && e.target.value) {
+                                    const [hours, minutes, seconds] = e.target.value.split(':');
+                                    const newDate = new Date(sharedStartDate);
+                                    const h = parseInt(hours) || 0;
+                                    const m = parseInt(minutes) || 0;
+                                    const s = parseInt(seconds || '0') || 0;
+                                    
+                                    if (h >= 0 && h <= 23 && m >= 0 && m <= 59 && s >= 0 && s <= 59) {
+                                      newDate.setHours(h, m, s);
+                                      setSharedStartDate(newDate);
+                                    }
+                                  }
+                                }}
+                                className="flex-1"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleSaveSharedTime}
+                            className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelSharedTimeEdit}
+                            className="flex-1"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* End Time - Clickable */}
+                  <Popover
+                    open={endTimePopoverOpen}
+                    onOpenChange={(open) => {
+                      if (open) {
+                        setSharedStartDate(parseISTString(structuredUsers[0].start_time));
+                        setSharedEndDate(parseISTString(structuredUsers[0].end_time));
+                      }
+                      setEndTimePopoverOpen(open);
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <button className="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="text-xs text-muted-foreground">End: </span>
+                          <span className="text-sm font-medium">{safeFormatDate(parseISTString(structuredUsers[0].end_time), "PPP hh:mm:ss a")}</span>
+                        </div>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="p-3">
+                        <Calendar
+                          value={sharedEndDate ? dateToInternationalized(sharedEndDate) : undefined}
+                          onChange={(value) => {
+                            if (value) {
+                              const newDate = internationalizedToDate(value);
+                              if (newDate && sharedEndDate) {
+                                newDate.setHours(sharedEndDate.getHours(), sharedEndDate.getMinutes(), sharedEndDate.getSeconds());
+                                setSharedEndDate(newDate);
+                              } else {
+                                setSharedEndDate(newDate);
+                              }
+                            }
+                          }}
+                        />
+                        <div className="mt-3 pt-3 border-t space-y-3">
+                          <div>
+                            <label className="text-sm font-medium block mb-2">Time</label>
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              <Input
+                                type="time"
+                                step="1"
+                                value={sharedEndDate ? safeFormatDate(sharedEndDate, "HH:mm:ss") : ""}
+                                onChange={(e) => {
+                                  if (sharedEndDate && e.target.value) {
+                                    const [hours, minutes, seconds] = e.target.value.split(':');
+                                    const newDate = new Date(sharedEndDate);
+                                    const h = parseInt(hours) || 0;
+                                    const m = parseInt(minutes) || 0;
+                                    const s = parseInt(seconds || '0') || 0;
+                                    
+                                    if (h >= 0 && h <= 23 && m >= 0 && m <= 59 && s >= 0 && s <= 59) {
+                                      newDate.setHours(h, m, s);
+                                      setSharedEndDate(newDate);
+                                    }
+                                  }
+                                }}
+                                className="flex-1"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-3 border-t flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleSaveSharedTime}
+                            className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelSharedTimeEdit}
+                            className="flex-1"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
               <div className="border border-border rounded-lg overflow-hidden">
                 <table className="w-full">
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Email</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Start Time</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">End Time</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Email</th>
-                      <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Call</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Email Notification</th>
+                      <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Call Notification</th>
                       <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
@@ -621,134 +882,6 @@ export default function UserAccess() {
                             />
                           ) : (
                             user.user_email
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {editingUser === index ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-full justify-start text-left font-normal"
-                                  leftIcon={<Clock className="h-4 w-4" />}
-                                >
-                                  {startDate ? safeFormatDate(startDate, "PPP hh:mm:ss a") : "Pick start date & time"}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <div className="p-3">
-                                  <Calendar
-                                    value={startDate ? dateToInternationalized(startDate) : undefined}
-                                    onChange={(value) => {
-                                      if (value) {
-                                        const newDate = internationalizedToDate(value);
-                                        if (newDate && startDate) {
-                                          newDate.setHours(startDate.getHours(), startDate.getMinutes(), startDate.getSeconds());
-                                          setStartDate(newDate);
-                                        } else {
-                                          setStartDate(newDate);
-                                        }
-                                      }
-                                    }}
-                                  />
-                                  <div className="mt-3 pt-3 border-t space-y-3">
-                                    <div>
-                                      <label className="text-sm font-medium block mb-2">Start Time</label>
-                                      <div className="flex items-center gap-2">
-                                        <Clock className="h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                          type="time"
-                                          step="1"
-                                          value={startDate ? safeFormatDate(startDate, "HH:mm:ss") : ""}
-                                          onChange={(e) => {
-                                            if (startDate && e.target.value) {
-                                              const [hours, minutes, seconds] = e.target.value.split(':');
-                                              const newDate = new Date(startDate);
-                                              const h = parseInt(hours) || 0;
-                                              const m = parseInt(minutes) || 0;
-                                              const s = parseInt(seconds || '0') || 0;
-                                              
-                                              if (h >= 0 && h <= 23 && m >= 0 && m <= 59 && s >= 0 && s <= 59) {
-                                                newDate.setHours(h, m, s);
-                                                setStartDate(newDate);
-                                              }
-                                            }
-                                          }}
-                                          className="flex-1"
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          ) : (
-                            safeFormatDate(parseISTString(user.start_time), "PPP hh:mm:ss a")
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {editingUser === index ? (
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-full justify-start text-left font-normal"
-                                  leftIcon={<Clock className="h-4 w-4" />}
-                                >
-                                  {endDate ? safeFormatDate(endDate, "PPP hh:mm:ss a") : "Pick end date & time"}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <div className="p-3">
-                                  <Calendar
-                                    value={endDate ? dateToInternationalized(endDate) : undefined}
-                                    onChange={(value) => {
-                                      if (value) {
-                                        const newDate = internationalizedToDate(value);
-                                        if (newDate && endDate) {
-                                          newDate.setHours(endDate.getHours(), endDate.getMinutes(), endDate.getSeconds());
-                                          setEndDate(newDate);
-                                        } else {
-                                          setEndDate(newDate);
-                                        }
-                                      }
-                                    }}
-                                  />
-                                  <div className="mt-3 pt-3 border-t space-y-3">
-                                    <div>
-                                      <label className="text-sm font-medium block mb-2">End Time</label>
-                                      <div className="flex items-center gap-2">
-                                        <Clock className="h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                          type="time"
-                                          step="1"
-                                          value={endDate ? safeFormatDate(endDate, "HH:mm:ss") : ""}
-                                          onChange={(e) => {
-                                            if (endDate && e.target.value) {
-                                              const [hours, minutes, seconds] = e.target.value.split(':');
-                                              const newDate = new Date(endDate);
-                                              const h = parseInt(hours) || 0;
-                                              const m = parseInt(minutes) || 0;
-                                              const s = parseInt(seconds || '0') || 0;
-                                              
-                                              if (h >= 0 && h <= 23 && m >= 0 && m <= 59 && s >= 0 && s <= 59) {
-                                                newDate.setHours(h, m, s);
-                                                setEndDate(newDate);
-                                              }
-                                            }
-                                          }}
-                                          className="flex-1"
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </PopoverContent>
-                            </Popover>
-                          ) : (
-                            safeFormatDate(parseISTString(user.end_time), "PPP hh:mm:ss a")
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -831,7 +964,25 @@ export default function UserAccess() {
           )}
 
           {/* Give Access Button */}
-          <div className="flex justify-center">
+          <div className="flex flex-col items-center gap-4">
+            {showBatchProgress && (
+              <div className="w-full max-w-md">
+                <div className="mb-2 flex justify-between text-sm">
+                  <span className="text-muted-foreground">Processing batches...</span>
+                  <span className="font-medium">{batchProgress.current} / {batchProgress.total}</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2.5">
+                  <div 
+                    className="bg-primary h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                  ></div>
+                </div>
+                <p className="mt-2 text-xs text-center text-muted-foreground">
+                  Sending access to {BATCH_SIZE} users per batch
+                </p>
+              </div>
+            )}
+            
             <Button 
               onClick={handleGiveAccess} 
               disabled={loading || !selectedTestId || structuredUsers.length === 0}

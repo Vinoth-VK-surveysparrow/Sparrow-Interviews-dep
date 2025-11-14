@@ -211,7 +211,8 @@ export default function ConductorAssessment() {
   } = useAssessment();
 
   // Camera and image capture
-  const { videoRef: assessmentVideoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
+  const assessmentVideoRef = useRef<HTMLVideoElement>(null);
+  const { startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture({ videoRef: assessmentVideoRef });
 
   // Load conductor configuration from localStorage (set by Dashboard)
   const loadConfig = useCallback(async () => {

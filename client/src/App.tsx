@@ -31,6 +31,7 @@ import Results from "@/pages/Results";
 import ConductorAssessment from "@/pages/ConductorAssessment";
 import TripleStepAssessment from "@/pages/TripleStepAssessment";
 import SalesAIAssessment from "@/pages/SalesAIAssessment";
+import QAAIAssessment from "@/pages/QA_AIAssessment";
 import RapidFireAssessment from "@/pages/RapidFireAssessment";
 import Login from "@/pages/Login";
 import NotFoundPage from "@/pages/NotFoundPage";
@@ -41,6 +42,7 @@ import { clarityService } from "@/lib/clarityService";
 import PermissionsTest from "@/components/PermissionsTest";
 import SecurityRestrictions from "@/components/SecurityRestrictions";
 import SettingsModal from "@/components/SettingsModal";
+import MobileBlocker from "@/components/MobileBlocker";
 
 function Header() {
   const { user, signOut, isAuthenticated } = useAuth();
@@ -141,6 +143,7 @@ function Router() {
                               location.startsWith('/conductor/') ||
                               location.startsWith('/triple-step/') ||
                               location.startsWith('/sales-ai/') ||
+                              location.startsWith('/qa-ai/') ||
                               location.startsWith('/rapid-fire/');
   
   const shouldHideSidebar = isInActiveAssessment || location === '/login';
@@ -239,6 +242,11 @@ function Router() {
                 <SalesAIAssessment />
               </ProtectedRoute>
             </Route>
+            <Route path="/qa-ai/:assessmentId">
+              <ProtectedRoute>
+                <QAAIAssessment />
+              </ProtectedRoute>
+            </Route>
             <Route path="/rapid-fire/:assessmentId">
               <ProtectedRoute>
                 <RapidFireAssessment />
@@ -275,6 +283,7 @@ function App() {
       <ThemeProvider>
         <AssessmentProvider>
           <TooltipProvider>
+            <MobileBlocker />
             <Toaster />
             <CenteredToaster />
             <Router />

@@ -25,10 +25,27 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
   onProceed,
   onClose
 }) => {
+  const [currentStep, setCurrentStep] = useState<'pdf' | 'checklist'>('pdf');
   const [acknowledgmentText, setAcknowledgmentText] = useState('');
   const [isAcknowledged, setIsAcknowledged] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string>('');
   const [pageCount, setPageCount] = useState<number>(1);
+  const [checkedItems, setCheckedItems] = useState({
+    noMalpractice: false,
+    stayFocused: false,
+    noAiTools: false,
+    noHeadphones: false,
+  });
+
+  const allChecked = Object.values(checkedItems).every(Boolean);
+
+  const handleCheckChange = (key: keyof typeof checkedItems) => {
+    setCheckedItems(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleNextClick = () => {
+    setCurrentStep('checklist');
+  };
 
   const handleAcknowledgmentChange = (value: string) => {
     setAcknowledgmentText(value);
@@ -36,7 +53,7 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
   };
 
   const handleProceed = () => {
-    if (isAcknowledged) {
+    if (isAcknowledged && allChecked) {
       onProceed();
     }
   };
@@ -75,6 +92,21 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
     }
   };
 
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentStep('pdf');
+      setAcknowledgmentText('');
+      setIsAcknowledged(false);
+      setCheckedItems({
+        noMalpractice: false,
+        stayFocused: false,
+        noAiTools: false,
+        noHeadphones: false,
+      });
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (acknowledgmentPdf?.data) {
       // Create blob URL for PDF display
@@ -105,102 +137,207 @@ export const AcknowledgmentModal: React.FC<AcknowledgmentModalProps> = ({
       <DialogContent 
         className="overflow-visible p-0 sm:max-w-7xl w-[95vw] h-[95vh] gap-0"
       >
-        {/* Custom Modal Header */}
-        <div className="border-b px-6 py-4 mb-0" style={{ backgroundColor: '#44444E', borderColor: '#44444E' }}>
-          <div className="flex items-center gap-3">
-            <SparrowLogo />
-            <div>
-              <h2 className="text-lg font-semibold text-white">
-                {acknowledgmentPdf.filename || 'Job Description & Requirements'}
-              </h2>
-              <p className="text-sm text-gray-300">{pageCount} {pageCount === 1 ? 'page' : 'pages'}</p>
+        {currentStep === 'pdf' ? (
+          // PDF Page
+          <>
+            {/* Custom Modal Header */}
+            <div className="border-b px-6 py-4 mb-0" style={{ backgroundColor: '#44444E', borderColor: '#44444E' }}>
+              <div className="flex items-center gap-3">
+                <SparrowLogo />
+                <div>
+                  <h2 className="text-lg font-semibold text-white">
+                    {acknowledgmentPdf.filename || 'Job Description & Requirements'}
+                  </h2>
+                  <p className="text-sm text-gray-300">{pageCount} {pageCount === 1 ? 'page' : 'pages'}</p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* PDF Thumbnail Sidebar */}
-          <div className="w-48 p-4" style={{ backgroundColor: '#44444E', borderRight: '1px solid #5a5a64' }}>
-            <div className="space-y-2">
-              <div className="border rounded-md overflow-hidden" style={{ backgroundColor: '#f8f8f8', borderColor: '#5a5a64' }}>
-                <div className="aspect-[3/4] p-2 flex items-center justify-center" style={{ backgroundColor: '#f8f8f8' }}>
+            <div className="flex flex-1 overflow-hidden">
+              {/* PDF Thumbnail Sidebar */}
+              <div className="w-48 p-4" style={{ backgroundColor: '#44444E', borderRight: '1px solid #5a5a64' }}>
+                <div className="space-y-2">
+                  <div className="border rounded-md overflow-hidden" style={{ backgroundColor: '#f8f8f8', borderColor: '#5a5a64' }}>
+                    <div className="aspect-[3/4] p-2 flex items-center justify-center" style={{ backgroundColor: '#f8f8f8' }}>
+                      <iframe
+                        src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                        className="max-w-full max-h-full pointer-events-none border-none"
+                        style={{
+                          width: 'calc(100% * 0.8)',
+                          height: 'calc(100% * 0.8)',
+                          border: 'none',
+                          backgroundColor: 'white'
+                        }}
+                        title="PDF Thumbnail"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-xs font-medium text-gray-300">
+                      {pageCount === 1 ? 'Page 1' : `${pageCount} Pages`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Content */}
+              <div className="flex-1 flex flex-col" style={{ backgroundColor: '#44444E' }}>
+                {/* PDF Viewer */}
+                <div className="flex-1 overflow-auto" style={{ backgroundColor: 'white' }}>
                   <iframe
-                    src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                    className="max-w-full max-h-full pointer-events-none border-none"
-                    style={{
-                      width: 'calc(100% * 0.8)',
-                      height: 'calc(100% * 0.8)',
-                      border: 'none',
-                      backgroundColor: 'white'
-                    }}
-                    title="PDF Thumbnail"
+                    src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1`}
+                    className="w-full h-full min-h-[800px]"
+                    style={{ border: 'none', backgroundColor: 'white' }}
+                    title="PDF Document"
                   />
                 </div>
-              </div>
-              <div className="text-center">
-                <span className="text-xs font-medium text-gray-300">
-                  {pageCount === 1 ? 'Page 1' : `${pageCount} Pages`}
-                </span>
-              </div>
-            </div>
-          </div>
 
-          {/* Main Content */}
-          <div className="flex-1 flex flex-col" style={{ backgroundColor: '#44444E' }}>
-            {/* PDF Viewer */}
-            <div className="flex-1 overflow-auto" style={{ backgroundColor: 'white' }}>
-              <iframe
-                src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1`}
-                className="w-full h-full min-h-[800px]"
-                style={{ border: 'none', backgroundColor: 'white' }}
-                title="PDF Document"
-              />
-            </div>
-
-            {/* Acknowledgment Section */}
-            <div className="p-4" style={{ backgroundColor: '#44444E', borderTop: '1px solid #5a5a64' }}>
-              <div className="max-w-4xl mx-auto space-y-3">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm text-gray-300">
-                    Type "acknowledged" to confirm you have read and understood the job description
-                  </p>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-4 w-4 text-gray-400 hover:text-gray-200 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs">
-                        <p className="text-sm">
-                          Notice: Your mic, audio, and video are recorded and evaluated by AI during this assessment. By continuing, you agree to this.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <div className="flex items-center gap-4">
-                  <Input
-                    id="acknowledgment"
-                    type="text"
-                    value={acknowledgmentText}
-                    onChange={(e) => handleAcknowledgmentChange(e.target.value)}
-                    placeholder="Type 'acknowledged' here..."
-                    className="flex-1 max-w-md text-white border-gray-500"
-                    style={{ backgroundColor: '#6b6b75' }}
-                  />
-                  <div className="ml-auto">
+                {/* Next Button Section */}
+                <div className="p-4" style={{ backgroundColor: '#44444E', borderTop: '1px solid #5a5a64' }}>
+                  <div className="max-w-4xl mx-auto flex justify-end">
                     <Button
-                      onClick={handleProceed}
-                      disabled={!isAcknowledged}
+                      onClick={handleNextClick}
                       className="min-w-[120px] rounded-full"
                     >
-                      Proceed
+                      Next
                     </Button>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        ) : (
+          // Checklist Page
+          <>
+            {/* Custom Modal Header */}
+            <div className="border-b px-6 py-4 mb-0" style={{ backgroundColor: '#44444E', borderColor: '#44444E' }}>
+              <div className="flex items-center gap-3">
+                <SparrowLogo />
+                <div>
+                  <h2 className="text-lg font-semibold text-white">
+                    Assessment Guidelines
+                  </h2>
+                  <p className="text-sm text-gray-300">Please read and accept all guidelines</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto" style={{ backgroundColor: '#44444E' }}>
+              <div className="max-w-3xl mx-auto p-8">
+                <div className="space-y-6">
+                  <p className="text-gray-300 text-base mb-8">
+                    To maintain the integrity of this assessment, please confirm you understand and will adhere to the following guidelines:
+                  </p>
+
+                  {/* Checklist Items */}
+                  <div className="space-y-0">
+                    {/* Item 1 */}
+                    <div className="flex items-start gap-4 py-5 border-b border-gray-600">
+                      <input
+                        type="checkbox"
+                        id="noMalpractice"
+                        checked={checkedItems.noMalpractice}
+                        onChange={() => handleCheckChange('noMalpractice')}
+                        className="mt-1 w-5 h-5 rounded border-gray-500 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800 cursor-pointer"
+                      />
+                      <label htmlFor="noMalpractice" className="text-gray-200 text-base leading-relaxed cursor-pointer flex-1">
+                        I will not engage in any form of malpractice throughout the assessment, including cheating, plagiarism, or any dishonest behavior.
+                      </label>
+                    </div>
+
+                    {/* Item 2 */}
+                    <div className="flex items-start gap-4 py-5 border-b border-gray-600">
+                      <input
+                        type="checkbox"
+                        id="stayFocused"
+                        checked={checkedItems.stayFocused}
+                        onChange={() => handleCheckChange('stayFocused')}
+                        className="mt-1 w-5 h-5 rounded border-gray-500 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800 cursor-pointer"
+                      />
+                      <label htmlFor="stayFocused" className="text-gray-200 text-base leading-relaxed cursor-pointer flex-1">
+                        I will stay focused and keep my face clearly visible within the camera frame throughout the entire assessment.
+                      </label>
+                    </div>
+
+                    {/* Item 3 */}
+                    <div className="flex items-start gap-4 py-5 border-b border-gray-600">
+                      <input
+                        type="checkbox"
+                        id="noAiTools"
+                        checked={checkedItems.noAiTools}
+                        onChange={() => handleCheckChange('noAiTools')}
+                        className="mt-1 w-5 h-5 rounded border-gray-500 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800 cursor-pointer"
+                      />
+                      <label htmlFor="noAiTools" className="text-gray-200 text-base leading-relaxed cursor-pointer flex-1">
+                        I will not use any external AI tools, chatbots, or automated assistance during the assessment.
+                      </label>
+                    </div>
+
+                    {/* Item 4 */}
+                    <div className="flex items-start gap-4 py-5">
+                      <input
+                        type="checkbox"
+                        id="noHeadphones"
+                        checked={checkedItems.noHeadphones}
+                        onChange={() => handleCheckChange('noHeadphones')}
+                        className="mt-1 w-5 h-5 rounded border-gray-500 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-800 cursor-pointer"
+                      />
+                      <label htmlFor="noHeadphones" className="text-gray-200 text-base leading-relaxed cursor-pointer flex-1">
+                        I will not use headphones or earphones, and I will keep both hands visible within the camera frame at all times.
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Acknowledgment Input */}
+                  <div className="mt-8 pt-6 border-t border-gray-600 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-gray-300">
+                        Type "acknowledged" to confirm you have read and understood all guidelines
+                      </p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-4 w-4 text-gray-400 hover:text-gray-200 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p className="text-sm">
+                              Notice: Your mic, audio, and video are recorded and evaluated by AI during this assessment. By continuing, you agree to this.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Input
+                        id="acknowledgment"
+                        type="text"
+                        value={acknowledgmentText}
+                        onChange={(e) => handleAcknowledgmentChange(e.target.value)}
+                        placeholder="Type 'acknowledged' here..."
+                        className="flex-1 max-w-md text-white border-gray-500"
+                        style={{ backgroundColor: '#6b6b75' }}
+                      />
+                      <div className="ml-auto">
+                        <Button
+                          onClick={handleProceed}
+                          disabled={!isAcknowledged || !allChecked}
+                          className="min-w-[120px] rounded-full"
+                        >
+                          Proceed
+                        </Button>
+                      </div>
+                    </div>
+                    {!allChecked && (
+                      <p className="text-sm text-yellow-400">
+                        Please check all guidelines above before proceeding
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

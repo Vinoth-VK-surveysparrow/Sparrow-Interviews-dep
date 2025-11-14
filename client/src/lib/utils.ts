@@ -5,27 +5,31 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function blobToJSON(blob: Blob): Promise<any> {
-  return new Promise((resolve, reject) => {
+export const blobToJSON = (blob: Blob) =>
+  new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      try {
-        const result = JSON.parse(reader.result as string);
-        resolve(result);
-      } catch (error) {
-        reject(error);
+      if (reader.result) {
+        try {
+          const json = JSON.parse(reader.result as string);
+          resolve(json);
+        } catch (error) {
+          reject(new Error(`Failed to parse blob as JSON: ${error instanceof Error ? error.message : 'Unknown error'}`));
+        }
+      } else {
+        reject(new Error('FileReader returned empty result while reading blob'));
       }
     };
-    reader.onerror = reject;
+    reader.onerror = () => {
+      reject(new Error(`Failed to read blob: ${reader.error?.message || 'Unknown error'}`));
+    };
     reader.readAsText(blob);
   });
-}
 
-export function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = window.atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
+export function base64ToArrayBuffer(base64: string) {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes.buffer;

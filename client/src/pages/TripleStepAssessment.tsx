@@ -139,7 +139,8 @@ export default function TripleStepAssessment() {
     isS3Ready, 
     uploadAudioToS3
   } = useAssessment();
-  const { videoRef, startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const { startCamera, startAutoCapture, stopAutoCapture, capturedImages } = useCameraCapture({ videoRef });
   const { startContinuousRecording, stopContinuousRecording, isRecording, forceCleanup } = useContinuousAudioRecording();
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(true);
   const { fetchQuestions } = useS3Upload();

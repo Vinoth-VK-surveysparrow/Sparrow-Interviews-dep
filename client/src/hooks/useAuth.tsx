@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { auth, signInWithGoogle, signOutUser, isAuthorizedEmail } from '@/lib/firebase';
-import { fetchGeminiApiKey } from '@/services/geminiApiService';
+import { getVertexCredentials, validateEnvironmentSetup, VertexCredentials } from '@/services/vertexApiService';
 import { storeFirebaseToken, clearStoredFirebaseToken, startTokenRefresh, stopTokenRefresh, initializeVisibilityListener, removeVisibilityListener } from '@/lib/authenticatedApiService';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [vertexCredentials, setVertexCredentials] = useState<VertexCredentials | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -38,6 +39,15 @@ export const useAuth = () => {
             } catch (tokenError) {
               console.error('❌ Failed to get/store Firebase token:', tokenError);
             }
+            
+            // Get the Vertex AI credentials from environment variables
+            try {
+              const credentials = getVertexCredentials();
+              setVertexCredentials(credentials);
+            } catch (error) {
+              console.error('Error getting Vertex AI credentials from environment:', error);
+              setVertexCredentials(null);
+            }
           }
         } catch (error) {
           console.error('Error checking user authorization:', error);
@@ -51,6 +61,7 @@ export const useAuth = () => {
       } else {
         setUser(null);
         setError(null);
+        setVertexCredentials(null);
         clearStoredFirebaseToken();
         stopTokenRefresh();
       }
@@ -86,6 +97,7 @@ export const useAuth = () => {
       setError(null);
       await signOutUser();
       setUser(null);
+      setVertexCredentials(null);
       clearStoredFirebaseToken();
       stopTokenRefresh();
       console.log('🚪 User signed out and token cleared');
@@ -96,12 +108,42 @@ export const useAuth = () => {
     }
   };
 
+  // Function to refresh the Vertex AI credentials (useful after environment changes)
+  const refreshVertexCredentials = async () => {
+    try {
+      const credentials = getVertexCredentials();
+      setVertexCredentials(credentials);
+      return credentials;
+    } catch (error) {
+      console.error('Error refreshing Vertex AI credentials:', error);
+      setVertexCredentials(null);
+      return null;
+    }
+  };
+
+  // Listen for environment variable changes
+  useEffect(() => {
+    const handleCredentialsUpdate = () => {
+      refreshVertexCredentials();
+    };
+
+    // Listen for environment changes
+    window.addEventListener('vertex-credentials-updated', handleCredentialsUpdate);
+    
+    return () => {
+      window.removeEventListener('vertex-credentials-updated', handleCredentialsUpdate);
+    };
+  }, []);
+
   return {
     user,
     loading,
     error,
     signIn,
     signOut,
-    isAuthenticated: !!user
+    vertexCredentials,
+    refreshVertexCredentials,
+    isAuthenticated: !!user,
+    hasVertexCredentials: !!vertexCredentials?.projectId && validateEnvironmentSetup()
   };
 }; 

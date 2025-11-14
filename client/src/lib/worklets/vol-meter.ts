@@ -34,7 +34,9 @@ class VolMeterWorklet extends AudioWorkletProcessor {
   }
 }
 
+// Register the processor with both names for compatibility
 registerProcessor('vu-meter', VolMeterWorklet);
+registerProcessor('vumeter-out', VolMeterWorklet);
 `;
 
 export default VolMeterWorkletSource;

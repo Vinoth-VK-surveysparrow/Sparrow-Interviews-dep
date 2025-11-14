@@ -6,15 +6,15 @@ import { ensureWorkletLoaded, WorkletName } from "./worklet-manager";
 export class AudioStreamer {
   public audioQueue: Float32Array[] = [];
   private isPlaying: boolean = false;
-  private sampleRate: number = 24000;
-  private bufferSize: number = 7680;
+  private sampleRate: number = 24000; // Vertex AI outputs 24kHz
+  private bufferSize: number = 7680; // 320ms at 24kHz - matches working implementation
   private processingBuffer: Float32Array = new Float32Array(0);
   private scheduledTime: number = 0;
   public gainNode: GainNode;
   public source: AudioBufferSourceNode;
   private isStreamComplete: boolean = false;
   private checkInterval: number | null = null;
-  private initialBufferTime: number = 0.1;
+  private initialBufferTime: number = 0.1; // 100ms initial buffer
   private endOfQueueAudioSource: AudioBufferSourceNode | null = null;
 
   public onComplete = () => {};
@@ -22,6 +22,12 @@ export class AudioStreamer {
   constructor(public context: AudioContext) {
     this.gainNode = this.context.createGain();
     this.source = this.context.createBufferSource();
+    
+    // Full gain - browser echo cancellation will handle feedback
+    // Matches working implementation in src folder
+    this.gainNode.gain.setValueAtTime(1, this.context.currentTime);
+    
+    // Connect to destination
     this.gainNode.connect(this.context.destination);
     this.addPCM16 = this.addPCM16.bind(this);
   }
@@ -51,10 +57,14 @@ export class AudioStreamer {
     try {
       // Use the centralized worklet loading mechanism
       await ensureWorkletLoaded(this.context, workletName);
-    const worklet = new AudioWorkletNode(this.context, workletName);
+      
+      // Small delay to ensure worklet is fully registered in AudioWorkletGlobalScope
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      const worklet = new AudioWorkletNode(this.context, workletName);
 
-    //add the node into the map
-    workletsRecord[workletName].node = worklet;
+      //add the node into the map
+      workletsRecord[workletName].node = worklet;
       console.log(`AudioStreamer: Created worklet node: ${workletName}`);
     } catch (error) {
       console.error(`AudioStreamer: Error setting up worklet ${workletName}:`, error);
@@ -111,7 +121,7 @@ export class AudioStreamer {
   }
 
   private scheduleNextBuffer() {
-    const SCHEDULE_AHEAD_TIME = 0.25; // Increased for smoother playback and avoiding cutoffs
+    const SCHEDULE_AHEAD_TIME = 0.2; // Match working implementation
 
     while (
       this.audioQueue.length > 0 &&
@@ -138,24 +148,9 @@ export class AudioStreamer {
       }
 
       source.buffer = audioBuffer;
+      
+      // Only connect to gain node for audio output (no worklet connection to prevent feedback)
       source.connect(this.gainNode);
-
-      const worklets = registeredWorklets.get(this.context);
-
-      if (worklets) {
-        Object.entries(worklets).forEach(([workletName, graph]) => {
-          const { node, handlers } = graph;
-          if (node) {
-            source.connect(node);
-            node.port.onmessage = function (ev: MessageEvent) {
-              handlers.forEach((handler) => {
-                handler.call(node.port, ev);
-              });
-            };
-            node.connect(this.context.destination);
-          }
-        });
-      }
 
       // Ensure we never schedule in the past
       const startTime = Math.max(this.scheduledTime, this.context.currentTime);
@@ -180,7 +175,7 @@ export class AudioStreamer {
             ) {
               this.scheduleNextBuffer();
             }
-          }, 100) as unknown as number;
+          }, 100) as unknown as number; // Match working implementation
         }
       }
     } else {
@@ -188,7 +183,7 @@ export class AudioStreamer {
         (this.scheduledTime - this.context.currentTime) * 1000;
       setTimeout(
         () => this.scheduleNextBuffer(),
-        Math.max(0, nextCheckTime - 50),
+        Math.max(0, nextCheckTime - 50), // Match working implementation
       );
     }
   }

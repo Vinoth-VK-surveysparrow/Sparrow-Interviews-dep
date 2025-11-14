@@ -25,9 +25,7 @@ export function AssessmentSecurity() {
   
   // Simple and clear: only restrict during actual assessment taking
   const shouldApplyRestrictions = isActiveAssessmentContent;
-  
-  // Debug logging for clarity
-  console.log(`🔒 AssessmentSecurity - Location: ${location}, Apply Restrictions: ${shouldApplyRestrictions}`);
+
 
   useEffect(() => {
     if (!shouldApplyRestrictions) {

@@ -41,7 +41,7 @@ interface MultimodalLiveClientEventTypes {
 
 export type MultimodalLiveAPIClientConnection = {
   url?: string;
-  apiKey: string;
+  accessToken?: string;
 };
 
 /**
@@ -57,15 +57,24 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
     return { ...this.config };
   }
 
-  constructor({ url, apiKey }: MultimodalLiveAPIClientConnection) {
+  constructor({ url, accessToken }: MultimodalLiveAPIClientConnection) {
     super();
-    url =
-      url ||
-      `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
-    url += `?key=${apiKey}`;
-    this.url = url;
+    if (accessToken) {
+      // Use direct Vertex AI WebSocket with token in URL as access_token parameter
+      const location = 'us-central1';
+      const baseUrl = url || `wss://${location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
+      // Append access token as query parameter (OAuth2 format)
+      this.url = `${baseUrl}?access_token=${encodeURIComponent(accessToken)}`;
+      this.accessToken = accessToken;
+      console.log('🔗 Vertex AI WebSocket URL configured (token hidden)');
+    } else {
+      // Fallback URL (should not be used in production)
+      this.url = url || `ws://localhost:8001`;
+    }
     this.send = this.send.bind(this);
   }
+
+  private accessToken?: string;
 
   log(type: string, message: StreamingLog["message"]) {
     const log: StreamingLog = {
@@ -106,6 +115,7 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
 
         this.ws = ws;
 
+        // Send setup message (token is already in URL, no separate auth message needed)
         const setupMessage: SetupMessage = {
           setup: this.config,
         };
@@ -202,6 +212,8 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
         base64s.forEach((b64) => {
           if (b64) {
             const data = base64ToArrayBuffer(b64);
+            // Vertex AI sends 24kHz PCM - pass through directly (no processing)
+            // Browser's echo cancellation will handle feedback
             this.emit("audio", data);
             this.log(`server.audio`, `buffer (${data.byteLength})`);
           }

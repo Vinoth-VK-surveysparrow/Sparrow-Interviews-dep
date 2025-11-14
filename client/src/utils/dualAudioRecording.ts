@@ -114,7 +114,6 @@ export class DualAudioRecorder {
       this.userMediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0 && this.isRecording) {
           this.userRecordedChunks.push(event.data);
-          console.log('👤 User audio chunk received:', event.data.size, 'bytes');
         } else if (event.data.size > 0 && !this.isRecording) {
           console.log('🚫 Ignoring user chunk after recording stopped:', event.data.size, 'bytes');
         }
@@ -132,7 +131,6 @@ export class DualAudioRecorder {
       this.aiMediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0 && this.isRecording) {
           this.aiRecordedChunks.push(event.data);
-          console.log('🤖 AI audio chunk received:', event.data.size, 'bytes');
         } else if (event.data.size > 0 && !this.isRecording) {
           console.log('🚫 Ignoring AI chunk after recording stopped:', event.data.size, 'bytes');
         }
@@ -151,7 +149,6 @@ export class DualAudioRecorder {
       this.mixedMediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0 && this.isRecording) {
           this.mixedRecordedChunks.push(event.data);
-          console.log('🎵 Mixed conversation chunk received:', event.data.size, 'bytes');
         } else if (event.data.size > 0 && !this.isRecording) {
           console.log('🚫 Ignoring mixed chunk after recording stopped:', event.data.size, 'bytes');
         }
@@ -198,7 +195,6 @@ export class DualAudioRecorder {
         data: arrayBuffer.slice(0),
         timestamp: timestamp
       });
-      console.log('👤 User PCM16 captured:', arrayBuffer.byteLength, 'bytes, timestamp:', timestamp, 'ms');
     } else {
       console.log('🚫 Ignoring user PCM16 data after recording stopped:', arrayBuffer.byteLength, 'bytes');
     }
@@ -261,13 +257,6 @@ export class DualAudioRecorder {
           this.aiSourceNodes.splice(index, 1);
         }
       };
-      
-      console.log('🎵 AI audio: PCM16 captured + streamed for timing:', {
-        samples: pcm16Array.length,
-        duration: `${(pcm16Array.length / this.aiSampleRate * 1000).toFixed(1)}ms`,
-        timestamp: timestamp,
-        pcmChunks: this.aiPCMChunks.length
-      });
     } catch (error) {
       console.error('🚨 Error connecting AI audio from ArrayBuffer:', error);
     }

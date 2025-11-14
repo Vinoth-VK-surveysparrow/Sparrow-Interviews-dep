@@ -218,8 +218,8 @@ export function AppSidebar() {
           <div className="flex flex-col items-center space-y-2">
             {/* Settings Icon */}
             <div className="flex justify-center">
-              <SettingsModal>
-                <Tooltip>
+              <Tooltip>
+                <SettingsModal>
                   <TooltipTrigger asChild>
                     <button
                       className="w-8 h-8 rounded flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -227,11 +227,11 @@ export function AppSidebar() {
                       <Settings className="w-5 h-5" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <p>Settings</p>
-                  </TooltipContent>
-                </Tooltip>
-              </SettingsModal>
+                </SettingsModal>
+                <TooltipContent side="right">
+                  <p>Settings</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
 
             {/* Sign Out Button */}

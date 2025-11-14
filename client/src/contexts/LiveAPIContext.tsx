@@ -8,12 +8,10 @@ const LiveAPIContext = createContext<UseLiveAPIResults & {
 export type LiveAPIProviderProps = {
   children: ReactNode;
   url?: string;
-  apiKey: string;
 };
 
 export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
   url,
-  apiKey,
   children,
 }) => {
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
@@ -26,7 +24,6 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
 
   const liveAPI = useLiveAPI({ 
     url, 
-    apiKey, 
     onApiKeyError: showApiKeyError 
   });
 
@@ -42,9 +39,9 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
       {showApiKeyModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg max-w-md mx-4">
-            <h3 className="text-lg font-semibold mb-2">API Key Required</h3>
+            <h3 className="text-lg font-semibold mb-2">Environment Setup Required</h3>
             <p className="text-gray-600 mb-4">
-              {apiKeyModalMessage || "Please provide a valid Gemini API key to use this feature."}
+              {apiKeyModalMessage || "Please ensure your environment variables are configured and you're authenticated with Google Cloud."}
             </p>
             <button 
               onClick={() => setShowApiKeyModal(false)}

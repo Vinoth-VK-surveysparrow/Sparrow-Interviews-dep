@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRoute, useLocation } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from "@sparrowengg/twigs-react";
@@ -41,7 +41,8 @@ export default function Question() {
   const currentQuestionNumber = parseInt(params?.questionNumber || '1');
   const currentQuestion = questions[currentQuestionNumber - 1];
   
-  const { videoRef, startCamera, startAutoCapture, stopAutoCapture, captureImage, capturedImages } = useCameraCapture();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const { startCamera, startAutoCapture, stopAutoCapture, captureImage, capturedImages } = useCameraCapture({ videoRef });
   const { transcript, startListening, stopListening, resetTranscript, hasSupport } = useSpeechRecognition(false); // Disable auto-restart for question page
   const { user } = useAuth();
   const { isMonitoring, stopMonitoring, flagCount, showWarning, warningMessage } = useBehaviorMonitoring({
